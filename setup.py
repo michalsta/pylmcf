@@ -15,10 +15,12 @@ ext_modules = [
 ]
 
 setup(
-    name="pylcmf",
+    name="pylmcf",
     version=__version__,
     author="Michał Startek",
     ext_modules=ext_modules,
     cmdclass={"build_ext": build_ext},
     zip_safe=False,
+    install_requires=["numpy", "numba"],
+    packages=["pylmcf"],
 )

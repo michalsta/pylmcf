@@ -3,7 +3,16 @@
 #include <iostream>
 #include <lemon/list_graph.h>
 #include <lemon/network_simplex.h>
+#include <type_traits>
 
+
+template <typename T>
+void print_span(std::span<T> span) {
+    for (auto& elem : span) {
+        std::cerr << elem << " ";
+    }
+    std::cerr << std::endl;
+}
 
 // Function to compute the LCMF
 template <typename T>
@@ -14,7 +23,9 @@ void lmcf(
     std::span<T> capacities,
     std::span<T> costs,
     std::span<T> result
-    ) {
+    )
+    requires std::is_signed<T>::value && std::is_integral<T>::value
+    {
     // Make sure all edge arrays and result are the same size
     if (edges_starts.size() != edges_ends.size() || edges_starts.size() != capacities.size() || edges_starts.size() != costs.size() || edges_starts.size() != result.size()) {
         throw std::invalid_argument("All edge arrays and result must be the same size");
@@ -29,7 +40,7 @@ void lmcf(
             throw std::invalid_argument("Edge start or end index out of bounds: start=" + std::to_string(edges_starts[i]) + ", end=" + std::to_string(edges_ends[i]));
         }
         if (capacities[i] <= 0) {
-            throw std::invalid_argument("Capacities must be positive");
+            throw std::invalid_argument("Capacities must be strictly positive");
         }
         if (costs[i] < 0) {
             throw std::invalid_argument("Costs must be non-negative");
@@ -58,7 +69,7 @@ void lmcf(
     }
 
     // Add node flows to the nodes
-    lemon::ListDigraph::NodeMap<T> node_supply_map(graph);
+    lemon::ListDigraph::NodeMap<typename std::make_signed<T>::type> node_supply_map(graph);
     for (size_t i = 0; i < no_nodes; i++)
         node_supply_map[nodes[i]] = node_supply[i];
 
@@ -71,13 +82,9 @@ void lmcf(
     solver.supplyMap(node_supply_map);
     solver.run();
 
-    std::cerr << "Objective: " << solver.totalCost() << std::endl;
     // Get the result
     for (size_t i = 0; i < no_edges; i++)
-    {
-        std::cerr << "arc: " << solver.flow(arcs[i]) << std::endl;
         result[i] = solver.flow(arcs[i]);
-    }
 }
 /*
 // Binding code

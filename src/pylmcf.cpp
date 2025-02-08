@@ -4,6 +4,7 @@
 #include <span>
 #include <iostream>
 #include <fstream>
+#include <type_traits>
 
 #include "lmcf.cpp" // Yes, ugly. But it works.
 
@@ -32,7 +33,6 @@ py::array_t<T> py_lmcf(
     auto capacities_span = numpy_to_span(capacities);
     auto costs_span = numpy_to_span(costs);
 
-    std::cerr << "node_supply_span.size() = " << node_supply_span.size() << std::endl;
     py::array_t<T> result(edges_starts_span.size());
     lmcf(node_supply_span, edges_starts_span, edges_ends_span, capacities_span, costs_span, numpy_to_span(result));
 
@@ -45,11 +45,11 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
 /*    m.def("lmcf", &py_lmcf<int8_t>, "Compute the lmcf for a given graph");
     m.def("lmcf", &py_lmcf<int16_t>, "Compute the lmcf for a given graph");
     m.def("lmcf", &py_lmcf<int32_t>, "Compute the lmcf for a given graph");
-*/    m.def("lmcf", &py_lmcf<int64_t>, "Compute the lmcf for a given graph");
- /*   m.def("lmcf", &py_lmcf<uint8_t>, "Compute the lmcf for a given graph");
-    m.def("lmcf", &py_lmcf<uint16_t>, "Compute the lmcf for a given graph");
-    m.def("lmcf", &py_lmcf<uint32_t>, "Compute the lmcf for a given graph");
-    m.def("lmcf", &py_lmcf<uint64_t>, "Compute the lmcf for a given graph");
-    m.def("lmcf", &py_lmcf<float>, "Compute the lmcf for a given graph");
+    m.def("lmcf", &py_lmcf<int64_t>, "Compute the lmcf for a given graph");
+ */   m.def("lmcf", &py_lmcf<int8_t>, "Compute the lmcf for a given graph");
+    m.def("lmcf", &py_lmcf<int16_t>, "Compute the lmcf for a given graph");
+    m.def("lmcf", &py_lmcf<int32_t>, "Compute the lmcf for a given graph");
+    m.def("lmcf", &py_lmcf<int64_t>, "Compute the lmcf for a given graph");
+ /*   m.def("lmcf", &py_lmcf<float>, "Compute the lmcf for a given graph");
     m.def("lmcf", &py_lmcf<double>, "Compute the lmcf for a given graph");
 */}
