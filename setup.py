@@ -8,7 +8,7 @@ ext_modules = [
     Pybind11Extension(
         "pylmcf_cpp",
         ["src/pylmcf.cpp"],
-        include_dirs=["src"],
+        include_dirs=["src", "."],
         define_macros=[("LMCF_VERSION", __version__)],
         cxx_std=23,
     )
