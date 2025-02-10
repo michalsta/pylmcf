@@ -32,7 +32,7 @@ def wasserstein_network(X1, Y1, intensities1, X2, Y2, intensities2, trash_cost):
     # Add edges from source to first layer
     for i in range(len(intensities1)):
         # Source to layer 1
-        print("Source to layer 1", SRC_IDX, LAYER1_START_IDX + i)
+        # print("Source to layer 1", SRC_IDX, LAYER1_START_IDX + i)
         edge_starts.append(SRC_IDX)
         edge_ends.append(LAYER1_START_IDX + i)
         edge_capacities.append(intensities1[i])
@@ -40,7 +40,7 @@ def wasserstein_network(X1, Y1, intensities1, X2, Y2, intensities2, trash_cost):
 
     # Add edges from second layer to sink
     for i in range(len(intensities2)):
-        print("Layer 2 to sink", LAYER2_START_IDX + i, SINK_IDX)
+        # print("Layer 2 to sink", LAYER2_START_IDX + i, SINK_IDX)
         # Layer 2 to sink
         edge_starts.append(LAYER2_START_IDX + i)
         edge_ends.append(SINK_IDX)
@@ -49,15 +49,17 @@ def wasserstein_network(X1, Y1, intensities1, X2, Y2, intensities2, trash_cost):
 
 
     # The matching edges:
+    matches = 0
     for i in range(len(intensities1)):
         for j in range(len(intensities2)):
-            print("Layer 1 to layer 2: ", LAYER1_START_IDX + i, LAYER2_START_IDX + j)
+            # print("Layer 1 to layer 2: ", LAYER1_START_IDX + i, LAYER2_START_IDX + j)
             dist_val = dist(X1[i], Y1[i], X2[j], Y2[j])
             if dist_val < trash_cost:
                 edge_starts.append(LAYER1_START_IDX + i)
                 edge_ends.append(LAYER2_START_IDX + j)
                 edge_capacities.append(min(intensities1[i], intensities2[j]))
                 edge_costs.append(np.int64(SCALING_FACTOR * dist_val))
+                matches += 1
 
     '''
     # The trash edges:
@@ -84,7 +86,7 @@ def wasserstein_network(X1, Y1, intensities1, X2, Y2, intensities2, trash_cost):
     nodes_supply = np.append(nodes_supply, 0)
     for i in range(len(intensities1)):
         # Layer 1 to trash
-        print("Layer 1 to trash", LAYER1_START_IDX + i, len(nodes_supply) - 1)
+        # print("Layer 1 to trash", LAYER1_START_IDX + i, len(nodes_supply) - 1)
         edge_starts.append(LAYER1_START_IDX + i)
         edge_ends.append(len(nodes_supply) - 1)
         edge_capacities.append(intensities1[i])
@@ -92,7 +94,7 @@ def wasserstein_network(X1, Y1, intensities1, X2, Y2, intensities2, trash_cost):
 
     for i in range(len(intensities2)):
         # Layer 2 to trash
-        print("Layer 2 to trash", len(nodes_supply) - 1, LAYER2_START_IDX + i)
+        # print("Layer 2 to trash", len(nodes_supply) - 1, LAYER2_START_IDX + i)
         edge_starts.append(len(nodes_supply) - 1)
         edge_ends.append(LAYER2_START_IDX + i)
         edge_capacities.append(intensities2[i])
@@ -106,9 +108,6 @@ def wasserstein_integer(X1, Y1, intensities1, X2, Y2, intensities2, trash_cost):
     assert trash_cost % 2 == 0, "Trash cost must be even (divisible by 2)"
     nodes_supply, edge_starts, edge_ends, edge_capacities, edge_costs = wasserstein_network(X1, Y1, intensities1, X2, Y2, intensities2, trash_cost)
     flows = pylmcf_cpp.lmcf(nodes_supply, edge_starts, edge_ends, edge_capacities, edge_costs)
-    #print(list(map(np.array, zip(edge_starts, edge_ends, edge_capacities, edge_costs, flows))))
-    print(edge_starts, edge_ends, edge_capacities, edge_costs, flows)
-    print(flows)
     src_trashed = flows[len(flows)-len(X1)-len(X2):len(flows)-len(X2)]
     dst_trashed = flows[len(flows)-len(X2):]
     sources = edge_starts[len(X1)+len(X2):len(flows)-len(X1)-len(X2)] - 1
@@ -127,4 +126,4 @@ def wasserstein_integer(X1, Y1, intensities1, X2, Y2, intensities2, trash_cost):
 
 
 def wasserstein(X1, Y1, intensities1, X2, Y2, intensities2, trash_cost):
-    return wasserstein_integer(X1, Y1, intensities1, X2, Y2, intensities2, trash_cost)
+    return wasserstein_integer(X1, Y1, intensities1.astype(np.int64) , X2, Y2, intensities2.astype(np.int64), trash_cost)
