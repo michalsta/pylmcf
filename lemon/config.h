@@ -18,5 +18,3 @@
 /* #undef LEMON_DEFAULT_LP */
 /* #undef LEMON_DEFAULT_MIP */
 
-#define LEMON_USE_PTHREAD 1
-/* #undef LEMON_USE_WIN32_THREADS */
