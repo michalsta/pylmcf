@@ -1,12 +1,10 @@
-import pylmcf_cpp
 from pylmcf import *
 import numpy as np
-
 
 INF = np.int64(2**30)
 I = INF
 
-'''
+"""
 node_supply     = np.array([10, 0, 0, 0, 0, -10], dtype=np.int64)
 edge_starts     = np.array([0, 0, 1, 1, 2, 2, 3, 4], dtype=np.int64)
 edge_ends       = np.array([1, 2, 3, 4, 3, 4, 5, 5], dtype=np.int64)
@@ -24,7 +22,7 @@ edge_ends       = np.array([1], dtype=np.int64)
 edge_capacities = np.array([7], dtype=np.int64)
 edge_costs      = np.array([3], dtype=np.int64)
 res = pylmcf_cpp.lmcf(node_supply, edge_starts, edge_ends, edge_capacities, edge_costs)
-'''
+"""
 
 # X1 = np.array([0, 10], dtype=np.double)
 # Y1 = np.array([0, 5], dtype=np.double)
@@ -54,20 +52,26 @@ RANGE = 100000
 # intensities2 = np.random.randint(1, RANGE, SIZE)
 # trash_cost = np.uint64(10)
 
-#print(type(res[0]), res[0], res[0].dtype)
-#print(type(res[1]), res[1], res[1].dtype)
-#print(type(res[2]), res[2], res[2].dtype)
-#print(type(res[3]), res[3], res[3].dtype)
-#print(type(res[4]), res[4], res[4].dtype)
+# print(type(res[0]), res[0], res[0].dtype)
+# print(type(res[1]), res[1], res[1].dtype)
+# print(type(res[2]), res[2], res[2].dtype)
+# print(type(res[3]), res[3], res[3].dtype)
+# print(type(res[4]), res[4], res[4].dtype)
+
+def test_1():
+    X1 = np.array([0, 100], dtype=np.double)
+    Y1 = np.array([0, 100], dtype=np.double)
+    X2 = np.array([0], dtype=np.double)
+    Y2 = np.array([1], dtype=np.double)
+    intensities1 = np.array([5, 1], dtype=np.uint64)
+    intensities2 = np.array([6], dtype=np.uint64)
+    trash_cost = np.uint64(10)
+    res = wasserstein(X1, Y1, intensities1, X2, Y2, intensities2, trash_cost)
+
+    assert np.array_equal(res['src_trashed'], np.array([0, 1]))
+    assert np.array_equal(res['dst_trashed'], np.array([1]))
+    assert np.array_equal(res['transport_source_idx'], np.array([0]))
+    assert np.array_equal(res['transport_sink_idx'], np.array([0]))
+    assert np.array_equal(res['transport_flow'], np.array([5]))
 
 
-X1 = np.array([0, 100], dtype=np.double)
-Y1 = np.array([0, 100], dtype=np.double)
-X2 = np.array([0], dtype=np.double)
-Y2 = np.array([1], dtype=np.double)
-intensities1 = np.array([5, 1], dtype=np.uint64)
-intensities2 = np.array([6], dtype=np.uint64)
-trash_cost = np.uint64(10)
-res = wasserstein(X1, Y1, intensities1, X2, Y2, intensities2, trash_cost)
-
-print(res)
