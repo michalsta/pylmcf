@@ -86,23 +86,3 @@ void lmcf(
     for (size_t i = 0; i < no_edges; i++)
         result[i] = solver.flow(arcs[i]);
 }
-/*
-// Binding code
-PYBIND11_MODULE(pylmcf_cpp, m) {
-    m.doc() = "Python binding for the LCMF algorithm implemented in C++"; // optional module docstring
-
-    m.def("lcmf", &lcmf<int8_t>, "Compute the LCMF for a given graph");
-    m.def("lcmf", &lcmf<int16_t>, "Compute the LCMF for a given graph");
-    m.def("lcmf", &lcmf<int32_t>, "Compute the LCMF for a given graph");
-    m.def("lcmf", &lcmf<int64_t>, "Compute the LCMF for a given graph");
-    m.def("lcmf", &lcmf<uint8_t>, "Compute the LCMF for a given graph");
-    m.def("lcmf", &lcmf<uint16_t>, "Compute the LCMF for a given graph");
-    m.def("lcmf", &lcmf<uint32_t>, "Compute the LCMF for a given graph");
-    m.def("lcmf", &lcmf<uint64_t>, "Compute the LCMF for a given graph");
-    m.def("lcmf", &lcmf<float>, "Compute the LCMF for a given graph");
-    m.def("lcmf", &lcmf<double>, "Compute the LCMF for a given graph");
-    }
-
-*/
-
-
