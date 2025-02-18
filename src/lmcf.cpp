@@ -16,7 +16,7 @@ void print_span(std::span<T> span) {
 
 // Function to compute the LCMF
 template <typename T>
-void lmcf(
+T lmcf(
     std::span<T> node_supply,
     std::span<T> edges_starts,
     std::span<T> edges_ends,
@@ -39,8 +39,8 @@ void lmcf(
         if (static_cast<size_t>(edges_starts[i]) >= no_nodes || static_cast<size_t>(edges_ends[i]) >= no_nodes) {
             throw std::invalid_argument("Edge start or end index out of bounds: start=" + std::to_string(edges_starts[i]) + ", end=" + std::to_string(edges_ends[i]));
         }
-        if (capacities[i] <= 0) {
-            throw std::invalid_argument("Capacities must be strictly positive");
+        if (capacities[i] < 0) {
+            throw std::invalid_argument("Capacities must be positive");
         }
         if (costs[i] < 0) {
             throw std::invalid_argument("Costs must be non-negative");
@@ -85,4 +85,6 @@ void lmcf(
     // Get the result
     for (size_t i = 0; i < no_edges; i++)
         result[i] = solver.flow(arcs[i]);
+
+    return solver.totalCost();
 }

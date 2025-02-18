@@ -112,7 +112,10 @@ def wasserstein_integer(X1, Y1, intensities1, X2, Y2, intensities2, trash_cost):
     dst_trashed = flows[len(flows)-len(X2):]
     sources = edge_starts[len(X1)+len(X2):len(flows)-len(X1)-len(X2)] - 1
     sinks = edge_ends[len(X1)+len(X2):len(flows)-len(X1)-len(X2)] - (1 + len(X1))
+    total_cost = np.sum(flows * edge_costs)
     flows = flows[len(X1)+len(X2):len(flows)-len(X1)-len(X2)]
+
+
 
     mask = flows > 0
 
@@ -122,6 +125,7 @@ def wasserstein_integer(X1, Y1, intensities1, X2, Y2, intensities2, trash_cost):
         "transport_source_idx": sources[mask],
         "transport_sink_idx": sinks[mask],
         "transport_flow": flows[mask],
+        "total_cost": total_cost
     }
 
 
