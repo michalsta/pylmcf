@@ -6,20 +6,12 @@
 #include <fstream>
 #include <type_traits>
 
+#include "py_support.h"
+
 #include "lmcf.cpp" // Yes, ugly. But it works.
 #include "graph.cpp"
 
 
-namespace py = pybind11;
-
-template <typename T>
-std::span<T> numpy_to_span(py::array_t<T> array) {
-    py::buffer_info info = array.request();
-    if (info.ndim != 1) {
-        throw std::invalid_argument("Only 1D arrays are supported");
-    }
-    return std::span<T>(static_cast<T*>(info.ptr), info.size);
-}
 
 template <typename T>
 py::array_t<T> py_lmcf(
@@ -55,14 +47,14 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
  /*   m.def("lmcf", &py_lmcf<float>, "Compute the lmcf for a given graph");
     m.def("lmcf", &py_lmcf<double>, "Compute the lmcf for a given graph");
 */
-    py::class_<Graph<uint64_t>>(m, "Graph")
-        .def(py::init<size_t, const std::span<size_t>&, const std::span<size_t>&, const std::span<uint64_t>&>())
-        .def("no_nodes", &Graph<uint64_t>::no_nodes)
-        .def("no_edges", &Graph<uint64_t>::no_edges)
-        .def("set_node_supply", &Graph<uint64_t>::set_node_supply)
-        .def("set_edge_capacities", &Graph<uint64_t>::set_edge_capacities)
-        .def("solve", &Graph<uint64_t>::solve)
-        .def("total_cost", &Graph<uint64_t>::total_cost)
-        .def("result", &Graph<uint64_t>::extract_result);
+    py::class_<Graph<int64_t>>(m, "Graph")
+        .def(py::init<size_t, const py::array_t<int64_t> &, const py::array_t<int64_t> &, const py::array_t<uint64_t> &>())
+        .def("no_nodes", &Graph<int64_t>::no_nodes)
+        .def("no_edges", &Graph<int64_t>::no_edges)
+        .def("set_node_supply", &Graph<int64_t>::set_node_supply)
+        .def("set_edge_capacities", &Graph<int64_t>::set_edge_capacities)
+        .def("solve", &Graph<int64_t>::solve)
+        .def("total_cost", &Graph<int64_t>::total_cost)
+        .def("result", &Graph<int64_t>::extract_result);
 ;
 }

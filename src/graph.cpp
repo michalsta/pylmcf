@@ -1,14 +1,24 @@
-#include <lemon/static_graph.h>
-#include <lemon/network_simplex.h>
+#include <stdexcept>
 #include <span>
 #include <vector>
+#include <lemon/static_graph.h>
+#include <lemon/network_simplex.h>
+
+#ifdef PYBIND11_VERSION_MAJOR
+#include <pybind11/pybind11.h>
+#include <pybind11/numpy.h>
+#include <pybind11/stl.h>
+
+#include "py_support.h"
+#endif
+
 
 template <typename T> class Graph {
 private:
     const size_t _no_nodes;
-    const std::vector<size_t> edges_starts;
-    const std::vector<size_t> edges_ends;
-    const std::vector<size_t> costs;
+    const std::vector<int64_t> edges_starts;
+    const std::vector<int64_t> edges_ends;
+    const std::vector<int64_t> costs;
 
     lemon::StaticDigraph lemon_graph;
     lemon::StaticDigraph::NodeMap<T> node_supply_map;
@@ -18,8 +28,8 @@ private:
     lemon::NetworkSimplex<lemon::StaticDigraph, T, T> solver;
 
 public:
-    Graph(size_t no_nodes, const std::span<size_t> &edge_starts,
-        const std::span<size_t> &edge_ends, const std::span<T> &costs):
+    Graph(size_t no_nodes, const std::span<int64_t> &edge_starts,
+        const std::span<int64_t> &edge_ends, const std::span<T> &costs):
 
         _no_nodes(no_nodes),
         edges_starts(edge_starts.begin(), edge_starts.end()),
@@ -49,7 +59,7 @@ public:
             }
 
             // TODO: optimize do deal away with unnecessary memory copying
-            std::vector<std::pair<size_t, size_t>> arcs;
+            std::vector<std::pair<int64_t, int64_t>> arcs;
             arcs.reserve(no_edges);
             for (size_t ii = 0; ii < no_edges; ii++)
                 arcs.emplace_back(edge_starts[ii], edge_ends[ii]);
@@ -61,6 +71,18 @@ public:
                 costs_map[lemon_graph.arcFromId(ii)] = costs[ii];
             }
         };
+
+    #ifdef PYBIND11_VERSION_MAJOR
+    Graph(size_t no_nodes, const py::array_t<int64_t> &edge_starts,
+        const py::array_t<int64_t> &edge_ends, const py::array_t<T> &costs):
+        Graph(no_nodes, numpy_to_span(edge_starts), numpy_to_span(edge_ends), numpy_to_span(costs)) {};
+    #endif
+
+    Graph() = delete;
+    Graph(Graph&&) = delete;
+    Graph(const Graph&) = delete;
+    Graph& operator=(const Graph&) = delete;
+
 
     inline size_t no_nodes() const {
         return _no_nodes;
