@@ -51,10 +51,10 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
         .def(py::init<size_t, const py::array_t<int64_t> &, const py::array_t<int64_t> &, const py::array_t<uint64_t> &>())
         .def("no_nodes", &Graph<int64_t>::no_nodes)
         .def("no_edges", &Graph<int64_t>::no_edges)
-        .def("set_node_supply", &Graph<int64_t>::set_node_supply)
-        .def("set_edge_capacities", &Graph<int64_t>::set_edge_capacities)
+        .def("set_node_supply", &Graph<int64_t>::set_node_supply_py)
+        .def("set_edge_capacities", &Graph<int64_t>::set_edge_capacities_py)
         .def("solve", &Graph<int64_t>::solve)
         .def("total_cost", &Graph<int64_t>::total_cost)
-        .def("result", &Graph<int64_t>::extract_result);
+        .def("result", &Graph<int64_t>::extract_result_py);
 ;
 }

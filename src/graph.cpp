@@ -72,11 +72,6 @@ public:
             }
         };
 
-    #ifdef PYBIND11_VERSION_MAJOR
-    Graph(size_t no_nodes, const py::array_t<int64_t> &edge_starts,
-        const py::array_t<int64_t> &edge_ends, const py::array_t<T> &costs):
-        Graph(no_nodes, numpy_to_span(edge_starts), numpy_to_span(edge_ends), numpy_to_span(costs)) {};
-    #endif
 
     Graph() = delete;
     Graph(Graph&&) = delete;
@@ -127,4 +122,23 @@ public:
             data[ii] = solver.flow(lemon_graph.arcFromId(ii));
         return std::span<T>(data, no_edges());
     }
+
+    #ifdef PYBIND11_VERSION_MAJOR
+    Graph(size_t no_nodes, const py::array_t<int64_t> &edge_starts,
+        const py::array_t<int64_t> &edge_ends, const py::array_t<T> &costs):
+        Graph(no_nodes, numpy_to_span(edge_starts), numpy_to_span(edge_ends), numpy_to_span(costs)) {};
+
+    void set_node_supply_py(const py::array_t<T> &node_supply) {
+        set_node_supply(numpy_to_span(node_supply));
+    }
+
+    void set_edge_capacities_py(const py::array_t<T> &capacities) {
+        set_edge_capacities(numpy_to_span(capacities));
+    }
+
+    py::array_t<T> extract_result_py() const {
+        return mallocd_span_to_owning_numpy(extract_result());
+    }
+    #endif
+
 };

@@ -3,6 +3,7 @@ from setuptools import setup
 
 
 __version__ = open("pyproject.toml").read().split('version = "')[1].split('"')[0]
+debug = True
 
 import os
 sources = ["src/pylmcf.cpp", "lemon/base.cc"]
@@ -13,6 +14,13 @@ if os.name == 'nt':
 else:
     os_flags = [("LEMON_USE_PTHREAD", 1)]
 
+if debug:
+    assert os.name != 'nt', "Debug mode is not supported on Windows"
+    cflags = ["-Og", "-g", "-fsanitize=address"]#, "-fsanitize=undefined"]
+else:
+    cflags = []
+    if os.name != 'nt':
+        cflags += ["-O3"]
 
 ext_modules = [
     Pybind11Extension(
@@ -21,6 +29,8 @@ ext_modules = [
         include_dirs=["src", "."],
         define_macros=[("LMCF_VERSION", __version__)] + os_flags,
         cxx_std=20,
+        extra_compile_args=cflags,
+        #extra_link_args=["-static-libsan"] if debug else []
     )
 ]
 
