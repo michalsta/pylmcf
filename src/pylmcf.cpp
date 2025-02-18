@@ -7,6 +7,8 @@
 #include <type_traits>
 
 #include "lmcf.cpp" // Yes, ugly. But it works.
+#include "graph.cpp"
+
 
 namespace py = pybind11;
 
@@ -52,4 +54,15 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
     m.def("lmcf", &py_lmcf<int64_t>, "Compute the lmcf for a given graph");
  /*   m.def("lmcf", &py_lmcf<float>, "Compute the lmcf for a given graph");
     m.def("lmcf", &py_lmcf<double>, "Compute the lmcf for a given graph");
-*/}
+*/
+    py::class_<Graph<uint64_t>>(m, "Graph")
+        .def(py::init<size_t, const std::span<size_t>&, const std::span<size_t>&, const std::span<uint64_t>&>())
+        .def("no_nodes", &Graph<uint64_t>::no_nodes)
+        .def("no_edges", &Graph<uint64_t>::no_edges)
+        .def("set_node_supply", &Graph<uint64_t>::set_node_supply)
+        .def("set_edge_capacities", &Graph<uint64_t>::set_edge_capacities)
+        .def("solve", &Graph<uint64_t>::solve)
+        .def("total_cost", &Graph<uint64_t>::total_cost)
+        .def("result", &Graph<uint64_t>::extract_result);
+;
+}
