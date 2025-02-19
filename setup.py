@@ -3,7 +3,7 @@ from setuptools import setup
 
 
 __version__ = open("pyproject.toml").read().split('version = "')[1].split('"')[0]
-debug = True
+debug = False
 
 import os
 sources = ["src/pylmcf.cpp", "lemon/base.cc"]

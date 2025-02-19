@@ -12,6 +12,33 @@
 #include "py_support.h"
 #endif
 
+lemon::StaticDigraph make_lemon_graph(size_t no_nodes, const std::span<int64_t> &edge_starts,
+    const std::span<int64_t> &edge_ends) {
+    const size_t no_edges = edge_starts.size();
+
+    // Make sure all edge arrays and result are the same size
+    if (edge_starts.size() != edge_ends.size()) {
+        throw std::invalid_argument("All edge arrays must be the same size");
+    }
+
+    // Make sure all arcs are valid
+    for (size_t ii = 0; ii < no_edges; ii++) {
+        if (static_cast<size_t>(edge_starts[ii]) >= no_nodes || static_cast<size_t>(edge_ends[ii]) >= no_nodes) {
+            throw std::invalid_argument("Edge start or end index out of bounds: start=" + std::to_string(edge_starts[ii]) + ", end=" + std::to_string(edge_ends[ii]));
+        }
+    }
+    lemon::StaticDigraph lemon_graph;
+
+    // TODO: Replace vector with const-mem iterator referencing the span
+    std::vector<std::pair<int64_t, int64_t>> arcs;
+    arcs.reserve(no_edges);
+    for (size_t ii = 0; ii < no_edges; ii++)
+        arcs.emplace_back(edge_starts[ii], edge_ends[ii]);
+
+    lemon_graph.build(no_nodes, arcs.begin(), arcs.end());
+    return lemon_graph;
+}
+
 
 template <typename T> class Graph {
 private:
@@ -20,7 +47,7 @@ private:
     const std::vector<int64_t> edges_ends;
     const std::vector<int64_t> costs;
 
-    lemon::StaticDigraph lemon_graph;
+    const lemon::StaticDigraph lemon_graph;
     lemon::StaticDigraph::NodeMap<T> node_supply_map;
     lemon::StaticDigraph::ArcMap<T> capacities_map;
     lemon::StaticDigraph::ArcMap<T> costs_map;
@@ -35,7 +62,7 @@ public:
         edges_starts(edge_starts.begin(), edge_starts.end()),
         edges_ends(edge_ends.begin(), edge_ends.end()),
         costs(costs.begin(), costs.end()),
-        lemon_graph(),
+        lemon_graph(make_lemon_graph(no_nodes, edge_starts, edge_ends)),
         node_supply_map(lemon_graph),
         capacities_map(lemon_graph),
         costs_map(lemon_graph),
@@ -57,14 +84,6 @@ public:
                     throw std::invalid_argument("Costs must be non-negative");
                 }
             }
-
-            // TODO: optimize do deal away with unnecessary memory copying
-            std::vector<std::pair<int64_t, int64_t>> arcs;
-            arcs.reserve(no_edges);
-            for (size_t ii = 0; ii < no_edges; ii++)
-                arcs.emplace_back(edge_starts[ii], edge_ends[ii]);
-
-            lemon_graph.build(no_nodes, arcs.begin(), arcs.end());
 
             // Add costs to the arcs
             for (size_t ii = 0; ii < no_edges; ii++) {
@@ -100,9 +119,9 @@ public:
         if (capacities.size() != no_edges())
             throw std::invalid_argument("Capacities must have the same size as the number of edges");
 
-
         for (size_t ii = 0; ii < no_edges(); ii++)
             capacities_map[lemon_graph.arcFromId(ii)] = capacities[ii];
+
         solver.upperMap(capacities_map);
     }
 
