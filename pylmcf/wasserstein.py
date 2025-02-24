@@ -197,6 +197,9 @@ class WassersteinNetwork:
         self.G.set_node_supply(self.sink, -total_flow)
         self.G.solve()
 
+    def total_cost(self):
+        return self.G.total_cost
+
 
 class SingleTheoryMatching:
     def __init__(self, WNM, theoretical_spectrum, max_dist):
@@ -257,6 +260,26 @@ class SimpleTrash:
         self.G.set_edge_capacities(np.array([self.trash_edge]), np.array([np.sum(self.WNM.empirical_spectrum.intensities)]))
 
 
+class NoTrash:
+    def __init__(self, WNM):
+        pass
+
+    def set_edge_capacity(self):
+        pass
+
+class EmpiricalTrash:
+    def __init__(self, WNM, trash_cost):
+        self.G = WNM.G
+        self.WNM = WNM
+        self.trash_cost = trash_cost
+        edge_starts = WNM.empirical_node_ids
+        edge_ends = np.full(len(edge_starts), WNM.sink)
+        self.trash_edges = self.G.add_edges(edge_starts, edge_ends, np.full(len(edge_starts), trash_cost))
+
+    def set_edge_capacity(self):
+        self.G.set_edge_capacities(self.trash_edges, self.WNM.empirical_spectrum.intensities)
+
+
 class WassersteinMatching:
     def __init__(self, WN, empirical_spectrum, theoretical_spectra, distance_limit):
         self.empirical_spectrum = empirical_spectrum
@@ -280,28 +303,23 @@ class WassersteinMatching:
         # print("Empirical intensities", self.empirical_spectrum.intensities)
         self.G.set_edge_capacities(self.source_to_empirical, self.empirical_spectrum.intensities)
 
-    def solve(self):
-        self.G.solve()
-
-    def result(self):
-        return self.G.total_cost
-
 
 
 class WassersteinSolver:
     def __init__(self, empirical_spectrum, theoretical_spectra, trash_cost):
+        self.INTENSITY_SCALING = 1_000_000_000
         if not isinstance(empirical_spectrum, Spectrum):
             empirical_spectrum = Spectrum.FromMasserstein(empirical_spectrum)
             theoretical_spectra = [Spectrum.FromMasserstein(s) for s in theoretical_spectra]
 
-        self.empirical_spectrum = empirical_spectrum.scaled(1_000_000_000)
-        print("Empirical spectrum", self.empirical_spectrum)
-        self.theoretical_spectra = [s.scaled(1_000_000_000) for s in theoretical_spectra]
-        print("Theoretical spectra", self.theoretical_spectra)
+        self.empirical_spectrum = empirical_spectrum.scaled(self.INTENSITY_SCALING)
+        # print("Empirical spectrum", self.empirical_spectrum)
+        self.theoretical_spectra = [s.scaled(self.INTENSITY_SCALING) for s in theoretical_spectra]
+        # print("Theoretical spectra", self.theoretical_spectra)
         self.trash_cost = trash_cost
 
-        self.WN = WassersteinNetwork(empirical_spectrum, theoretical_spectra, trash_cost)
+        self.WN = WassersteinNetwork(self.empirical_spectrum, self.theoretical_spectra, self.trash_cost)
 
     def run(self):
         self.WN.solve([1])
-        return self.WN.result()
+        return self.WN.total_cost() / self.INTENSITY_SCALING
