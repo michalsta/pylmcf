@@ -232,6 +232,8 @@ class SingleTheoryMatching:
     def set_edge_capacities(self, scale_factor: float):
         scaled_intensities = self.theoretical_spectrum.intensities * scale_factor
         self.G.set_edge_capacities(self.theory_to_sink_edges, scaled_intensities)
+        if len(self.matching_edge_ids) == 0:
+            return
         empirical_layer_intensities = self.WNM.empirical_spectrum.intensities[self.WNM.empirical_node_id_to_idx(self.matching_edge_start_nodes)]
         theoretical_layer_intensities = scaled_intensities[self.node_id_to_idx(self.matching_edge_end_nodes)]
         # print("Empirical layer intensities", empirical_layer_intensities)
