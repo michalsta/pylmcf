@@ -47,7 +47,7 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
  /*   m.def("lmcf", &py_lmcf<float>, "Compute the lmcf for a given graph");
     m.def("lmcf", &py_lmcf<double>, "Compute the lmcf for a given graph");
 */
-    py::class_<Graph<int64_t>>(m, "Graph")
+    py::class_<Graph<int64_t>>(m, "LemonGraph")
         .def(py::init<size_t, const py::array_t<int64_t> &, const py::array_t<int64_t> &, const py::array_t<uint64_t> &>())
         .def("no_nodes", &Graph<int64_t>::no_nodes)
         .def("no_edges", &Graph<int64_t>::no_edges)
@@ -55,6 +55,7 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
         .def("set_edge_capacities", &Graph<int64_t>::set_edge_capacities_py)
         .def("solve", &Graph<int64_t>::solve)
         .def("total_cost", &Graph<int64_t>::total_cost)
-        .def("result", &Graph<int64_t>::extract_result_py);
+        .def("result", &Graph<int64_t>::extract_result_py)
+        .def("__str__", &Graph<int64_t>::to_string);
 ;
 }

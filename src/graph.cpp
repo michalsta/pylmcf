@@ -27,15 +27,19 @@ lemon::StaticDigraph make_lemon_graph(size_t no_nodes, const std::span<int64_t> 
             throw std::invalid_argument("Edge start or end index out of bounds: start=" + std::to_string(edge_starts[ii]) + ", end=" + std::to_string(edge_ends[ii]));
         }
     }
+
     lemon::StaticDigraph lemon_graph;
 
-    // TODO: Replace vector with const-mem iterator referencing the span
-    std::vector<std::pair<int64_t, int64_t>> arcs;
+    std::vector<std::pair<int, int>> arcs;
     arcs.reserve(no_edges);
     for (size_t ii = 0; ii < no_edges; ii++)
         arcs.emplace_back(edge_starts[ii], edge_ends[ii]);
 
+    if(!std::is_sorted(arcs.begin(), arcs.end()))
+        throw std::invalid_argument("Edges must be sorted by start node, then by end node");
+
     lemon_graph.build(no_nodes, arcs.begin(), arcs.end());
+
     return lemon_graph;
 }
 
@@ -120,7 +124,10 @@ public:
             throw std::invalid_argument("Capacities must have the same size as the number of edges");
 
         for (size_t ii = 0; ii < no_edges(); ii++)
+        {
+            // std::cerr << "Setting capacity " << capacities[ii] << " for edge " << ii << std::endl;
             capacities_map[lemon_graph.arcFromId(ii)] = capacities[ii];
+        }
 
         solver.upperMap(capacities_map);
     }
@@ -138,8 +145,23 @@ public:
     std::span<T> extract_result() const {
         T* data = static_cast<T*>(malloc(sizeof(T) * no_edges()));
         for (size_t ii = 0; ii < no_edges(); ii++)
+        {
             data[ii] = solver.flow(lemon_graph.arcFromId(ii));
+            // std::cerr << "Flow for edge " << ii << " is " << data[ii] << std::endl;
+        }
         return std::span<T>(data, no_edges());
+    }
+
+    std::string to_string() const {
+        std::string out = "Graph with " + std::to_string(no_nodes()) + " nodes and " + std::to_string(no_edges()) + " edges\n";
+        out += "Edges:\n";
+        for (size_t ii = 0; ii < no_edges(); ii++) {
+            out += "  " + std::to_string(lemon_graph.id(lemon_graph.source(lemon_graph.arcFromId(ii)))) + " -> " + std::to_string(lemon_graph.id(lemon_graph.target(lemon_graph.arcFromId(ii)))) + " with cost " + std::to_string(costs_map[lemon_graph.arcFromId(ii)]) + " and capacity " + std::to_string(capacities_map[lemon_graph.arcFromId(ii)]) + "\n";
+        }
+        // for (size_t ii = 0; ii < no_edges(); ii++) {
+        //     out += "  " + std::to_string(edges_starts[ii]) + " -> " + std::to_string(edges_ends[ii]) + " with cost " + std::to_string(costs[ii]) + "\n";
+        // }
+        return out;
     }
 
     #ifdef PYBIND11_VERSION_MAJOR
