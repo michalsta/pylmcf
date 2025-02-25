@@ -10,9 +10,6 @@ def test_1d():
     assert solver.run() == 1
 
 
-test_1d()
-
-
 def test_2d():
     s1_pos = np.array([[0, 1, 0], [0, 0, 1]])
     s1_int = np.array([1, 1, 1])
@@ -27,6 +24,3 @@ def test_2d():
         costs_scaling=1000
     )
     assert solver.run() == 1.414
-
-
-test_2d()
