@@ -2,6 +2,7 @@ import numpy as np
 from numba import njit
 from .graph import Graph
 from .spectrum import Spectrum
+#from .numba_helper import match_nodes
 import pylmcf_cpp
 
 
@@ -242,7 +243,7 @@ class SingleTheoryMatching:
 
         self.matching_edge_start_nodes = []  # empirical nodes
         self.matching_edge_end_nodes = []  # theoretical nodes
-        self.matching_edge_ids = []
+        distances = []
         # print("Theoretical nodes", self.theoretical_nodes)
         # print("Empirical nodes", WNM.empirical_node_ids)
 
@@ -253,15 +254,18 @@ class SingleTheoryMatching:
                     theoretical_spectrum.positions[:, ii],
                 )
                 if dist_val < max_dist:
-                    self.matching_edge_ids.append(
-                        self.G.add_edge(empirical_node, theoretical_node, int(dist_val))
-                    )
+                    distances.append(np.int64(dist_val))
                     self.matching_edge_start_nodes.append(empirical_node)
                     self.matching_edge_end_nodes.append(theoretical_node)
 
         self.matching_edge_start_nodes = np.array(self.matching_edge_start_nodes)
         self.matching_edge_end_nodes = np.array(self.matching_edge_end_nodes)
-        self.matching_edge_ids = np.array(self.matching_edge_ids)
+
+        self.matching_edge_ids = self.G.add_edges(
+            self.matching_edge_start_nodes,
+            self.matching_edge_end_nodes,
+            np.array(distances, dtype=np.int64),
+        )
         # print("SingleTheoryMatching: Done")
 
     def set_edge_capacities(self, scale_factor: float):
