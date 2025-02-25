@@ -2,7 +2,7 @@ import numpy as np
 from numba import njit
 from .graph import Graph
 from .spectrum import Spectrum
-#import pylmcf_cpp
+import pylmcf_cpp
 
 
 @njit
@@ -170,7 +170,7 @@ def wasserstein(X1, Y1, intensities1, X2, Y2, intensities2, trash_cost):
 
 
 class WassersteinNetwork:
-    def __init__(self, empirical_spectrum, theoretical_spectra, trash_cost):
+    def __init__(self, empirical_spectrum, theoretical_spectra, trash_cost, dist_fun):
         self.empirical_spectrum = empirical_spectrum
         self.theoretical_spectra = theoretical_spectra
         self.trash_cost = trash_cost
@@ -181,7 +181,7 @@ class WassersteinNetwork:
         # print("Sink:")
         self.sink = G.add_nodes(1)[0]
         # print("Matching:")
-        self.matching = WassersteinMatching(self, empirical_spectrum, theoretical_spectra, trash_cost)
+        self.matching = WassersteinMatching(self, empirical_spectrum, theoretical_spectra, trash_cost, dist_fun)
         # print("Trash:")
         self.trash = SimpleTrash(self, trash_cost)
         G.build()
@@ -202,7 +202,7 @@ class WassersteinNetwork:
 
 
 class SingleTheoryMatching:
-    def __init__(self, WNM, theoretical_spectrum, max_dist):
+    def __init__(self, WNM, theoretical_spectrum, max_dist, dist_fun):
         # print("SingleTheoryMatching")
         self.theoretical_spectrum = theoretical_spectrum
         self.G = WNM.G
@@ -221,7 +221,7 @@ class SingleTheoryMatching:
 
         for ii, theoretical_node in enumerate(self.theoretical_nodes):
             for jj, empirical_node in enumerate(WNM.empirical_node_ids):
-                dist_val = np.linalg.norm(WNM.empirical_spectrum.positions[jj] - theoretical_spectrum.positions[ii])
+                dist_val = dist_fun(WNM.empirical_spectrum.positions[:,jj], theoretical_spectrum.positions[:,ii])
                 if dist_val < max_dist:
                     self.matching_edge_ids.append(self.G.add_edge(empirical_node, theoretical_node, int(dist_val)))
                     self.matching_edge_start_nodes.append(empirical_node)
@@ -280,8 +280,33 @@ class EmpiricalTrash:
         self.G.set_edge_capacities(self.trash_edges, self.WNM.empirical_spectrum.intensities)
 
 
+class SingleTheoryTrash:
+    def __init__(self, WNM, trash_cost, STM):
+        self.G = WNM.G
+        self.WNM = WNM
+        self.trash_cost = trash_cost
+        self.STM = STM
+        edge_starts = np.full(len(STM.theoretical_nodes), WNM.source)
+        edge_ends = STM.theoretical_nodes
+        self.trash_edges = self.G.add_edges(edge_starts, edge_ends, np.full(len(edge_starts), trash_cost))
+
+    def set_edge_capacity(self):
+        self.G.set_edge_capacities(self.trash_edges, self.STM.theoretical_spectrum.intensities)
+
+class TheoryTrash:
+    def __init__(self, WNM, trash_cost):
+        self.G = WNM.G
+        self.WNM = WNM
+        self.trash_cost = trash_cost
+        self.self_single_theory_trashes = [SingleTheoryTrash(WNM, trash_cost, STM) for STM in WNM.theory_matchers]
+
+    def set_edge_capacity(self):
+        for single_theory_trash in self.self_single_theory_trashes:
+            single_theory_trash.set_edge_capacity()
+
+
 class WassersteinMatching:
-    def __init__(self, WN, empirical_spectrum, theoretical_spectra, distance_limit):
+    def __init__(self, WN, empirical_spectrum, theoretical_spectra, distance_limit, dist_fun):
         self.empirical_spectrum = empirical_spectrum
         self.theoretical_spectra = theoretical_spectra
         self.distance_limit = distance_limit
@@ -289,7 +314,7 @@ class WassersteinMatching:
         self.G = WN.G
         self.empirical_node_ids = self.G.add_nodes(len(empirical_spectrum))
         self.empirical_node_id_to_idx = lambda x: x - self.empirical_node_ids[0]
-        self.theory_matchers = [SingleTheoryMatching(self, theoretical_spectrum, distance_limit)
+        self.theory_matchers = [SingleTheoryMatching(self, theoretical_spectrum, distance_limit, dist_fun)
                                 for theoretical_spectrum in theoretical_spectra]
 
         self.source_to_empirical = self.G.add_edges(np.full(len(self.empirical_node_ids), self.network.source),
@@ -306,20 +331,23 @@ class WassersteinMatching:
 
 
 class WassersteinSolver:
-    def __init__(self, empirical_spectrum, theoretical_spectra, trash_cost):
+    def __init__(self, empirical_spectrum, theoretical_spectra, trash_cost, dist_fun = lambda x,y: np.linalg.norm(x-y)):
         self.INTENSITY_SCALING = 1_000_000_000
+        self.COSTS_SCALING     = 1_000_000_000
         if not isinstance(empirical_spectrum, Spectrum):
             empirical_spectrum = Spectrum.FromMasserstein(empirical_spectrum)
             theoretical_spectra = [Spectrum.FromMasserstein(s) for s in theoretical_spectra]
+
+        scaled_dist_fun = lambda x,y: np.int64(self.COSTS_SCALING * dist_fun(x,y))
 
         self.empirical_spectrum = empirical_spectrum.scaled(self.INTENSITY_SCALING)
         # print("Empirical spectrum", self.empirical_spectrum)
         self.theoretical_spectra = [s.scaled(self.INTENSITY_SCALING) for s in theoretical_spectra]
         # print("Theoretical spectra", self.theoretical_spectra)
-        self.trash_cost = trash_cost
+        self.trash_cost = trash_cost * self.COSTS_SCALING
 
-        self.WN = WassersteinNetwork(self.empirical_spectrum, self.theoretical_spectra, self.trash_cost)
+        self.WN = WassersteinNetwork(self.empirical_spectrum, self.theoretical_spectra, self.trash_cost, scaled_dist_fun)
 
     def run(self):
         self.WN.solve([1])
-        return self.WN.total_cost() / self.INTENSITY_SCALING
+        return self.WN.total_cost() / self.INTENSITY_SCALING / self.COSTS_SCALING

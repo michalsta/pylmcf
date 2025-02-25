@@ -1,6 +1,7 @@
 from pylmcf import *
 import numpy as np
 from pprint import pprint
+import pylmcf_cpp
 
 INF = np.int64(2**30)
 I = INF
