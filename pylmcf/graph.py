@@ -1,31 +1,27 @@
 from pylmcf import pylmcf_cpp
+from array import array
 import numpy as np
 
 
 class Graph:
     def __init__(self):
         self.no_nodes = 0
-        self.edge_starts = []
-        self.edge_ends = []
-        self.edge_costs = []
-        self.edge_ids = []
+        self.edge_starts = array("q")
+        self.edge_ends = array("q")
+        self.edge_costs = array("q")
+        self.edge_ids = array("q")
         self.order = None
         self.flows = None
-        self.node_labels = {}
-        self.edge_labels = {}
 
-    def add_nodes(self, no_nodes, labels=None):
+    def add_nodes(self, no_nodes):
         assert self.order is None, "Cannot add nodes after building the graph"
         ret = self.no_nodes
         self.no_nodes += no_nodes
         ret = np.arange(ret, ret + no_nodes, dtype=np.int64)
         # print("Added nodes", ret)
-        if labels is not None:
-            for i, label in zip(ret, labels):
-                self.node_labels[i] = label
         return ret
 
-    def add_edges(self, starts, ends, costs, labels=None):
+    def add_edges(self, starts, ends, costs):
         assert self.order is None, "Cannot add edges after building the graph"
         new_ids = range(len(self.edge_starts), len(self.edge_starts) + len(starts))
         self.edge_ids.extend(new_ids)
@@ -35,9 +31,6 @@ class Graph:
         ret = np.array(new_ids)
         # for id, start, end, cost in zip(new_ids, starts, ends, costs):
         #     print("Added edge", "id:", id, "start:", start, "end:", end, "cost:", cost)
-        if labels is not None:
-            for i, label in zip(ret, labels):
-                self.edge_labels[i] = label
         return ret
 
     def add_edge(self, start, end, cost):
@@ -51,10 +44,10 @@ class Graph:
 
     def build(self):
         self.order = np.lexsort((self.edge_ends, self.edge_starts))
-        self.edge_starts = np.array(self.edge_starts)[self.order]
-        self.edge_ends = np.array(self.edge_ends)[self.order]
-        self.edge_costs = np.array(self.edge_costs)[self.order]
-        self.edge_ids = np.array(self.edge_ids)[self.order]
+        self.edge_starts = np.asarray(self.edge_starts)[self.order]
+        self.edge_ends = np.asarray(self.edge_ends)[self.order]
+        self.edge_costs = np.asarray(self.edge_costs)[self.order]
+        self.edge_ids = np.asarray(self.edge_ids)[self.order]
         self.edge_capacities = np.zeros(len(self.edge_starts), dtype=np.int64)
         self.node_supply = np.zeros(self.no_nodes, dtype=np.int64)
         self.edge_id_to_index = np.argsort(self.edge_ids)
