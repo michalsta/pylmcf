@@ -54,6 +54,7 @@ RANGE = 100000
 # intensities2 = np.random.randint(1, RANGE, SIZE)
 # trash_cost = np.uint64(10)
 
+
 # print(type(res[0]), res[0], res[0].dtype)
 # print(type(res[1]), res[1], res[1].dtype)
 # print(type(res[2]), res[2], res[2].dtype)
@@ -71,11 +72,11 @@ def test_0():
 
     pprint(res)
 
-    assert np.array_equal(res['src_trashed'], np.array([0, 1]))
-    assert np.array_equal(res['dst_trashed'], np.array([1]))
-    assert np.array_equal(res['transport_source_idx'], np.array([0]))
-    assert np.array_equal(res['transport_sink_idx'], np.array([0]))
-    assert np.array_equal(res['transport_flow'], np.array([5]))
+    assert np.array_equal(res["src_trashed"], np.array([0, 1]))
+    assert np.array_equal(res["dst_trashed"], np.array([1]))
+    assert np.array_equal(res["transport_source_idx"], np.array([0]))
+    assert np.array_equal(res["transport_sink_idx"], np.array([0]))
+    assert np.array_equal(res["transport_flow"], np.array([5]))
 
 
 def test_1():
@@ -88,11 +89,11 @@ def test_1():
     trash_cost = np.uint64(10)
     res = wasserstein(X1, Y1, intensities1, X2, Y2, intensities2, trash_cost)
 
-    assert np.array_equal(res['src_trashed'], np.array([0, 1]))
-    assert np.array_equal(res['dst_trashed'], np.array([1]))
-    assert np.array_equal(res['transport_source_idx'], np.array([0]))
-    assert np.array_equal(res['transport_sink_idx'], np.array([0]))
-    assert np.array_equal(res['transport_flow'], np.array([5]))
+    assert np.array_equal(res["src_trashed"], np.array([0, 1]))
+    assert np.array_equal(res["dst_trashed"], np.array([1]))
+    assert np.array_equal(res["transport_source_idx"], np.array([0]))
+    assert np.array_equal(res["transport_sink_idx"], np.array([0]))
+    assert np.array_equal(res["transport_flow"], np.array([5]))
 
 
 test_0()

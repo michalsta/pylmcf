@@ -1,7 +1,6 @@
 import numpy as np
 
 
-
 class Spectrum:
     def __init__(self, positions, intensities):
         if not isinstance(positions, np.ndarray):
@@ -9,7 +8,9 @@ class Spectrum:
         if not isinstance(intensities, np.ndarray):
             raise ValueError("intensities must be a numpy array")
         if len(positions.shape) != 2:
-            raise ValueError("positions must be a 2D array. If you have a 1D array, use Spectrum_1D")
+            raise ValueError(
+                "positions must be a 2D array. If you have a 1D array, use Spectrum_1D"
+            )
         if len(intensities.shape) != 1:
             raise ValueError("intensities must be a 1D array")
         if positions.shape[1] != len(intensities):
@@ -27,8 +28,7 @@ class Spectrum:
         return len(self.intensities)
 
     def scaled(self, factor):
-        return Spectrum(self.positions.copy(),
-                        self.intensities * factor)
+        return Spectrum(self.positions.copy(), self.intensities * factor)
 
 
 class Spectrum_1D(Spectrum):
