@@ -7,7 +7,7 @@ def test_1d():
     E = Spectrum_1D([1], [1])
     T = Spectrum_1D([2], [1])
     solver = WassersteinSolver(E, [T], 10)
-    print(solver.run())
+    assert solver.run() == 1
 
 
 test_1d()
@@ -24,8 +24,9 @@ def test_2d():
         s1,
         [s2],
         1000000,
+        costs_scaling=1000
     )
-    print(solver.run())
+    assert solver.run() == 1.414
 
 
 test_2d()

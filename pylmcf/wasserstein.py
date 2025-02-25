@@ -397,24 +397,26 @@ class WassersteinSolver:
         theoretical_spectra,
         trash_cost,
         dist_fun=lambda x, y: np.linalg.norm(x - y),
+        intensity_scaling=1_000_000,
+        costs_scaling=1_000_000,
     ):
-        self.INTENSITY_SCALING = 1_000_000_000
-        self.COSTS_SCALING = 1_000_000_000
+        self.intensity_scaling = intensity_scaling
+        self.costs_scaling = costs_scaling
         if not isinstance(empirical_spectrum, Spectrum):
             empirical_spectrum = Spectrum.FromMasserstein(empirical_spectrum)
             theoretical_spectra = [
                 Spectrum.FromMasserstein(s) for s in theoretical_spectra
             ]
 
-        scaled_dist_fun = lambda x, y: np.int64(self.COSTS_SCALING * dist_fun(x, y))
+        scaled_dist_fun = lambda x, y: np.int64(self.costs_scaling * dist_fun(x, y))
 
-        self.empirical_spectrum = empirical_spectrum.scaled(self.INTENSITY_SCALING)
+        self.empirical_spectrum = empirical_spectrum.scaled(self.intensity_scaling)
         # print("Empirical spectrum", self.empirical_spectrum)
         self.theoretical_spectra = [
-            s.scaled(self.INTENSITY_SCALING) for s in theoretical_spectra
+            s.scaled(self.intensity_scaling) for s in theoretical_spectra
         ]
         # print("Theoretical spectra", self.theoretical_spectra)
-        self.trash_cost = trash_cost * self.COSTS_SCALING
+        self.trash_cost = trash_cost * self.costs_scaling
 
         self.WN = WassersteinNetwork(
             self.empirical_spectrum,
@@ -424,5 +426,6 @@ class WassersteinSolver:
         )
 
     def run(self):
+        print("Running WassersteinSolver")
         self.WN.solve([1])
-        return self.WN.total_cost() / self.INTENSITY_SCALING / self.COSTS_SCALING
+        return self.WN.total_cost() / self.intensity_scaling / self.costs_scaling
