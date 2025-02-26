@@ -2,7 +2,8 @@ import numpy as np
 from numba import njit
 from .graph import Graph
 from .spectrum import Spectrum
-#from .numba_helper import match_nodes
+
+# from .numba_helper import match_nodes
 import pylmcf_cpp
 
 
@@ -246,8 +247,10 @@ class SingleTheoryMatching:
         distances = []
 
         for ii, theoretical_node in enumerate(self.theoretical_nodes):
-            dists = dist_fun(theoretical_spectrum.positions[:, ii:ii+1][:np.newaxis],
-                                   WNM.empirical_spectrum.positions)
+            dists = dist_fun(
+                theoretical_spectrum.positions[:, ii : ii + 1][: np.newaxis],
+                WNM.empirical_spectrum.positions,
+            )
             mask = dists < max_dist
             distances.extend(dists[mask])
             self.matching_edge_start_nodes.extend(WNM.empirical_node_ids[mask])
@@ -380,6 +383,7 @@ class WassersteinMatching:
         )
 
     def set_edge_capacities(self, scale_factors):
+        assert len(scale_factors) == len(self.theory_matchers)
         for scale_factor, theory_matcher in zip(scale_factors, self.theory_matchers):
             theory_matcher.set_edge_capacities(scale_factor)
         # print("Setting edge capacities for source to empirical")
@@ -424,7 +428,23 @@ class WassersteinSolver:
             scaled_dist_fun,
         )
 
-    def run(self):
-        print("Running WassersteinSolver")
-        self.WN.solve([1])
+    def run(self, point=None):
+        print("Running with point", point)
+        if point is None:
+            point = np.full(len(self.theoretical_spectra), 1.0)
+        point = point / np.sum(point)
+        self.WN.solve(point)
+        print("Total cost", self.WN.total_cost())
         return self.WN.total_cost() / self.intensity_scaling / self.costs_scaling
+
+    def estimate_proportions(self):
+        target_function = lambda x: self.run(x)
+        from scipy.optimize import minimize
+
+        res = minimize(
+            target_function,
+            np.full(len(self.theoretical_spectra), 1.0),
+            bounds=[(0, None)] * len(self.theoretical_spectra),
+            method="Nelder-Mead"
+        )
+        return res.x
