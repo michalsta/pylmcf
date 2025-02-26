@@ -2,6 +2,7 @@ import numpy as np
 from numba import njit
 from .graph import Graph
 from .spectrum import Spectrum
+from .trashes import *
 
 # from .numba_helper import match_nodes
 import pylmcf_cpp
@@ -288,78 +289,6 @@ class SingleTheoryMatching:
         self.G.set_edge_capacities(self.matching_edge_ids, scaled_matching_capacities)
 
 
-class SimpleTrash:
-    def __init__(self, WNM, trash_cost):
-        self.G = WNM.G
-        self.WNM = WNM
-        self.trash_cost = trash_cost
-        self.trash_edge = self.G.add_edge(self.WNM.source, self.WNM.sink, trash_cost)
-
-    def set_edge_capacity(self):
-        # print("Trash capacity", np.sum(self.WNM.empirical_spectrum.intensities))
-        self.G.set_edge_capacities(
-            np.array([self.trash_edge]),
-            np.array([np.sum(self.WNM.empirical_spectrum.intensities)]),
-        )
-
-
-class NoTrash:
-    def __init__(self, WNM):
-        pass
-
-    def set_edge_capacity(self):
-        pass
-
-
-class EmpiricalTrash:
-    def __init__(self, WNM, trash_cost):
-        self.G = WNM.G
-        self.WNM = WNM
-        self.trash_cost = trash_cost
-        edge_starts = WNM.empirical_node_ids
-        edge_ends = np.full(len(edge_starts), WNM.sink)
-        self.trash_edges = self.G.add_edges(
-            edge_starts, edge_ends, np.full(len(edge_starts), trash_cost)
-        )
-
-    def set_edge_capacity(self):
-        self.G.set_edge_capacities(
-            self.trash_edges, self.WNM.empirical_spectrum.intensities
-        )
-
-
-class SingleTheoryTrash:
-    def __init__(self, WNM, trash_cost, STM):
-        self.G = WNM.G
-        self.WNM = WNM
-        self.trash_cost = trash_cost
-        self.STM = STM
-        edge_starts = np.full(len(STM.theoretical_nodes), WNM.source)
-        edge_ends = STM.theoretical_nodes
-        self.trash_edges = self.G.add_edges(
-            edge_starts, edge_ends, np.full(len(edge_starts), trash_cost)
-        )
-
-    def set_edge_capacity(self):
-        self.G.set_edge_capacities(
-            self.trash_edges, self.STM.theoretical_spectrum.intensities
-        )
-
-
-class TheoryTrash:
-    def __init__(self, WNM, trash_cost):
-        self.G = WNM.G
-        self.WNM = WNM
-        self.trash_cost = trash_cost
-        self.self_single_theory_trashes = [
-            SingleTheoryTrash(WNM, trash_cost, STM) for STM in WNM.theory_matchers
-        ]
-
-    def set_edge_capacity(self):
-        for single_theory_trash in self.self_single_theory_trashes:
-            single_theory_trash.set_edge_capacity()
-
-
 class WassersteinMatching:
     def __init__(
         self, WN, empirical_spectrum, theoretical_spectra, distance_limit, dist_fun
@@ -432,7 +361,7 @@ class WassersteinSolver:
         print("Running with point", point)
         if point is None:
             point = np.full(len(self.theoretical_spectra), 1.0)
-        point = point / np.sum(point)
+        #point = point / np.sum(point)
         self.WN.solve(point)
         print("Total cost", self.WN.total_cost())
         return self.WN.total_cost() / self.intensity_scaling / self.costs_scaling
