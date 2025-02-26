@@ -9,6 +9,7 @@ def test_1d():
     solver = WassersteinSolver(E, [T], 10)
     assert solver.run() == 1
 
+test_1d()
 
 def test_2d():
     s1_pos = np.array([[0, 1, 0], [0, 0, 1]])
@@ -23,4 +24,9 @@ def test_2d():
         1000000,
         costs_scaling=1000
     )
+    print(solver.run())
     assert solver.run() == 1.414
+
+
+
+test_2d()

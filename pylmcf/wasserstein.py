@@ -244,19 +244,14 @@ class SingleTheoryMatching:
         self.matching_edge_start_nodes = []  # empirical nodes
         self.matching_edge_end_nodes = []  # theoretical nodes
         distances = []
-        # print("Theoretical nodes", self.theoretical_nodes)
-        # print("Empirical nodes", WNM.empirical_node_ids)
 
         for ii, theoretical_node in enumerate(self.theoretical_nodes):
-            for jj, empirical_node in enumerate(WNM.empirical_node_ids):
-                dist_val = dist_fun(
-                    WNM.empirical_spectrum.positions[:, jj],
-                    theoretical_spectrum.positions[:, ii],
-                )
-                if dist_val < max_dist:
-                    distances.append(np.int64(dist_val))
-                    self.matching_edge_start_nodes.append(empirical_node)
-                    self.matching_edge_end_nodes.append(theoretical_node)
+            dists = dist_fun(theoretical_spectrum.positions[:, ii:ii+1][:np.newaxis],
+                                   WNM.empirical_spectrum.positions)
+            mask = dists < max_dist
+            distances.extend(dists[mask])
+            self.matching_edge_start_nodes.extend(WNM.empirical_node_ids[mask])
+            self.matching_edge_end_nodes.extend(np.full(np.sum(mask), theoretical_node))
 
         self.matching_edge_start_nodes = np.array(self.matching_edge_start_nodes)
         self.matching_edge_end_nodes = np.array(self.matching_edge_end_nodes)
@@ -400,7 +395,7 @@ class WassersteinSolver:
         empirical_spectrum,
         theoretical_spectra,
         trash_cost,
-        dist_fun=lambda x, y: np.linalg.norm(x - y),
+        dist_fun=lambda x, y: np.linalg.norm(x - y, axis=0),
         intensity_scaling=1_000_000,
         costs_scaling=1_000_000,
     ):
