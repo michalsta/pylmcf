@@ -1,7 +1,7 @@
 from pylmcf import pylmcf_cpp
 from array import array
 import numpy as np
-
+import networkx as nx
 
 class Graph:
     def __init__(self):
@@ -98,3 +98,31 @@ class Graph:
                     self.flows[i],
                 )
             )
+
+    def to_networkx(self):
+        G = nx.DiGraph()
+        for i in range(len(self.edge_starts)):
+            G.add_edge(
+                self.edge_starts[i],
+                self.edge_ends[i],
+                capacity=self.edge_capacities[i],
+                flow=self.flows[i],
+                label=f"ca: {int(self.edge_capacities[i])} co: {int(self.edge_costs[i])} f: {int(self.flows[i])}"
+            )
+        return G
+
+    def show(self):
+        from matplotlib import pyplot as plt
+        nxg = self.to_networkx()
+        edge_labels = nx.get_edge_attributes(nxg, 'label')
+        ranks = {node: nx.shortest_path_length(nxg, 0, node) for node in nxg.nodes}
+        ranks[1] = 4
+        # Assign rank as 'layer' attribute
+        nx.set_node_attributes(nxg, ranks, 'layer')
+
+        # Use multipartite_layout based on 'layer'
+        pos = nx.multipartite_layout(nxg, subset_key='layer')
+
+        nx.draw(nxg, pos=pos, with_labels=True)
+        nx.draw_networkx_edge_labels(nxg, pos=pos, edge_labels=edge_labels)
+        plt.show()

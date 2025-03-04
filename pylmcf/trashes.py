@@ -3,6 +3,9 @@ import numpy as np
 
 
 class Trash(ABC):
+    def apply_cost_scaling(self, scaling):
+        self.scale = scaling
+
     @abstractmethod
     def set_edge_capacities(self):
         pass
@@ -22,22 +25,31 @@ class Trash(ABC):
 
 class SimpleTrash(Trash):
     def __init__(self, trash_cost):
+        self.scale = 1
         self.trash_cost = trash_cost
 
     def add_to_network(self, WNM):
         self.G = WNM.G
         self.WNM = WNM
-        self.trash_edge = self.G.add_edge(self.WNM.source, self.WNM.sink, self.trash_cost)
+        self.trash_edge = self.G.add_edge(self.WNM.source, self.WNM.sink, self.trash_cost * self.scale)
 
     def set_edge_capacities(self):
         # print("Trash capacity", np.sum(self.WNM.empirical_spectrum.intensities))
+        self.edge_capacity = np.sum(self.WNM.empirical_spectrum.intensities)
         self.G.set_edge_capacities(
             np.array([self.trash_edge]),
-            np.array([np.sum(self.WNM.empirical_spectrum.intensities)]),
+            np.array([self.edge_capacity]),
         )
 
     def distance_limit(self):
-        return self.trash_cost
+        return self.trash_cost * self.scale
+
+    def print_summary(self):
+        print("Simple trash")
+        print("     Trash cost", self.trash_cost * self.scale)
+        print("     Trash edge", self.trash_edge)
+        print("     Trash capacity", np.sum(self.WNM.empirical_spectrum.intensities))
+        print("     Trash flow", self.G.flows[self.trash_edge])
 
 class NoTrash(Trash):
     def __init__(self, cost = None):
@@ -52,8 +64,12 @@ class NoTrash(Trash):
     def distance_limit(self):
         return np.inf
 
-class EmpiricalTrash:
+    def print_summary(self):
+        print("Trivial trash")
+
+class EmpiricalTrash(Trash):
     def __init__(self, WNM, trash_cost):
+        self.scale = 1
         self.trash_cost = trash_cost
 
     def add_to_network(self, WNM):
@@ -62,7 +78,7 @@ class EmpiricalTrash:
         edge_starts = WNM.empirical_node_ids
         edge_ends = np.full(len(edge_starts), WNM.sink)
         self.trash_edges = self.G.add_edges(
-            edge_starts, edge_ends, np.full(len(edge_starts), self.trash_cost)
+            edge_starts, edge_ends, np.full(len(edge_starts), self.trash_cost * self.scale)
         )
 
     def set_edge_capacities(self):
@@ -71,18 +87,27 @@ class EmpiricalTrash:
         )
 
     def distance_limit(self):
-        return self.trash_cost
+        return self.trash_cost * self.scale
+
+    def print_summary(self):
+        print("Empirical trash")
+        print("Trash cost", self.trash_cost * self.scale)
+        print("Trash edges", self.trash_edges)
+        print("Trash edge capacities", self.WNM.empirical_spectrum.intensities)
+        print("Trash edge intensities", self.WNM.empirical_spectrum.intensities)
+
 
 
 class TheoryTrash(Trash):
     def __init__(self, WNM, trash_cost):
+        self.scale = 1
         self.trash_cost = trash_cost
 
     def add_to_network(self, WNM):
         self.G = WNM.G
         self.WNM = WNM
         self.self_single_theory_trashes = [
-            SingleTheoryTrash(WNM, trash_cost, STM) for STM in WNM.theory_matchers
+            SingleTheoryTrash(WNM, self.trash_cost * self.scale, STM) for STM in WNM.theory_matchers
         ]
 
     def set_edge_capacities(self):
@@ -99,7 +124,7 @@ class SingleTheoryTrash:
         edge_starts = np.full(len(STM.theoretical_nodes), WNM.source)
         edge_ends = STM.theoretical_nodes
         self.trash_edges = self.G.add_edges(
-            edge_starts, edge_ends, np.full(len(edge_starts), self.trash_cost)
+            edge_starts, edge_ends, np.full(len(edge_starts), self.trash_cost * self.scale)
         )
 
     def set_edge_capacities(self):

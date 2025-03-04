@@ -21,7 +21,7 @@ class Spectrum:
 
     @staticmethod
     def FromMasserstein(masserstein_spectrum):
-        locs, intensities = zip(*masserstein_spectrum.confs())
+        locs, intensities = zip(*masserstein_spectrum.confs)
         return Spectrum_1D(np.array(locs), np.array(intensities))
 
     def __len__(self):
