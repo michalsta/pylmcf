@@ -24,6 +24,14 @@ class Spectrum:
         locs, intensities = zip(*masserstein_spectrum.confs)
         return Spectrum_1D(np.array(locs), np.array(intensities))
 
+    @staticmethod
+    def Concatenate(spectra):
+        assert all([isinstance(s, Spectrum) for s in spectra])
+        assert all([s.positions.shape[0] == spectra[0].positions.shape[0] for s in spectra])
+        positions = np.concatenate([s.positions for s in spectra], axis=1)
+        intensities = np.concatenate([s.intensities for s in spectra])
+        return Spectrum(positions, intensities)
+
     def __len__(self):
         return len(self.intensities)
 
