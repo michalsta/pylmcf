@@ -42,6 +42,5 @@ setup(
     ext_modules=ext_modules,
     cmdclass={"build_ext": build_ext},
     zip_safe=False,
-    install_requires=["numpy", "numba", "pybind11"],
     packages=["pylmcf"],
 )
