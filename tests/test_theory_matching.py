@@ -1,5 +1,5 @@
 from pylmcf.wasserstein import *
-from pylmcf.graph import Graph
+from pylmcf.graph import FlowGraph
 from pylmcf.spectrum import Spectrum_1D
 from pylmcf.trashes import SimpleTrash
 

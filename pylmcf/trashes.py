@@ -31,11 +31,11 @@ class SimpleTrash(Trash):
     def add_to_network(self, WNM):
         self.G = WNM.G
         self.WNM = WNM
-        self.trash_edge = self.G.add_edge(self.WNM.source, self.WNM.sink, self.trash_cost * self.scale)
+        self.trash_edge = self.G.add_edge(self.WNM.source, self.WNM.sink, np.int64(self.trash_cost * self.scale))
 
     def set_edge_capacities(self):
         # print("Trash capacity", np.sum(self.WNM.empirical_spectrum.intensities))
-        self.edge_capacity = np.sum(self.WNM.empirical_spectrum.intensities)
+        self.edge_capacity = self.WNM.total_supply
         self.G.set_edge_capacities(
             np.array([self.trash_edge]),
             np.array([self.edge_capacity]),
@@ -136,3 +136,6 @@ class SingleTheoryTrash:
         self.G.set_edge_capacities(
             self.trash_edges, self.STM.theoretical_spectrum.intensities
         )
+
+
+
