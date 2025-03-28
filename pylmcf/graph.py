@@ -28,7 +28,7 @@ class Graph:
         self.edge_starts.extend(starts)
         self.edge_ends.extend(ends)
         self.edge_costs.extend(costs)
-        ret = np.array(new_ids)
+        ret = np.array(new_ids, dtype=np.int64)
         # for id, start, end, cost in zip(new_ids, starts, ends, costs):
         #     print("Added edge", "id:", id, "start:", start, "end:", end, "cost:", cost)
         return ret
