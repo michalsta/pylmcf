@@ -3,6 +3,7 @@ from array import array
 from functools import cached_property
 from enum import Enum
 from pylmcf.graph_wrapper import GraphWrapper
+from pylmcf.graph_elements import *
 from dataclasses import dataclass
 from typing import Union
 from abc import ABC
@@ -12,100 +13,6 @@ import networkx as nx
 import time
 
 # import codon
-
-
-BIGINT = np.int64(2**56)
-
-TODO_REMOVE_ME = 982347589
-
-@dataclass(frozen=True)
-class FlowNode:
-    id: int
-
-@dataclass(frozen=True)
-class SourceNode(FlowNode):
-    @property
-    def layer(self):
-        return 0
-
-
-@dataclass(frozen=True)
-class SinkNode(FlowNode):
-    @property
-    def layer(self):
-        return 3
-
-
-@dataclass(frozen=True)
-class EmpiricalNode(FlowNode):
-    peak_idx: int
-    intensity: int
-    @property
-    def layer(self):
-        return 1
-
-
-@dataclass(frozen=True)
-class TheoreticalNode(FlowNode):
-    peak_idx: int
-    spectrum_id: int
-    intensity: int
-    @property
-    def layer(self):
-        return 2
-
-
-Node = Union[SourceNode, SinkNode, EmpiricalNode, TheoreticalNode]
-
-@dataclass(frozen=True)
-class FlowEdge:
-    id: int
-    start_node: Node
-    end_node: Node
-
-    @property
-    def start_node_id(self):
-        return self.start_node.id
-
-    @property
-    def end_node_id(self):
-        return self.end_node.id
-
-
-@dataclass(frozen=True)
-class MatchingEdge(FlowEdge):
-    emp_peak_idx: int
-    theo_spectrum_id: int
-    theo_peak_idx: int
-    cost: int
-
-@dataclass(frozen=True)
-class SrcToEmpEdge(FlowEdge):
-    emp_peak_intensity: int
-    @property
-    def cost(self):
-        return 0
-
-@dataclass(frozen=True)
-class TheoToSinkEdge(FlowEdge):
-    theo_spectrum_id: int
-    theo_peak_intensity: int
-    @property
-    def cost(self):
-        return 0
-
-@dataclass(frozen=True)
-class SimpleTrashEdge(FlowEdge):
-    cost: int
-
-@dataclass(frozen=True)
-class TheoryTrashEdge(FlowEdge):
-    theo_spectrum_id: int
-    theo_peak_intensity: int
-
-@dataclass(frozen=True)
-class EmpiricalTrashEdge(FlowEdge):
-    emp_peak_intensity: int
 
 #Edge = Union[MatchingEdge, SrcToEmpEdge, TheoToSinkEdge, SimpleTrashEdge]
 
@@ -188,7 +95,7 @@ class DecompositableFlowGraph:
                     obj=edge,
                 )
 
-    def build(self):
+    def build(self, trash_costructors=[]):
         self.built = True
         self.fragment_graphs = []
 
@@ -198,10 +105,15 @@ class DecompositableFlowGraph:
         self.graph.remove_nodes_from(dead_end_nodes)
 
         for subgraph in nx.weakly_connected_components(self.graph):
-            self.fragment_graphs.append(FlowSubgraph(self.graph.subgraph(subgraph), self))
+            subgraph = FlowSubgraph(self.graph.subgraph(subgraph), self)
+            for trash_costructor in trash_costructors:
+                trash_costructor.add_to_subgraph(subgraph)
+
+            self.fragment_graphs.append(subgraph)
 
         for subgraph in self.fragment_graphs:
             subgraph.build()
+
 
     def set_point(self, point):
         assert len(point) == len(self.theoretical_spectra)

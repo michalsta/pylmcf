@@ -1,5 +1,33 @@
 from abc import ABC, abstractmethod
 import numpy as np
+from pylmcf.graph_elements import *
+
+
+
+
+
+
+
+class TrashFactory(ABC):
+    @abstractmethod
+    def dead_end_trash_cost(self, dead_end_nodes):
+        pass
+    @abstractmethod
+    def add_to_subgraph(self, subgraph):
+        pass
+
+
+class TrashFactorySimple(TrashFactory):
+    def __init__(self, trash_cost):
+        self.trash_cost = trash_cost
+
+    def dead_end_trash_cost(self, dead_end_nodes):
+        return 0
+
+    def add_to_subgraph(self, subgraph):
+        subgraph.edges.append(SimpleTrashEdge(TODO_REMOVE_ME, subgraph.source, subgraph.sink, self.trash_cost))
+
+
 
 
 class Trash(ABC):
