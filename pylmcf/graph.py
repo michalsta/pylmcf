@@ -203,7 +203,6 @@ class FlowSubgraph:
         for node in self.nodes:
             bnx_graph.add_node(node.id, layer=node.layer)
         for edge_id, edge in enumerate(self.edges):
-            print(edge)
             bnx_graph.add_edge(
                 edge.start_node.id,
                 edge.end_node.id,
