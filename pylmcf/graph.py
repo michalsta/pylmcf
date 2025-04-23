@@ -104,7 +104,8 @@ class DecompositableFlowGraph:
         ]
         self.graph.remove_nodes_from(dead_end_nodes)
 
-        for subgraph in nx.weakly_connected_components(self.graph):
+        from tqdm import tqdm
+        for subgraph in tqdm(list(nx.weakly_connected_components(self.graph)), desc="Building subgraphs"):
             subgraph = FlowSubgraph(self.graph.subgraph(subgraph), self)
             for trash_costructor in trash_costructors:
                 trash_costructor.add_to_subgraph(subgraph)
@@ -166,7 +167,6 @@ class FlowSubgraph:
 
         self.edges.extend(e[2]['obj'] for e in nx_graph.edges(data=True))
 
-        self.add_simple_trash(10000)
 
     def build(self):
         self.lemon_edge_starts = np.array(
@@ -192,9 +192,6 @@ class FlowSubgraph:
         self.lemon_graph = GraphWrapper(  # pylmcf_cpp.LemonGraph(
             len(self.nodes), self.lemon_edge_starts, self.lemon_edge_ends, self.lemon_edge_costs
         )
-
-    def add_simple_trash(self, cost):
-        self.edges.append(SimpleTrashEdge(TODO_REMOVE_ME, self.source, self.sink, cost))
 
 
     def nx_graph(self):

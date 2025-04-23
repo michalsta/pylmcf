@@ -89,8 +89,8 @@ class SimpleTrashEdge(FlowEdge):
 
 @dataclass(frozen=True)
 class TheoryTrashEdge(FlowEdge):
-    theo_spectrum_id: int
-    theo_peak_intensity: int
+    #theo_spectrum_id: int
+    #theo_peak_intensity: int
     cost: int
 
 @dataclass(frozen=True)

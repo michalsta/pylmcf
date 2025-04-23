@@ -28,6 +28,35 @@ class TrashFactorySimple(TrashFactory):
         subgraph.edges.append(SimpleTrashEdge(TODO_REMOVE_ME, subgraph.source, subgraph.sink, self.trash_cost))
 
 
+class TrashFactoryEmpirical(TrashFactory):
+    def __init__(self, trash_cost):
+        self.trash_cost = trash_cost
+
+    def dead_end_trash_cost(self, dead_end_nodes):
+        raise NotImplementedError()
+
+    def add_to_subgraph(self, subgraph):
+        for node in subgraph.nodes:
+            match node:
+                case EmpiricalNode(id, peak_idx, intensity):
+                    subgraph.edges.append(EmpiricalTrashEdge(TODO_REMOVE_ME, node, subgraph.sink, intensity, self.trash_cost))
+                case _:
+                    pass
+
+class TrashFactoryTheory(TrashFactory):
+    def __init__(self, trash_cost):
+        self.trash_cost = trash_cost
+
+    def dead_end_trash_cost(self, dead_end_nodes):
+        raise NotImplementedError()
+
+    def add_to_subgraph(self, subgraph):
+        for node in subgraph.nodes:
+            match node:
+                case TheoreticalNode(peak_idx, intensity):
+                    subgraph.edges.append(TheoryTrashEdge(TODO_REMOVE_ME, subgraph.source, node, self.trash_cost))
+                case _:
+                    pass
 
 
 class Trash(ABC):
