@@ -9,4 +9,4 @@ description = "Python bindings for LEMON Min Cost Flow algorithm"
 authors = [
     { name="Michał Startek", email="michal.startek@mimuw.edu.pl" }
 ]
-dependencies = ["numpy", "pybind11", "numba", "networkx", "scipy", "matplotlib"]
+dependencies = ["numpy", "pybind11", "numba", "networkx", "scipy", "matplotlib", "tqdm"]
