@@ -197,28 +197,31 @@ class FlowSubgraph:
         self.edges.append(SimpleTrashEdge(TODO_REMOVE_ME, self.source, self.sink, cost))
 
 
-    @cached_property
     def nx_graph(self):
         bnx_graph = nx.DiGraph()
+        flows = self.lemon_graph.flow()
         for node in self.nodes:
             bnx_graph.add_node(node.id, layer=node.layer)
-        for edge in self.edges:
+        for edge_id, edge in enumerate(self.edges):
             print(edge)
             bnx_graph.add_edge(
                 edge.start_node.id,
                 edge.end_node.id,
                 obj=edge,
                 cost=edge.cost,
+                capacity=self.lemon_edge_capacities[edge_id],
+                flow=flows[edge_id],
+                label=f"ca: {int(self.lemon_edge_capacities[edge_id])} co: {int(edge.cost)} f: {int(flows[edge_id])}",
             )
         return bnx_graph
 
     def show(self):
         from matplotlib import pyplot as plt
-
-        pos = nx.multipartite_layout(self.nx_graph, subset_key="layer")
-        edge_labels = nx.get_edge_attributes(self.nx_graph, "cost")
-        nx.draw(self.nx_graph, with_labels=True, pos=pos)
-        nx.draw_networkx_edge_labels(self.nx_graph, pos=pos, edge_labels=edge_labels)
+        nx_graph = self.nx_graph()
+        pos = nx.multipartite_layout(nx_graph, subset_key="layer")
+        edge_labels = nx.get_edge_attributes(nx_graph, "label")
+        nx.draw(nx_graph, with_labels=True, pos=pos)
+        nx.draw_networkx_edge_labels(nx_graph, pos=pos, edge_labels=edge_labels)
         plt.show()
 
     def set_point(self, point):

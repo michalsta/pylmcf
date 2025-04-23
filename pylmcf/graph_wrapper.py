@@ -1,6 +1,7 @@
 from pylmcf_cpp import LemonGraph
 import networkx as nx
 from functools import cached_property
+import numpy as np
 
 
 class GraphWrapper:
@@ -12,6 +13,7 @@ class GraphWrapper:
         self.edge_costs = edge_costs
         self.node_supply = None
         self.edge_capacities = None
+        self.solved = False
 
 
     @property
@@ -37,12 +39,17 @@ class GraphWrapper:
 
     def solve(self):
         self.lemon_graph.solve()
+        self.solved = True
 
     def total_cost(self):
+        if not self.solved:
+            raise ValueError("Graph has not been solved yet.")
         return self.lemon_graph.total_cost()
 
     def flow(self):
-        return self.lemon_graph.flow()
+        if not self.solved:
+            return np.zeros(len(self.edge_starts), dtype=np.int64)
+        return self.lemon_graph.result()
 
     def plot(self):
         from matplotlib import pyplot as plt
