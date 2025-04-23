@@ -6,6 +6,7 @@ from pylmcf.graph_wrapper import GraphWrapper
 from dataclasses import dataclass
 from typing import Union
 from abc import ABC
+from pprint import pprint
 import numpy as np
 import networkx as nx
 import time
@@ -15,81 +16,98 @@ import time
 
 BIGINT = np.int64(2**56)
 
+TODO_REMOVE_ME = 982347589
 
 @dataclass(frozen=True)
-class SourceNode:
+class FlowNode:
     id: int
+
+@dataclass(frozen=True)
+class SourceNode(FlowNode):
+    @property
+    def layer(self):
+        return 0
 
 
 @dataclass(frozen=True)
-class SinkNode:
-    id: int
+class SinkNode(FlowNode):
+    @property
+    def layer(self):
+        return 3
 
 
 @dataclass(frozen=True)
-class EmpiricalNode:
-    id: int
+class EmpiricalNode(FlowNode):
     peak_idx: int
     intensity: int
+    @property
+    def layer(self):
+        return 1
 
 
 @dataclass(frozen=True)
-class TheoreticalNode:
-    id: int
+class TheoreticalNode(FlowNode):
     peak_idx: int
     spectrum_id: int
     intensity: int
+    @property
+    def layer(self):
+        return 2
 
 
 Node = Union[SourceNode, SinkNode, EmpiricalNode, TheoreticalNode]
 
-
 @dataclass(frozen=True)
-class MatchingEdge:
+class FlowEdge:
     id: int
     start_node: Node
     end_node: Node
+
+    @property
+    def start_node_id(self):
+        return self.start_node.id
+
+    @property
+    def end_node_id(self):
+        return self.end_node.id
+
+
+@dataclass(frozen=True)
+class MatchingEdge(FlowEdge):
     emp_peak_idx: int
     theo_spectrum_id: int
     theo_peak_idx: int
+    cost: int
 
 @dataclass(frozen=True)
-class SrcToEmpEdge:
-    id: int
-    start_node: Node
-    end_node: Node
+class SrcToEmpEdge(FlowEdge):
     emp_peak_intensity: int
+    @property
+    def cost(self):
+        return 0
 
 @dataclass(frozen=True)
-class TheoToSinkEdge:
-    id: int
-    start_node: Node
-    end_node: Node
+class TheoToSinkEdge(FlowEdge):
+    theo_spectrum_id: int
+    theo_peak_intensity: int
+    @property
+    def cost(self):
+        return 0
+
+@dataclass(frozen=True)
+class SimpleTrashEdge(FlowEdge):
+    cost: int
+
+@dataclass(frozen=True)
+class TheoryTrashEdge(FlowEdge):
     theo_spectrum_id: int
     theo_peak_intensity: int
 
 @dataclass(frozen=True)
-class SimpleTrashEdge:
-    id: int
-    start_node: Node
-    end_node: Node
-
-@dataclass(frozen=True)
-class TheoryTrashEdge:
-    id: int
-    start_node: Node
-    end_node: Node
-    theo_spectrum_id: int
-    theo_peak_intensity: int
-
-@dataclass(frozen=True)
-class EmpiricalTrashEdge:
-    id: int
-    start_node: Node
-    end_node: Node
+class EmpiricalTrashEdge(FlowEdge):
     emp_peak_intensity: int
 
-Edge = Union[MatchingEdge, SrcToEmpEdge, TheoToSinkEdge, SimpleTrashEdge]
+#Edge = Union[MatchingEdge, SrcToEmpEdge, TheoToSinkEdge, SimpleTrashEdge]
 
 
 
@@ -122,7 +140,7 @@ class DecompositableFlowGraph:
             )
             self.nodes.append(node)
             self.empirical_spectrum_corresponding_nodes.append(node)
-            self.graph.add_node(node)
+            self.graph.add_node(node, layer=1)
 
 
     def add_theoretical_spectrum(self, spectrum, dist_fun, max_dist):
@@ -143,7 +161,7 @@ class DecompositableFlowGraph:
                 intensity=spectrum.intensities[idx],
             )
             self.nodes.append(theo_node)
-            self.graph.add_node(theo_node)
+            self.graph.add_node(theo_node, layer=2)
 
             dists = np.int64(
                 dist_fun(
@@ -151,18 +169,17 @@ class DecompositableFlowGraph:
                     self.empirical_spectrum.positions,
                 )
             )
-            print("dist", dists)
             emp_indexes = np.where(dists < max_dist)[0]
-            print("emp_indexes", emp_indexes)
 
             for emp_idx in emp_indexes:
                 edge = MatchingEdge(
                     id=len(self.edges),
-                    start_node=self.empirical_spectrum_corresponding_nodes[idx],
+                    start_node=self.empirical_spectrum_corresponding_nodes[emp_idx],
                     end_node=theo_node,
                     emp_peak_idx=emp_idx,
                     theo_spectrum_id=len(self.theoretical_spectra) - 1,
                     theo_peak_idx=idx,
+                    cost=dists[emp_idx],
                 )
                 self.edges.append(edge)
                 self.graph.add_edge(
@@ -181,7 +198,6 @@ class DecompositableFlowGraph:
         self.graph.remove_nodes_from(dead_end_nodes)
 
         for subgraph in nx.weakly_connected_components(self.graph):
-            print("Subgraph")
             self.fragment_graphs.append(FlowSubgraph(self.graph.subgraph(subgraph), self))
 
         for subgraph in self.fragment_graphs:
@@ -197,7 +213,6 @@ class DecompositableFlowGraph:
 
     def show(self):
         from matplotlib import pyplot as plt
-
         pos = nx.multipartite_layout(self.graph, subset_key="layer")
         nx.draw(self.graph, with_labels=True, pos=pos)
         plt.show()
@@ -209,6 +224,8 @@ class FlowSubgraph:
         self.source = SourceNode(0)
         self.sink = SinkNode(1)
         self.nodes = [self.source, self.sink]
+        self.source_idx = 0
+        self.sink_idx = 1
         self.nodes.extend(nx_graph.nodes)
         self.nodes.sort(key=lambda node: node.id)
         self.node_nx_id_to_lemon_id = {
@@ -223,50 +240,63 @@ class FlowSubgraph:
         for node in self.nodes:
             match node:
                 case EmpiricalNode(id, peak_idx, intensity):
-                    edge = SrcToEmpEdge(len(self.edges), intensity)
+                    edge = SrcToEmpEdge(len(self.edges), self.source, node, intensity)
                     self.edges.append(edge)
                 case TheoreticalNode(id, peak_idx, spectrum_id, intensity):
-                    edge = TheoToSinkEdge(len(self.edges), spectrum_id, intensity)
+                    edge = TheoToSinkEdge(len(self.edges), node, self.sink, spectrum_id, intensity)
                     self.edges.append(edge)
+                case SourceNode(_):
+                    pass
+                case SinkNode(_):
+                    pass
                 case _:
                     raise ValueError(f"Unexpected node type: {type(node)} (this shouldn't happen)")
 
-        sdfvsdv
-        #for edge_start, edge_end, edge_obj in nx_graph.edges(data=True):
+        self.edges.extend(e[2]['obj'] for e in nx_graph.edges(data=True))
 
-        self.add_simple_trash(10)
+        self.add_simple_trash(10000)
 
     def build(self):
-        self.order = np.lexsort((self.edge_ends, self.edge_starts))
-        self.edge_starts = np.asarray(self.edge_starts)[self.order]
-        self.edge_ends = np.asarray(self.edge_ends)[self.order]
-        self.edge_costs = np.asarray(self.edge_costs)[self.order]
-        self.edge_capacities = np.asarray(self.edge_capacities)[self.order]
+        self.lemon_edge_starts = np.array(
+            [self.node_nx_id_to_lemon_id[edge.start_node.id] for edge in self.edges], dtype=np.int64)
+        self.lemon_edge_ends = np.array(
+            [self.node_nx_id_to_lemon_id[edge.end_node.id] for edge in self.edges], dtype=np.int64)
+        self.order = np.lexsort((self.lemon_edge_ends, self.lemon_edge_starts))
+        self.lemon_edge_starts = np.asarray(self.lemon_edge_starts)[self.order]
+        self.lemon_edge_ends = np.asarray(self.lemon_edge_ends)[self.order]
         self.edges = [self.edges[i] for i in self.order]
 
+        def get_edge_cost(edge):
+            try:
+                return edge.cost
+            except AttributeError:
+                return 0
+
+        self.lemon_edge_costs = np.array(
+            [get_edge_cost(edge) for edge in self.edges], dtype=np.int64
+        )
+        self.lemon_edge_capacities = np.zeros(len(self.lemon_edge_starts), dtype=np.int64)
+
         self.lemon_graph = GraphWrapper(  # pylmcf_cpp.LemonGraph(
-            len(self.node_ids), self.edge_starts, self.edge_ends, self.edge_costs
+            len(self.nodes), self.lemon_edge_starts, self.lemon_edge_ends, self.lemon_edge_costs
         )
 
     def add_simple_trash(self, cost):
-        self.edge_starts.append(self.source)
-        self.edge_ends.append(self.sink)
-        self.edge_costs.append(cost)
-        self.edge_capacities.append(0)
-        self.edges.append(SimpleTrashEdge())
-        print("Trash:", self.edge_starts)
+        self.edges.append(SimpleTrashEdge(TODO_REMOVE_ME, self.source, self.sink, cost))
 
 
     @cached_property
     def nx_graph(self):
         bnx_graph = nx.DiGraph()
-        for node_id, layer in zip(self.node_ids, self.node_layers):
-            bnx_graph.add_node(node_id, layer=layer)
-        for i in range(len(self.edge_starts)):
+        for node in self.nodes:
+            bnx_graph.add_node(node.id, layer=node.layer)
+        for edge in self.edges:
+            print(edge)
             bnx_graph.add_edge(
-                self.node_ids[self.edge_starts[i]],
-                self.node_ids[self.edge_ends[i]],
-                cost=self.edge_costs[i],
+                edge.start_node.id,
+                edge.end_node.id,
+                obj=edge,
+                cost=edge.cost,
             )
         return bnx_graph
 
@@ -280,35 +310,44 @@ class FlowSubgraph:
         plt.show()
 
     def set_point(self, point):
+        assert len(point) == len(self.parent.theoretical_spectra)
         self.total_theoretical_intensity = 0
         trash_edge_idx = None
         for edge_idx, edge in enumerate(self.edges):
             match edge:
-                case TheoToSinkEdge(theo_spectrum_id, theo_peak_idx):
+                case TheoToSinkEdge(id, start_node, end_node, theo_spectrum_id, theo_peak_intensity):
                     new_cap = point[theo_spectrum_id] * edge.theo_peak_intensity
                     self.total_theoretical_intensity += new_cap
-                    self.edge_capacities[edge_idx] = new_cap
+                    self.lemon_edge_capacities[edge_idx] = new_cap
                 case SimpleTrashEdge():
                     trash_edge_idx = edge_idx
+                case MatchingEdge(
+                    id,
+                    start_node,
+                    end_node,
+                    emp_peak_idx,
+                    theo_spectrum_id,
+                    theo_peak_idx,
+                    cost,
+                ):
+                    self.lemon_edge_capacities[edge_idx] = BIGINT
+                case SrcToEmpEdge(id, start_node, end_node, emp_peak_intensity):
+                    self.lemon_edge_capacities[edge_idx] = emp_peak_intensity
                 case _:
                     pass
         self.total_et_intensity = (
             self.total_empirical_intensity + self.total_theoretical_intensity
         )
-        print("ET:", self.total_et_intensity)
-        print(self.edge_capacities)
-        self.node_supply[self.source] = self.total_et_intensity
-        self.node_supply[self.sink] = -self.total_et_intensity
+        self.node_supply[self.source_idx] = self.total_et_intensity
+        self.node_supply[self.sink_idx] = -self.total_et_intensity
 
-        self.edge_capacities[trash_edge_idx] = self.total_et_intensity
+        self.lemon_edge_capacities[trash_edge_idx] = self.total_et_intensity
 
-        print(np.array(self.edge_capacities))
-        self.lemon_graph.set_edge_capacities(self.edge_capacities)
+        self.lemon_graph.set_edge_capacities(self.lemon_edge_capacities)
         self.lemon_graph.set_node_supply(self.node_supply)
         self.lemon_graph.solve()
         self.flows = self.lemon_graph.result()
         self.total_cost = self.lemon_graph.total_cost()
-        self.lemon_graph.plot()
         return self.total_cost
 
 
@@ -329,7 +368,6 @@ class FlowGraph:
         ret = self.no_nodes
         self.no_nodes += no_nodes
         ret = np.arange(ret, ret + no_nodes, dtype=np.int64)
-        # print("Added nodes", ret)
         return ret
 
     def add_edges(self, starts, ends, costs):
@@ -340,8 +378,6 @@ class FlowGraph:
         self.edge_ends.extend(ends)
         self.edge_costs.extend(costs)
         ret = np.array(new_ids, dtype=np.int64)
-        # for id, start, end, cost in zip(new_ids, starts, ends, costs):
-        #     print("Added edge", "id:", id, "start:", start, "end:", end, "cost:", cost)
         return ret
 
     def add_edge(self, start, end, cost):
@@ -373,7 +409,6 @@ class FlowGraph:
             self.order is not None
         ), "Cannot set edge capacities before building the graph"
         assert len(edge_ids) == len(capacities)
-        # print("Setting edge capacities", self.edge_id_to_index[edge_ids], capacities)
         self.edge_capacities[self.edge_id_to_index[edge_ids]] = capacities
 
     def set_node_supply(self, node_ids, supply):
@@ -434,7 +469,6 @@ class FlowGraph:
         components_split = G.subgraph(range(2, self.no_nodes))
         components = nx.weakly_connected_components(components_split)
         subgraphs = [G.subgraph([0, 1] + list(c)) for c in components]
-        print(len(subgraphs))
         raise Exception()
 
     def show(self):
