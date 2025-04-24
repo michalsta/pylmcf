@@ -46,7 +46,6 @@ def test_2d():
         scale_factor=1000
     )
     ret = solver.set_point([1])
-    solver.DG.subgraphs[0].show()
     assert ret == 1.414
 
 
