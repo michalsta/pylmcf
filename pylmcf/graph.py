@@ -196,7 +196,7 @@ class FlowSubgraph:
 
     def nx_graph(self):
         bnx_graph = nx.DiGraph()
-        flows = self.lemon_graph.flow()
+        flows = self.lemon_graph.result()
         for node in self.nodes:
             bnx_graph.add_node(node.id, layer=node.layer)
         for edge_id, edge in enumerate(self.edges):
@@ -261,6 +261,8 @@ class FlowSubgraph:
         self.total_cost = self.lemon_graph.total_cost()
         return self.total_cost
 
+
+# =========================== OBSOLETE CODE BELOW DO NOT USE ==========================
 
 class FlowGraph:
     def __init__(self):

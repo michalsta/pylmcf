@@ -59,6 +59,9 @@ class TrashFactoryTheory(TrashFactory):
                     pass
 
 
+# =========================== OBSOLETE CODE BELOW DO NOT USE ==========================
+
+
 class Trash(ABC):
     def apply_cost_scaling(self, scaling):
         self.scale = scaling

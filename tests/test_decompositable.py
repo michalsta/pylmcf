@@ -14,8 +14,8 @@ def test_simple():
     G.build([TrashFactorySimple(10)])
     #G.show()
     print(G.set_point([1]))
-    for fr_gr in G.fragment_graphs:
-        fr_gr.show()
+    #for fr_gr in G.fragment_graphs:
+    #    fr_gr.show()
 
 
 if __name__ == "__main__":

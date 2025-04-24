@@ -46,7 +46,7 @@ class GraphWrapper:
             raise ValueError("Graph has not been solved yet.")
         return self.lemon_graph.total_cost()
 
-    def flow(self):
+    def result(self):
         if not self.solved:
             return np.zeros(len(self.edge_starts), dtype=np.int64)
         return self.lemon_graph.result()
@@ -58,6 +58,3 @@ class GraphWrapper:
         nx.draw(self.nx_graph, with_labels=True, pos=pos)
         nx.draw_networkx_edge_labels(self.nx_graph, edge_labels=edge_labels, pos=pos)
         plt.show()
-
-    def result(self):
-        return self.lemon_graph.result()

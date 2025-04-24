@@ -9,6 +9,10 @@ import networkx as nx
 # from .numba_helper import match_nodes
 import pylmcf_cpp
 
+
+# =========================== OBSOLETE CODE BELOW DO NOT USE ==========================
+
+
 def XXX_solve(G):
     G.solve()
 
