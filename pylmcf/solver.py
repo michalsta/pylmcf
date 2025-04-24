@@ -27,4 +27,4 @@ class DeconvolutionSolver:
             start_point = [1.0] * len(self.theoretical_spectra)
         start_point = self.scale_factor * np.array(start_point)
 
-        return minimize(opt_fun, method='Nelder-Mead', x0 = start_point, bounds=[(0, None)] * len(self.theoretical_spectra), options={'disp': True, 'maxiter':100000})
+        return minimize(opt_fun, method='Nelder-Mead', x0 = start_point, bounds=[(0, None)] * len(self.theoretical_spectra), options={'disp': True, 'maxiter':10000})
