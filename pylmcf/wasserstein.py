@@ -372,7 +372,7 @@ class WassersteinNetwork:
         self.theoretical_spectra = theoretical_spectra
         if distance_limit is None:
             distance_limit = max((t.distance_limit() for t in trashes), default=np.inf)
-        G = DecompositableFlowGraph()
+        G = FlowGraph()
         self.G = G
         self.source = G.source
         self.sink = G.sink

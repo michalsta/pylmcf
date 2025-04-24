@@ -97,7 +97,7 @@ class DecompositableFlowGraph:
 
     def build(self, trash_costructors=[]):
         self.built = True
-        self.fragment_graphs = []
+        self.subgraphs = []
 
         dead_end_nodes = [
             node for node, degree in dict(self.graph.degree()).items() if degree < 1
@@ -110,9 +110,9 @@ class DecompositableFlowGraph:
             for trash_costructor in trash_costructors:
                 trash_costructor.add_to_subgraph(subgraph)
 
-            self.fragment_graphs.append(subgraph)
+            self.subgraphs.append(subgraph)
 
-        for subgraph in self.fragment_graphs:
+        for subgraph in self.subgraphs:
             subgraph.build()
 
 
@@ -120,7 +120,8 @@ class DecompositableFlowGraph:
         assert len(point) == len(self.theoretical_spectra)
         self.point = point
         self.total_cost = 0
-        for subgraph in self.fragment_graphs:
+        for subgraph in self.subgraphs:
+            print(self.total_cost)
             self.total_cost += subgraph.set_point(point)
         return self.total_cost
 
@@ -230,8 +231,8 @@ class FlowSubgraph:
                     new_cap = point[theo_spectrum_id] * edge.theo_peak_intensity
                     self.total_theoretical_intensity += new_cap
                     self.lemon_edge_capacities[edge_idx] = new_cap
-                case SimpleTrashEdge():
-                    trash_edge_idx = edge_idx
+                case SimpleTrashEdge() | TheoryTrashEdge() | EmpiricalTrashEdge():
+                    self.lemon_edge_capacities[edge_idx] = BIGINT
                 case MatchingEdge(
                     id,
                     start_node,
@@ -243,16 +244,23 @@ class FlowSubgraph:
                 ):
                     self.lemon_edge_capacities[edge_idx] = BIGINT
                 case SrcToEmpEdge(id, start_node, end_node, emp_peak_intensity):
+                    print(f"empirical intensity: {emp_peak_intensity}")
                     self.lemon_edge_capacities[edge_idx] = emp_peak_intensity
                 case _:
                     pass
+        print(self.lemon_edge_capacities)
+
         self.total_et_intensity = (
             self.total_empirical_intensity + self.total_theoretical_intensity
         )
         self.node_supply[self.source_idx] = self.total_et_intensity
         self.node_supply[self.sink_idx] = -self.total_et_intensity
 
-        self.lemon_edge_capacities[trash_edge_idx] = self.total_et_intensity
+        print(self.lemon_edge_capacities)
+        print(self.total_et_intensity)
+        print(trash_edge_idx)
+
+        print(self.lemon_edge_capacities)
 
         self.lemon_graph.set_edge_capacities(self.lemon_edge_capacities)
         self.lemon_graph.set_node_supply(self.node_supply)
@@ -273,8 +281,8 @@ class FlowGraph:
         self.edge_ids = array("q")
         self.order = None
         self.flows = None
-        # self.source = self.add_nodes(1)[0]
-        # self.sink = self.add_nodes(1)[0]
+        self.source = self.add_nodes(1)[0]
+        self.sink = self.add_nodes(1)[0]
 
     def add_nodes(self, no_nodes):
         assert self.order is None, "Cannot add nodes after building the graph"
@@ -374,6 +382,7 @@ class FlowGraph:
         return G
 
     def trim(self):
+        return
         G = self.to_networkx()
         dead_end_nodes = [
             node for node, degree in dict(G.degree()).items() if degree <= 1
