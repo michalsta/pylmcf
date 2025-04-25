@@ -43,7 +43,7 @@ def test_compare_4():
     S1 = Spectrum(np.random.randint(0, 1000, (2,5)), np.random.randint(0, 1000, 5))
     S2 = Spectrum(np.random.randint(0, 1000, (2,5)), np.random.randint(0, 1000, 5))
 
-    print(compare(S1, [S2], 10, [0.1, 0.1]))
+    print(compare(S1, [S2], 10, [0.1]))
 
 
 def test_compare_5():
@@ -62,4 +62,9 @@ def test_compare_6():
     print(compare(S1, [S2, S3, S4], 10, [0.0, 1.0, 1.0]))
 
 if __name__ == "__main__":
+    test_compare_1()
+    test_compare_2()
+    test_compare_3()
+    test_compare_4()
+    test_compare_5()
     test_compare_6()
