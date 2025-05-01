@@ -1,4 +1,4 @@
-from pylmcf import Spectrum_1D, WassersteinSolver, Spectrum, wasserstein_integer, SimpleTrash, wasserstein_integer_compat
+from pylmcf import Spectrum_1D, WassersteinSolver, Spectrum, wasserstein_integer, SimpleTrash, wasserstein_integer_compat, DecompositableFlowGraph, TrashFactorySimple
 import numpy as np
 
 
@@ -14,8 +14,19 @@ def compare(E, T, trash_cost, fractions = None):
     intensities = np.concatenate([s.intensities*f for s, f in zip(T, fractions)])
     val2 = wasserstein_integer(E.positions[0], E.positions[1], E.intensities, positions[0], positions[1], intensities, trash_cost)['total_cost']
     val3 = wasserstein_integer_compat(E.positions[0], E.positions[1], E.intensities, positions[0], positions[1], intensities, trash_cost)['total_cost']
-    #assert val1 == val2 == val3
-    return val1, val2, val3
+    decomp_solver = DecompositableFlowGraph()
+    decomp_solver.add_empirical_spectrum(E)
+    for s, f in zip(T, fractions):
+        decomp_solver.add_theoretical_spectrum(s, lambda x, y: np.linalg.norm(x - y, axis=0), trash_cost)
+    decomp_solver.build([TrashFactorySimple(trash_cost)])
+    val4 = decomp_solver.set_point(fractions)
+    print(f"Solver: {val1}, Wasserstein: {val2}, Wasserstein_compat: {val3}, DecompositableFlowGraph: {val4}")
+    #assert val1 == val2 # 2 uses diffrent trash so not really the same
+    assert val1 == val3
+    assert val1 == val4
+    return val1, val2, val3, val4
+
+
 
 def test_compare_1():
     S1 = Spectrum(np.array([[0], [0]]), np.array([1]))
@@ -43,7 +54,7 @@ def test_compare_4():
     S1 = Spectrum(np.random.randint(0, 1000, (2,5)), np.random.randint(0, 1000, 5))
     S2 = Spectrum(np.random.randint(0, 1000, (2,5)), np.random.randint(0, 1000, 5))
 
-    print(compare(S1, [S2], 10, [0.1]))
+    print(compare(S1, [S2], 10, [1.0]))
 
 
 def test_compare_5():

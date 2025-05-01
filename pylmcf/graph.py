@@ -11,6 +11,7 @@ from pprint import pprint
 import numpy as np
 import networkx as nx
 import time
+from tqdm import tqdm
 
 # import codon
 
@@ -60,7 +61,7 @@ class DecompositableFlowGraph:
 
         self.theoretical_spectra.append(spectrum)
 
-        for idx in range(len(spectrum.intensities)):
+        for idx in tqdm(range(len(spectrum.intensities))):
             theo_node = TheoreticalNode(
                 id=len(self.nodes),
                 peak_idx=idx,
@@ -102,6 +103,8 @@ class DecompositableFlowGraph:
         dead_end_nodes = [
             node for node, degree in dict(self.graph.degree()).items() if degree < 1
         ]
+
+        self.dead_end_trashes = [tc.dead_end_trash(dead_end_nodes, len(self.theoretical_spectra)) for tc in trash_costructors]
         self.graph.remove_nodes_from(dead_end_nodes)
 
         from tqdm import tqdm
@@ -123,7 +126,7 @@ class DecompositableFlowGraph:
         for subgraph in self.subgraphs:
             print(self.total_cost)
             self.total_cost += subgraph.set_point(point)
-        return self.total_cost
+        return self.total_cost + sum(trash.cost_at_point(point) for trash in self.dead_end_trashes)
 
     def show(self):
         from matplotlib import pyplot as plt
@@ -155,6 +158,7 @@ class FlowSubgraph:
             match node:
                 case EmpiricalNode(id, peak_idx, intensity):
                     edge = SrcToEmpEdge(len(self.edges), self.source, node, intensity)
+                    self.total_empirical_intensity += intensity
                     self.edges.append(edge)
                 case TheoreticalNode(id, peak_idx, spectrum_id, intensity):
                     edge = TheoToSinkEdge(len(self.edges), node, self.sink, spectrum_id, intensity)
@@ -248,19 +252,13 @@ class FlowSubgraph:
                     self.lemon_edge_capacities[edge_idx] = emp_peak_intensity
                 case _:
                     pass
-        print(self.lemon_edge_capacities)
 
-        self.total_et_intensity = (
-            self.total_empirical_intensity + self.total_theoretical_intensity
+        self.total_et_intensity = self.total_empirical_intensity + self.total_theoretical_intensity
+        self.node_supply[self.source_idx] = max(self.total_empirical_intensity, self.total_theoretical_intensity)
+        self.node_supply[self.sink_idx] = -1 * self.node_supply[self.source_idx]
+        print(
+            f"Total empirical intensity: {self.total_empirical_intensity}, total theoretical intensity: {self.total_theoretical_intensity}"
         )
-        self.node_supply[self.source_idx] = self.total_et_intensity
-        self.node_supply[self.sink_idx] = -self.total_et_intensity
-
-        print(self.lemon_edge_capacities)
-        print(self.total_et_intensity)
-        print(trash_edge_idx)
-
-        print(self.lemon_edge_capacities)
 
         self.lemon_graph.set_edge_capacities(self.lemon_edge_capacities)
         self.lemon_graph.set_node_supply(self.node_supply)
