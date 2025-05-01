@@ -5,8 +5,6 @@ from typing import Union
 
 BIGINT = np.int64(2**56)
 
-TODO_REMOVE_ME = 982347589
-
 @dataclass(frozen=True)
 class FlowNode:
     id: int

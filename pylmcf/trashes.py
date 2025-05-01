@@ -59,7 +59,7 @@ class TrashFactoryEmpirical(TrashFactory):
         for node in subgraph.nodes:
             match node:
                 case EmpiricalNode(id, peak_idx, intensity):
-                    subgraph.edges.append(EmpiricalTrashEdge(TODO_REMOVE_ME, node, subgraph.sink, intensity, self.trash_cost))
+                    subgraph.edges.append(EmpiricalTrashEdge(node, subgraph.sink, intensity, self.trash_cost))
                 case _:
                     pass
 
@@ -74,7 +74,7 @@ class TrashFactoryTheory(TrashFactory):
         for node in subgraph.nodes:
             match node:
                 case TheoreticalNode(peak_idx, intensity):
-                    subgraph.edges.append(TheoryTrashEdge(TODO_REMOVE_ME, subgraph.source, node, self.trash_cost))
+                    subgraph.edges.append(TheoryTrashEdge(subgraph.source, node, self.trash_cost))
                 case _:
                     pass
 
