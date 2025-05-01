@@ -48,7 +48,6 @@ Node = Union[SourceNode, SinkNode, EmpiricalNode, TheoreticalNode]
 
 @dataclass(frozen=True)
 class FlowEdge:
-    id: int
     start_node: Node
     end_node: Node
 

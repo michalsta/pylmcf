@@ -81,7 +81,6 @@ class DecompositableFlowGraph:
 
             for emp_idx in emp_indexes:
                 edge = MatchingEdge(
-                    id=len(self.edges),
                     start_node=self.empirical_spectrum_corresponding_nodes[emp_idx],
                     end_node=theo_node,
                     emp_peak_idx=emp_idx,
@@ -157,11 +156,11 @@ class FlowSubgraph:
         for node in self.nodes:
             match node:
                 case EmpiricalNode(id, peak_idx, intensity):
-                    edge = SrcToEmpEdge(len(self.edges), self.source, node, intensity)
+                    edge = SrcToEmpEdge(self.source, node, intensity)
                     self.total_empirical_intensity += intensity
                     self.edges.append(edge)
                 case TheoreticalNode(id, peak_idx, spectrum_id, intensity):
-                    edge = TheoToSinkEdge(len(self.edges), node, self.sink, spectrum_id, intensity)
+                    edge = TheoToSinkEdge(node, self.sink, spectrum_id, intensity)
                     self.edges.append(edge)
                 case SourceNode(_):
                     pass
@@ -231,14 +230,13 @@ class FlowSubgraph:
         trash_edge_idx = None
         for edge_idx, edge in enumerate(self.edges):
             match edge:
-                case TheoToSinkEdge(id, start_node, end_node, theo_spectrum_id, theo_peak_intensity):
+                case TheoToSinkEdge(start_node, end_node, theo_spectrum_id, theo_peak_intensity):
                     new_cap = point[theo_spectrum_id] * edge.theo_peak_intensity
                     self.total_theoretical_intensity += new_cap
                     self.lemon_edge_capacities[edge_idx] = new_cap
                 case SimpleTrashEdge() | TheoryTrashEdge() | EmpiricalTrashEdge():
                     self.lemon_edge_capacities[edge_idx] = BIGINT
                 case MatchingEdge(
-                    id,
                     start_node,
                     end_node,
                     emp_peak_idx,
@@ -247,7 +245,7 @@ class FlowSubgraph:
                     cost,
                 ):
                     self.lemon_edge_capacities[edge_idx] = BIGINT
-                case SrcToEmpEdge(id, start_node, end_node, emp_peak_intensity):
+                case SrcToEmpEdge(start_node, end_node, emp_peak_intensity):
                     print(f"empirical intensity: {emp_peak_intensity}")
                     self.lemon_edge_capacities[edge_idx] = emp_peak_intensity
                 case _:

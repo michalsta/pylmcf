@@ -44,7 +44,7 @@ class TrashFactorySimple(TrashFactory):
         return DeadEndTrash(self.trash_cost, dead_end_nodes, no_theoretical_spectra)
 
     def add_to_subgraph(self, subgraph):
-        subgraph.edges.append(SimpleTrashEdge(TODO_REMOVE_ME, subgraph.source, subgraph.sink, self.trash_cost))
+        subgraph.edges.append(SimpleTrashEdge(subgraph.source, subgraph.sink, self.trash_cost))
 
 
 
