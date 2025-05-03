@@ -55,23 +55,16 @@ class DecompositableFlowGraph:
             self.nodes.append(theo_node)
             self.graph.add_node(theo_node, layer=2)
 
-            dists = np.int64(
-                dist_fun(
-                    spectrum.positions[:, idx : idx + 1][: np.newaxis],
-                    empirical_spectrum.positions,
-                )
-            )
-            #print(f"Occupancy: {np.sum(dists < max_dist)}, out of {len(dists)}")
-            emp_indexes = np.where(dists < max_dist)[0]
+            emp_indexes, dists = empirical_spectrum.closer_than(spectrum.positions[:,idx:idx+1], max_dist, dist_fun)
 
-            for emp_idx in emp_indexes:
+            for emp_idx, dist in zip(emp_indexes, dists):
                 edge = MatchingEdge(
                     start_node=self.empirical_spectrum_corresponding_nodes[emp_idx],
                     end_node=theo_node,
                     emp_peak_idx=emp_idx,
                     theo_spectrum_id=self.no_theoretical_spectra,
                     theo_peak_idx=idx,
-                    cost=dists[emp_idx],
+                    cost=dist,
                 )
                 self.edges.append(edge)
                 self.graph.add_edge(

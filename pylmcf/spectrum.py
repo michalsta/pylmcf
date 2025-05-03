@@ -22,9 +22,18 @@ class Spectrum:
     @property
     def positions(self):
         return self.cspectrum.positions()
+
     @property
     def intensities(self):
         return self.cspectrum.intensities()
+
+    def closer_than(self, point, max_dist, dist_fun):
+        '''
+        Returns the indices of the positions that are closer than max_dist to the point, and the distances'''
+        dists = np.int64(dist_fun(point[: np.newaxis], self.positions))
+        mask = dists < max_dist
+        return np.where(mask)[0], dists[mask]
+
 
     @staticmethod
     def FromMasserstein(masserstein_spectrum):
