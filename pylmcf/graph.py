@@ -23,7 +23,6 @@ from tqdm import tqdm
 class DecompositableFlowGraph:
     def __init__(self, empirical_spectrum, theoretical_spectra, dist_funs, max_dists):
         self.no_theoretical_spectra = 0
-        self.empirical_spectrum_corresponding_nodes = []
         self.graph = nx.DiGraph()
         self.nodes = [None, None] # Reserve IDs for source and sink in subgraphs
         self.edges = []
@@ -40,7 +39,6 @@ class DecompositableFlowGraph:
                 id=len(self.nodes), peak_idx=idx, intensity=peak_intensity
             )
             self.nodes.append(node)
-            self.empirical_spectrum_corresponding_nodes.append(node)
             self.graph.add_node(node, layer=1)
 
 
@@ -59,7 +57,7 @@ class DecompositableFlowGraph:
 
             for emp_idx, dist in zip(emp_indexes, dists):
                 edge = MatchingEdge(
-                    start_node=self.empirical_spectrum_corresponding_nodes[emp_idx],
+                    start_node=self.nodes[emp_idx+2],
                     end_node=theo_node,
                     emp_peak_idx=emp_idx,
                     theo_spectrum_id=self.no_theoretical_spectra,
@@ -68,7 +66,7 @@ class DecompositableFlowGraph:
                 )
                 self.edges.append(edge)
                 self.graph.add_edge(
-                    self.empirical_spectrum_corresponding_nodes[emp_idx],
+                    self.nodes[emp_idx+2],
                     theo_node,
                     obj=edge,
                 )
