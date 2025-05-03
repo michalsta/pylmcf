@@ -24,8 +24,7 @@ class DecompositableFlowGraph:
     def __init__(self, empirical_spectrum, theoretical_spectra, dist_funs, max_dists):
         self.source = SourceNode(0)
         self.sink = SinkNode(1)
-        self.empirical_spectrum = empirical_spectrum
-        self.theoretical_spectra = theoretical_spectra
+        self.no_theoretical_spectra = 0
         self.empirical_spectrum_corresponding_nodes = []
         self.graph = nx.DiGraph()
         self.nodes = [self.source, self.sink]
@@ -35,7 +34,7 @@ class DecompositableFlowGraph:
         self._add_empirical_spectrum(empirical_spectrum)
 
         for spectrum, dist_fun, max_dist in zip(theoretical_spectra, dist_funs, max_dists):
-            self._add_theoretical_spectrum(spectrum, dist_fun, max_dist)
+            self._add_theoretical_spectrum(empirical_spectrum, spectrum, dist_fun, max_dist)
 
     def _add_empirical_spectrum(self, spectrum):
         for idx, peak_intensity in tqdm(enumerate(spectrum.intensities), desc="Adding empirical spectrum"):
@@ -47,11 +46,11 @@ class DecompositableFlowGraph:
             self.graph.add_node(node, layer=1)
 
 
-    def _add_theoretical_spectrum(self, spectrum, dist_fun, max_dist):
+    def _add_theoretical_spectrum(self, empirical_spectrum, spectrum, dist_fun, max_dist):
         for idx in tqdm(range(len(spectrum.intensities))):
             theo_node = TheoreticalNode(
                 id=len(self.nodes),
-                spectrum_id=len(self.theoretical_spectra) - 1,
+                spectrum_id=self.no_theoretical_spectra,
                 peak_idx=idx,
                 intensity=spectrum.intensities[idx],
             )
@@ -61,7 +60,7 @@ class DecompositableFlowGraph:
             dists = np.int64(
                 dist_fun(
                     spectrum.positions[:, idx : idx + 1][: np.newaxis],
-                    self.empirical_spectrum.positions,
+                    empirical_spectrum.positions,
                 )
             )
             #print(f"Occupancy: {np.sum(dists < max_dist)}, out of {len(dists)}")
@@ -72,7 +71,7 @@ class DecompositableFlowGraph:
                     start_node=self.empirical_spectrum_corresponding_nodes[emp_idx],
                     end_node=theo_node,
                     emp_peak_idx=emp_idx,
-                    theo_spectrum_id=len(self.theoretical_spectra) - 1,
+                    theo_spectrum_id=self.no_theoretical_spectra,
                     theo_peak_idx=idx,
                     cost=dists[emp_idx],
                 )
@@ -82,6 +81,7 @@ class DecompositableFlowGraph:
                     theo_node,
                     obj=edge,
                 )
+        self.no_theoretical_spectra += 1
 
     def build(self, trash_costructors=[]):
         self.built = True
@@ -91,7 +91,7 @@ class DecompositableFlowGraph:
             node for node, degree in dict(self.graph.degree()).items() if degree < 1
         ]
 
-        self.dead_end_trashes = [tc.dead_end_trash(dead_end_nodes, len(self.theoretical_spectra)) for tc in trash_costructors]
+        self.dead_end_trashes = [tc.dead_end_trash(dead_end_nodes, self.no_theoretical_spectra) for tc in trash_costructors]
         self.graph.remove_nodes_from(dead_end_nodes)
 
         from tqdm import tqdm
@@ -107,7 +107,7 @@ class DecompositableFlowGraph:
 
 
     def set_point(self, point):
-        assert len(point) == len(self.theoretical_spectra)
+        assert len(point) == self.no_theoretical_spectra
         self.point = point
         self.total_cost = 0
         for subgraph in self.subgraphs:
@@ -213,7 +213,7 @@ class FlowSubgraph:
         plt.show()
 
     def set_point(self, point):
-        assert len(point) == len(self.parent.theoretical_spectra)
+        assert len(point) == self.parent.no_theoretical_spectra
         self.total_theoretical_intensity = 0
         trash_edge_idx = None
         for edge_idx, edge in enumerate(self.edges):
