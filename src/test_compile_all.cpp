@@ -1,5 +1,14 @@
+#include <cstddef>
+#include <cstdint>
+#include <vector>
+#include <span>
+#include <algorithm>
+#include <stdexcept>
 #include "graph.cpp"
 #include "lmcf.cpp"
+#include "spectrum.hpp"
+#include "decompositable_graph.hpp"
+#include "graph_elements.hpp"
 
 template class Graph<int64_t>;
 template int64_t lmcf(

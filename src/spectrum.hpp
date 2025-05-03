@@ -3,6 +3,11 @@
 #include "basics.hpp"
 #include "py_support.h"
 
+#include <pybind11/pybind11.h>
+#include <pybind11/numpy.h>
+#include <pybind11/stl.h>
+
+
 class Spectrum {
     const py::array py_positions;
     const py::array_t<LEMON_INT> intensities;
@@ -20,5 +25,13 @@ public:
 
     std::vector<LEMON_INT> get_intensities() const {
         return std::vector<LEMON_INT>(intensities.data(), intensities.data() + size());
+    }
+
+    const py::array& py_get_positions() const {
+        return py_positions;
+    }
+
+    const py::array_t<LEMON_INT>& py_get_intensities() const {
+        return intensities;
     }
 };

@@ -1,4 +1,5 @@
 import numpy as np
+from pylmcf import pylmcf_cpp
 
 
 class Spectrum:
@@ -15,9 +16,15 @@ class Spectrum:
             raise ValueError("intensities must be a 1D array")
         if positions.shape[1] != len(intensities):
             raise ValueError("positions and intensities must have the same length")
-        self.positions = positions
-        self.intensities = intensities
-        assert self.positions.shape[1] == len(self.intensities)
+        assert positions.shape[1] == len(intensities)
+        self.cspectrum = pylmcf_cpp.CSpectrum(positions, intensities)
+
+    @property
+    def positions(self):
+        return self.cspectrum.positions()
+    @property
+    def intensities(self):
+        return self.cspectrum.intensities()
 
     @staticmethod
     def FromMasserstein(masserstein_spectrum):
