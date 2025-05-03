@@ -63,5 +63,6 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
         .def(py::init<py::array, py::array_t<LEMON_INT>>())
         .def("size", &Spectrum::size)
         .def("intensities", &Spectrum::py_get_intensities)
-        .def("positions", &Spectrum::py_get_positions);
+        .def("positions", &Spectrum::py_get_positions)
+        .def("get_point", &Spectrum::get_point);
 }

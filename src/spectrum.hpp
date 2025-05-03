@@ -12,7 +12,7 @@
 
 
 class Spectrum {
-    using Point_t = std::pair<const Spectrum*, size_t>;
+    using Point_t = std::pair<const py::array*, size_t>;
     const py::array py_positions;
     const py::array_t<LEMON_INT> py_intensities;
 public:
@@ -33,10 +33,8 @@ public:
         if (idx >= size()) {
             throw std::out_of_range("Index out of range");
         }
-        return {this, idx};
+        return {&py_positions, idx};
     }
-
-    
 
     const py::array& py_get_positions() const {
         return py_positions;

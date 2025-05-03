@@ -31,12 +31,15 @@ class Spectrum:
         '''
         Returns the point at index idx
         '''
-        #return self.cspectrum.get_point(idx)
-        return self.positions[:,idx:idx+1]
+        return self.cspectrum.get_point(idx)
+        #return self.positions[:,idx:idx+1]
+        #return self.positions, idx
 
     def closer_than(self, point, max_dist, dist_fun):
         '''
         Returns the indices of the positions that are closer than max_dist to the point, and the distances'''
+        pos, idx = point
+        point = pos[:,idx:idx+1]
         dists = np.int64(dist_fun(point[: np.newaxis], self.positions))
         mask = dists < max_dist
         return np.where(mask)[0], dists[mask]
