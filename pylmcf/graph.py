@@ -42,7 +42,7 @@ class DecompositableFlowGraph:
 
         self.empirical_spectrum = spectrum
 
-        for idx, peak_intensity in enumerate(spectrum.intensities):
+        for idx, peak_intensity in tqdm(enumerate(spectrum.intensities), desc="Adding empirical spectrum"):
             node = EmpiricalNode(
                 id=len(self.nodes), peak_idx=idx, intensity=peak_intensity
             )
@@ -64,8 +64,8 @@ class DecompositableFlowGraph:
         for idx in tqdm(range(len(spectrum.intensities))):
             theo_node = TheoreticalNode(
                 id=len(self.nodes),
-                peak_idx=idx,
                 spectrum_id=len(self.theoretical_spectra) - 1,
+                peak_idx=idx,
                 intensity=spectrum.intensities[idx],
             )
             self.nodes.append(theo_node)
@@ -77,6 +77,7 @@ class DecompositableFlowGraph:
                     self.empirical_spectrum.positions,
                 )
             )
+            #print(f"Occupancy: {np.sum(dists < max_dist)}, out of {len(dists)}")
             emp_indexes = np.where(dists < max_dist)[0]
 
             for emp_idx in emp_indexes:
@@ -159,7 +160,7 @@ class FlowSubgraph:
                     edge = SrcToEmpEdge(self.source, node, intensity)
                     self.total_empirical_intensity += intensity
                     self.edges.append(edge)
-                case TheoreticalNode(id, peak_idx, spectrum_id, intensity):
+                case TheoreticalNode(id, spectrum_id, peak_idx, intensity):
                     edge = TheoToSinkEdge(node, self.sink, spectrum_id, intensity)
                     self.edges.append(edge)
                 case SourceNode(_):

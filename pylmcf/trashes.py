@@ -14,7 +14,7 @@ class DeadEndTrash():
             match node:
                 case EmpiricalNode(id, peak_idx, intensity):
                     self.empirical_intensity += intensity
-                case TheoreticalNode(id, peak_idx, spectrum_id, intensity):
+                case TheoreticalNode(id, spectrum_id, peak_idx,intensity):
                     self.theoretical_intensities[spectrum_id] += intensity
                 case _:
                     raise ValueError("Unknown node type")
@@ -53,7 +53,8 @@ class TrashFactoryEmpirical(TrashFactory):
         self.trash_cost = trash_cost
 
     def dead_end_trash(self, dead_end_nodes, no_theoretical_spectra):
-        raise NotImplementedError()
+        empirical_dead_ends = [node for node in dead_end_nodes if isinstance(node, EmpiricalNode)]
+        return DeadEndTrash(self.trash_cost, empirical_dead_ends, no_theoretical_spectra)
 
     def add_to_subgraph(self, subgraph):
         for node in subgraph.nodes:
@@ -67,8 +68,9 @@ class TrashFactoryTheory(TrashFactory):
     def __init__(self, trash_cost):
         self.trash_cost = trash_cost
 
-    def dead_end_trash_cost(self, dead_end_nodes):
-        raise NotImplementedError()
+    def dead_end_trash(self, dead_end_nodes, no_theoretical_spectra):
+        theoretical_dead_ends = [node for node in dead_end_nodes if isinstance(node, TheoreticalNode)]
+        return DeadEndTrash(self.trash_cost, theoretical_dead_ends, len(theoretical_dead_ends))
 
     def add_to_subgraph(self, subgraph):
         for node in subgraph.nodes:

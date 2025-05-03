@@ -34,8 +34,8 @@ class EmpiricalNode(FlowNode):
 
 @dataclass(frozen=True)
 class TheoreticalNode(FlowNode):
-    peak_idx: int
     spectrum_id: int
+    peak_idx: int
     intensity: int
     @property
     def layer(self):
