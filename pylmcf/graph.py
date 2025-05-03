@@ -53,7 +53,7 @@ class DecompositableFlowGraph:
             self.nodes.append(theo_node)
             self.graph.add_node(theo_node, layer=2)
 
-            emp_indexes, dists = empirical_spectrum.closer_than(spectrum.positions[:,idx:idx+1], max_dist, dist_fun)
+            emp_indexes, dists = empirical_spectrum.closer_than(spectrum.get_point(idx), max_dist, dist_fun)
 
             for emp_idx, dist in zip(emp_indexes, dists):
                 edge = MatchingEdge(

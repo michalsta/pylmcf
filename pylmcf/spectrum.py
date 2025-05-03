@@ -27,6 +27,13 @@ class Spectrum:
     def intensities(self):
         return self.cspectrum.intensities()
 
+    def get_point(self, idx):
+        '''
+        Returns the point at index idx
+        '''
+        #return self.cspectrum.get_point(idx)
+        return self.positions[:,idx:idx+1]
+
     def closer_than(self, point, max_dist, dist_fun):
         '''
         Returns the indices of the positions that are closer than max_dist to the point, and the distances'''

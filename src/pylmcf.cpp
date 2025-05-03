@@ -63,14 +63,5 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
         .def(py::init<py::array, py::array_t<LEMON_INT>>())
         .def("size", &Spectrum::size)
         .def("intensities", &Spectrum::py_get_intensities)
-        .def("positions", &Spectrum::py_get_positions)
-
-        .def("__str__", [](const Spectrum &s) {
-            std::string out = "Spectrum with " + std::to_string(s.size()) + " elements\n";
-            out += "Intensities: ";
-            for (const auto &intensity : s.get_intensities()) {
-                out += std::to_string(intensity) + " ";
-            }
-            return out;
-        });
+        .def("positions", &Spectrum::py_get_positions);
 }
