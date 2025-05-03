@@ -29,9 +29,7 @@ def test_2d():
     assert solver.run() == 1.414
 
     # new algo
-    DG = DecompositableFlowGraph()
-    DG.add_empirical_spectrum(s1)
-    DG.add_theoretical_spectrum(s2, lambda x, y: 1000*np.linalg.norm(x - y, axis=0), 5000)
+    DG = DecompositableFlowGraph(s1, [s2], [lambda x, y: 1000*np.linalg.norm(x - y, axis=0)], [5000])
     DG.build([TrashFactorySimple(1000000)])
     #print(DG.set_point([1]))
     assert DG.set_point([1]) == 1414

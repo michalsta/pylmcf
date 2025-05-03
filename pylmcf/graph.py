@@ -21,27 +21,23 @@ from tqdm import tqdm
 
 
 class DecompositableFlowGraph:
-    def __init__(self):
+    def __init__(self, empirical_spectrum, theoretical_spectra, dist_funs, max_dists):
         self.source = SourceNode(0)
         self.sink = SinkNode(1)
-        self.empirical_spectrum = None
+        self.empirical_spectrum = empirical_spectrum
+        self.theoretical_spectra = theoretical_spectra
         self.empirical_spectrum_corresponding_nodes = []
-        self.theoretical_spectra = []
         self.graph = nx.DiGraph()
         self.nodes = [self.source, self.sink]
         self.edges = []
         self.built = False
 
-    def add_empirical_spectrum(self, spectrum):
-        assert (
-            self.empirical_spectrum is None
-        ), "Cannot add more than one empirical spectrum"
-        assert (
-            len(self.nodes) == 2
-        ), "Cannot add empirical spectrum after adding theoretical spectra"
+        self._add_empirical_spectrum(empirical_spectrum)
 
-        self.empirical_spectrum = spectrum
+        for spectrum, dist_fun, max_dist in zip(theoretical_spectra, dist_funs, max_dists):
+            self._add_theoretical_spectrum(spectrum, dist_fun, max_dist)
 
+    def _add_empirical_spectrum(self, spectrum):
         for idx, peak_intensity in tqdm(enumerate(spectrum.intensities), desc="Adding empirical spectrum"):
             node = EmpiricalNode(
                 id=len(self.nodes), peak_idx=idx, intensity=peak_intensity
@@ -51,16 +47,7 @@ class DecompositableFlowGraph:
             self.graph.add_node(node, layer=1)
 
 
-    def add_theoretical_spectrum(self, spectrum, dist_fun, max_dist):
-        assert (
-            self.empirical_spectrum is not None
-        ), "Cannot add theoretical spectrum before empirical spectrum"
-        assert (
-            not self.built
-        ), "Cannot add theoretical spectrum after building the graph"
-
-        self.theoretical_spectra.append(spectrum)
-
+    def _add_theoretical_spectrum(self, spectrum, dist_fun, max_dist):
         for idx in tqdm(range(len(spectrum.intensities))):
             theo_node = TheoreticalNode(
                 id=len(self.nodes),
