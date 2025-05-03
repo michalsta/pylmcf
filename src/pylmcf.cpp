@@ -64,5 +64,6 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
         .def("size", &Spectrum::size)
         .def("intensities", &Spectrum::py_get_intensities)
         .def("positions", &Spectrum::py_get_positions)
-        .def("get_point", &Spectrum::get_point);
+        .def("get_point", &Spectrum::get_point)
+        .def("closer_than", &Spectrum::closer_than);
 }

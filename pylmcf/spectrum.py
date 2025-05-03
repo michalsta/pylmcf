@@ -35,14 +35,37 @@ class Spectrum:
         #return self.positions[:,idx:idx+1]
         #return self.positions, idx
 
+    # def closer_than(self, point, max_dist, dist_fun):
+    #     '''
+    #     Returns the indices of the positions that are closer than max_dist to the point, and the distances'''
+    #     pos, idx = point
+    #     point = pos[:,idx:idx+1]
+    #     dists = np.int64(dist_fun(point[: np.newaxis], self.positions))
+    #     mask = dists < max_dist
+    #     return np.where(mask)[0], dists[mask]
+
     def closer_than(self, point, max_dist, dist_fun):
         '''
-        Returns the indices of the positions that are closer than max_dist to the point, and the distances'''
+        Returns the indices of the positions that are closer than max_dist to the point, and the distances
+        '''
+
+        def df(pt, vec):
+            pos, idx = pt
+            point = pos[:,idx:idx+1]
+            return dist_fun(point[: np.newaxis], vec)
+        #df = lambda pt, vec: dist_fun(pt[: np.newaxis], vec)
+        return self.cspectrum.closer_than(point, max_dist, df)
+        # should be equal to:
+        print("Closer than", point, "max_dist", max_dist, "dist_fun", dist_fun)
+        print("ret", ret)
         pos, idx = point
         point = pos[:,idx:idx+1]
         dists = np.int64(dist_fun(point[: np.newaxis], self.positions))
         mask = dists < max_dist
-        return np.where(mask)[0], dists[mask]
+        ret2 = np.where(mask)[0], dists[mask]
+        print("ret2", ret2)
+        assert ret == ret2, f"ret {ret} != ret2 {ret2}"
+        return ret
 
 
     @staticmethod
