@@ -9,12 +9,12 @@
 
 
 class Spectrum {
-    const py::array py_positions;
+    const py::array positions;
     const py::array_t<LEMON_INT> intensities;
 
 public:
     Spectrum(py::array positions, py::array_t<LEMON_INT> intensities)
-        : py_positions(positions), intensities(intensities) {
+        : positions(positions), intensities(intensities) {
         if (positions.shape()[1] != intensities.shape()[0]) {
             throw std::invalid_argument("Positions and intensities must have the same size");
         }}
@@ -28,7 +28,7 @@ public:
     }
 
     const py::array& py_get_positions() const {
-        return py_positions;
+        return positions;
     }
 
     const py::array_t<LEMON_INT>& py_get_intensities() const {
