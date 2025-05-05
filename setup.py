@@ -3,7 +3,9 @@ from setuptools import setup
 
 
 __version__ = open("pyproject.toml").read().split('version = "')[1].split('"')[0]
-debug = False
+debug = True
+# run with:
+# DYLD_INSERT_LIBRARIES=/Library/Developer/CommandLineTools/usr/lib/clang/17/lib/darwin/libclang_rt.asan_osx_dynamic.dylib
 
 import os
 

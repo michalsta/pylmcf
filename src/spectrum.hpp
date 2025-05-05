@@ -37,15 +37,15 @@ public:
     }
 
     std::pair<std::vector<size_t>, std::vector<LEMON_INT>> closer_than(
-        Point_t point,
+        const Point_t point,
         LEMON_INT max_dist,
-        py::function wrapped_dist_fun
-    )
+        const py::function* wrapped_dist_fun
+    ) const
     {
         std::vector<size_t> indices;
         std::vector<LEMON_INT> distances;
 
-        py::object distances_obj = wrapped_dist_fun(point, py_positions);
+        py::object distances_obj = (*wrapped_dist_fun)(point, py_positions);
         py::array_t<LEMON_INT> distances_array = distances_obj.cast<py::array_t<LEMON_INT>>();
         py::buffer_info distances_info = distances_array.request();
         LEMON_INT* distances_ptr = static_cast<LEMON_INT*>(distances_info.ptr);

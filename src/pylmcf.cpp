@@ -11,6 +11,8 @@
 #include "lmcf.cpp" // Yes, ugly. But it works.
 #include "graph.cpp"
 #include "spectrum.hpp"
+#include "decompositable_graph.hpp"
+#include "graph_elements.hpp"
 
 
 template <typename T>
@@ -66,4 +68,11 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
         .def("positions", &Spectrum::py_get_positions)
         .def("get_point", &Spectrum::get_point)
         .def("closer_than", &Spectrum::closer_than);
+
+    py::class_<DecompositableFlowGraph>(m, "CDecompositableFlowGraph")
+        .def(py::init<const Spectrum*, const std::vector<Spectrum*>&, const std::vector<py::function*>&, const std::vector<LEMON_INT>&>());
+
+    m.def("check_spectrum", [](const Spectrum& spectrum) {});
+    m.def("check_vspectrum", [](const std::vector<Spectrum*>& spectra) {});
+
 }

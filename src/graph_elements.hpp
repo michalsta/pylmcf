@@ -64,19 +64,23 @@ public:
 };
 
 class MatchingEdge final : public FlowEdge {
-    const size_t empirical_peak_index;
-    const size_t theoretical_spectrum_id;
-    const size_t theoretical_peak_index;
+    //const size_t empirical_peak_index;
+    //const size_t theoretical_spectrum_id;
+    //const size_t theoretical_peak_index;
+    const LEMON_INT cost;
 public:
     MatchingEdge(LEMON_INT id, const FlowNode& start_node, const FlowNode& end_node,
-                 size_t empirical_peak_index, size_t theoretical_spectrum_id, size_t theoretical_peak_index)
+                 //size_t empirical_peak_index, size_t theoretical_spectrum_id, size_t theoretical_peak_index,
+                    LEMON_INT cost)
         : FlowEdge(id, start_node, end_node),
-          empirical_peak_index(empirical_peak_index),
-          theoretical_spectrum_id(theoretical_spectrum_id),
-          theoretical_peak_index(theoretical_peak_index) {}
-    size_t get_empirical_peak_index() const { return empirical_peak_index; }
-    size_t get_theoretical_spectrum_id() const { return theoretical_spectrum_id; }
-    size_t get_theoretical_peak_index() const { return theoretical_peak_index; }
+          //empirical_peak_index(empirical_peak_index),
+          //theoretical_spectrum_id(theoretical_spectrum_id),
+          //theoretical_peak_index(theoretical_peak_index)
+          cost(cost) {}
+    // size_t get_empirical_peak_index() const { return empirical_peak_index; }
+    // size_t get_theoretical_spectrum_id() const { return theoretical_spectrum_id; }
+    // size_t get_theoretical_peak_index() const { return theoretical_peak_index; }
+    LEMON_INT get_cost() const { return cost; }
 };
 
 class SrcToEmpiricalEdge final : public FlowEdge {

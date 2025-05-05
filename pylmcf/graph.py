@@ -22,6 +22,7 @@ from tqdm import tqdm
 
 class DecompositableFlowGraph:
     def __init__(self, empirical_spectrum, theoretical_spectra, dist_funs, max_dists):
+        self.cobj = pylmcf_cpp.CDecompositableFlowGraph(empirical_spectrum.cspectrum, [ts.cspectrum for ts in theoretical_spectra], dist_funs, max_dists)
         self.no_theoretical_spectra = 0
         self.graph = nx.DiGraph()
         self.nodes = [None, None] # Reserve IDs for source and sink in subgraphs
