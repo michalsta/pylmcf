@@ -21,8 +21,12 @@ from tqdm import tqdm
 
 
 class DecompositableFlowGraph:
-    def __init__(self, empirical_spectrum, theoretical_spectra, dist_funs, max_dists):
-        self.cobj = pylmcf_cpp.CDecompositableFlowGraph(empirical_spectrum.cspectrum, [ts.cspectrum for ts in theoretical_spectra], dist_funs, max_dists)
+    def __init__(self, empirical_spectrum, theoretical_spectra, dist_fun, max_dist):
+        def wrapped_dist(p, y):
+            i = p[1]
+            x = p[0][:, i:i+1]
+            return dist_fun(x[: np.newaxis], y)
+        self.cobj = pylmcf_cpp.CDecompositableFlowGraph(empirical_spectrum.cspectrum, [ts.cspectrum for ts in theoretical_spectra], wrapped_dist, max_dist)
         self.no_theoretical_spectra = 0
         self.graph = nx.DiGraph()
         self.nodes = [None, None] # Reserve IDs for source and sink in subgraphs
@@ -31,7 +35,7 @@ class DecompositableFlowGraph:
 
         self._add_empirical_spectrum(empirical_spectrum)
 
-        for spectrum, dist_fun, max_dist in zip(theoretical_spectra, dist_funs, max_dists):
+        for spectrum in theoretical_spectra:
             self._add_theoretical_spectrum(empirical_spectrum, spectrum, dist_fun, max_dist)
 
     def _add_empirical_spectrum(self, spectrum):

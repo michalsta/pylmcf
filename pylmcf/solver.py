@@ -12,7 +12,7 @@ class DeconvolutionSolver:
         self.theoretical_spectra = [t.scaled(scale_factor) for t in theoretical_spectra]
         print("Theoretical spectra:", [t.intensities for t in self.theoretical_spectra])
         dist_fun = lambda x, y: distance_function(x, y) * scale_factor
-        self.DG = DecompositableFlowGraph(self.empirical_spectrum, self.theoretical_spectra, [dist_fun]*len(theoretical_spectra), [max_distance*scale_factor]*len(theoretical_spectra))
+        self.DG = DecompositableFlowGraph(self.empirical_spectrum, self.theoretical_spectra, dist_fun, max_distance*scale_factor)
 
         self.DG.build([TrashFactoryTheory(trash_cost*scale_factor), TrashFactoryEmpirical(trash_cost*scale_factor)])
 

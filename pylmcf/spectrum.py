@@ -54,7 +54,7 @@ class Spectrum:
             point = pos[:,idx:idx+1]
             return dist_fun(point[: np.newaxis], vec)
         #df = lambda pt, vec: dist_fun(pt[: np.newaxis], vec)
-        return self.cspectrum.closer_than(point, max_dist, df)
+        return self.cspectrum.closer_than(point, df, max_dist)
         # should be equal to:
         print("Closer than", point, "max_dist", max_dist, "dist_fun", dist_fun)
         print("ret", ret)

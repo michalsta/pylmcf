@@ -70,7 +70,7 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
         .def("closer_than", &Spectrum::closer_than);
 
     py::class_<DecompositableFlowGraph>(m, "CDecompositableFlowGraph")
-        .def(py::init<const Spectrum*, const std::vector<Spectrum*>&, const std::vector<py::function*>&, const std::vector<LEMON_INT>&>());
+        .def(py::init<const Spectrum*, const std::vector<Spectrum*>&, const py::function*, LEMON_INT>());
 
     m.def("check_spectrum", [](const Spectrum& spectrum) {});
     m.def("check_vspectrum", [](const std::vector<Spectrum*>& spectra) {});

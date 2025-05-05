@@ -38,8 +38,8 @@ public:
 
     std::pair<std::vector<size_t>, std::vector<LEMON_INT>> closer_than(
         const Point_t point,
-        LEMON_INT max_dist,
-        const py::function* wrapped_dist_fun
+        const py::function* wrapped_dist_fun,
+        LEMON_INT max_dist
     ) const
     {
         std::vector<size_t> indices;

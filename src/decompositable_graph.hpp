@@ -23,10 +23,10 @@ public:
 
 
     DecompositableFlowGraph(
-        const Spectrum* empirical_spectrum,
-        const std::vector<Spectrum*>& theoretical_spectra,
-        const std::vector<py::function*>& dist_funs,
-        const std::vector<LEMON_INT>& max_dists
+    const Spectrum* empirical_spectrum,
+    const std::vector<Spectrum*>& theoretical_spectra,
+    const py::function* dist_fun,
+    LEMON_INT max_dist
     ) {
         {
             size_t no_nodes = 2 + empirical_spectrum->size();
@@ -57,14 +57,12 @@ public:
                                             theoretical_peak_idx,
                                             theoretical_spectrum->intensities[theoretical_peak_idx]));
                     const auto& theoretical_node = std::get<TheoreticalNode>(nodes.back());
-                    const auto& dist_fun = dist_funs[theoretical_spectrum_idx];
-                    auto& max_dist = max_dists[theoretical_spectrum_idx];
 
                     // Calculate the distance between the empirical and theoretical peaks
                     auto [indices, distances] = empirical_spectrum->closer_than(
                         theoretical_spectrum->get_point(theoretical_peak_idx),
-                        max_dist,
-                        dist_fun
+                        dist_fun,
+                        max_dist
                     );
 
                     for (size_t ii = 0; ii < indices.size(); ++ii)
