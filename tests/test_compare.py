@@ -14,7 +14,7 @@ def compare(E, T, trash_cost, fractions = None):
     intensities = np.concatenate([s.intensities*f for s, f in zip(T, fractions)])
     val2 = wasserstein_integer(E.positions[0], E.positions[1], E.intensities, positions[0], positions[1], intensities, trash_cost)['total_cost']
     val3 = wasserstein_integer_compat(E.positions[0], E.positions[1], E.intensities, positions[0], positions[1], intensities, trash_cost)['total_cost']
-    decomp_solver = DecompositableFlowGraph(E, T, [lambda x, y: np.linalg.norm(x - y, axis=0)]*len(T), [trash_cost]*len(T))
+    decomp_solver = DecompositableFlowGraph(E, T, lambda x, y: np.linalg.norm(x - y, axis=0), trash_cost)
     decomp_solver.build([TrashFactorySimple(trash_cost)])
     val4 = decomp_solver.set_point(fractions)
     print(f"Solver: {val1}, Wasserstein: {val2}, Wasserstein_compat: {val3}, DecompositableFlowGraph: {val4}")

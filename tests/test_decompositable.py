@@ -9,7 +9,7 @@ def test_simple():
     S2 = Spectrum(np.array([[1, 4, 30, 31]]), np.array([1, 1, 1, 1]))
     S3 = Spectrum(np.array([[3, 4, 32]]), np.array([1, 1, 3]))
 
-    G = DecompositableFlowGraph(S1, [S2, S3], [lambda x, y: np.linalg.norm(x - y, axis=0)] * 2, [5] * 2)
+    G = DecompositableFlowGraph(S1, [S2, S3], lambda x, y: np.linalg.norm(x - y, axis=0), 5)
     G.build([TrashFactorySimple(10)])
     #G.show()
     print(G.set_point([1, 1]))
