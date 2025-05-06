@@ -6,16 +6,47 @@
 #include <span>
 #include <algorithm>
 #include <stdexcept>
+#include <variant>
 
 #include "basics.hpp"
 
-class FlowNode {
-    const LEMON_INT id;
+class SourceNode {};
+class SinkNode {};
+class EmpiricalNode {
+    const size_t peak_index;
+    const LEMON_INT intensity;
 public:
-    FlowNode(LEMON_INT id) : id(id) {}
-    LEMON_INT get_id() const { return id; }
+    EmpiricalNode(size_t peak_index, LEMON_INT intensity)
+        : peak_index(peak_index), intensity(intensity) {}
+    size_t get_peak_index() const { return peak_index; }
+    LEMON_INT get_intensity() const { return intensity; }
 };
 
+class TheoreticalNode {
+    const size_t spectrum_id;
+    const size_t peak_index;
+    const LEMON_INT intensity;
+public:
+    TheoreticalNode(size_t spectrum_id, size_t peak_index, LEMON_INT intensity)
+        : spectrum_id(spectrum_id), peak_index(peak_index), intensity(intensity) {}
+    size_t get_spectrum_id() const { return spectrum_id; }
+    size_t get_peak_index() const { return peak_index; }
+    LEMON_INT get_intensity() const { return intensity; }
+};
+
+using FlowNodeType = std::variant<SourceNode, SinkNode, EmpiricalNode, TheoreticalNode>;
+
+class FlowNode {
+    const LEMON_INT id;
+    const FlowNodeType type;
+public:
+    FlowNode(LEMON_INT id, SourceNode n) : id(id), type(n) {};
+    FlowNode(LEMON_INT id, SinkNode n) : id(id), type(n) {};
+    FlowNode(LEMON_INT id, EmpiricalNode n) : id(id), type(n) {};
+    FlowNode(LEMON_INT id, TheoreticalNode n) : id(id), type(n) {};
+    LEMON_INT get_id() const { return id; }
+};
+/*
 class SourceNode final : public FlowNode {
 public:
     SourceNode(LEMON_INT id) : FlowNode(id) {}
@@ -50,17 +81,22 @@ public:
 };
 
 using FlowNodeVariant = std::variant<SourceNode, SinkNode, EmpiricalNode, TheoreticalNode>;
+*/
+
 
 class FlowEdge {
     const LEMON_INT id;
     const FlowNode& start_node;
     const FlowNode& end_node;
+    //const FlowEdgeType type;
 public:
     FlowEdge(LEMON_INT id, const FlowNode& start_node, const FlowNode& end_node)
         : id(id), start_node(start_node), end_node(end_node) {}
     LEMON_INT get_id() const { return id; }
     const FlowNode& get_start_node() const { return start_node; }
     const FlowNode& get_end_node() const { return end_node; }
+    const size_t get_start_node_id() const { return start_node.get_id(); }
+    const size_t get_end_node_id() const { return end_node.get_id(); }
 };
 
 class MatchingEdge final : public FlowEdge {

@@ -18,7 +18,13 @@ from tqdm import tqdm
 #Edge = Union[MatchingEdge, SrcToEmpEdge, TheoToSinkEdge, SimpleTrashEdge]
 
 
-
+def compare_subgraphs(subgraph1, subgraph2):
+    """
+    Compare two subgraphs and return True if they are equal, False otherwise.
+    """
+    s1 = frozenset([frozenset(s) for s in subgraph1])
+    s2 = frozenset([frozenset(s) for s in subgraph2])
+    return s1 == s2
 
 class DecompositableFlowGraph:
     def __init__(self, empirical_spectrum, theoretical_spectra, dist_fun, max_dist):
@@ -85,17 +91,29 @@ class DecompositableFlowGraph:
             node for node, degree in dict(self.graph.degree()).items() if degree < 1
         ]
 
+        self.csubgraphs, self.cdead_end_nodes = self.cobj.subgraphs()
         self.dead_end_trashes = [tc.dead_end_trash(dead_end_nodes, self.no_theoretical_spectra) for tc in trash_costructors]
         self.graph.remove_nodes_from(dead_end_nodes)
 
+        print(f"Dead end nodes: {dead_end_nodes}")
+        print(f"Dead end nodes c++: {self.cdead_end_nodes}")
+
+        print(f"Graph nodes: {self.graph.nodes}")
+
+        for_comparison = []
         from tqdm import tqdm
         for subgraph in tqdm(list(nx.weakly_connected_components(self.graph)), desc="Building subgraphs"):
+            print(f"Subgraph: {subgraph}")
+            for_comparison.append([n.id for n in subgraph])
             subgraph = FlowSubgraph(self.graph.subgraph(subgraph), self)
             for trash_costructor in trash_costructors:
                 trash_costructor.add_to_subgraph(subgraph)
 
             self.subgraphs.append(subgraph)
 
+        print(f"Subgraphs: {for_comparison}")
+        print("c++ subgraphs:", self.csubgraphs)
+        assert compare_subgraphs(self.csubgraphs, for_comparison), "Subgraphs do not match with c++ subgraphs"
         for subgraph in self.subgraphs:
             subgraph.build()
 
