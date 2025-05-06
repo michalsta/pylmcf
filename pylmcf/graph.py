@@ -4,6 +4,7 @@ from functools import cached_property
 from enum import Enum
 from pylmcf.graph_wrapper import GraphWrapper
 from pylmcf.graph_elements import *
+from pylmcf.spectrum import Spectrum
 from dataclasses import dataclass
 from typing import Union
 from abc import ABC
@@ -11,6 +12,7 @@ from pprint import pprint
 import numpy as np
 import networkx as nx
 import time
+import types
 from tqdm import tqdm
 
 # import codon
@@ -28,11 +30,20 @@ def compare_subgraphs(subgraph1, subgraph2):
 
 class DecompositableFlowGraph:
     def __init__(self, empirical_spectrum, theoretical_spectra, dist_fun, max_dist):
+        assert isinstance(empirical_spectrum, Spectrum)
+        if not isinstance(theoretical_spectra, list):
+            theoretical_spectra = list(theoretical_spectra)
+        assert all(isinstance(ts, Spectrum) for ts in theoretical_spectra)
+        assert isinstance(dist_fun, types.FunctionType)
+        assert isinstance(max_dist, int)
+
         def wrapped_dist(p, y):
             i = p[1]
             x = p[0][:, i:i+1]
             return dist_fun(x[: np.newaxis], y)
+        print("Creating C++ DecompositableFlowGraph")
         self.cobj = pylmcf_cpp.CDecompositableFlowGraph(empirical_spectrum.cspectrum, [ts.cspectrum for ts in theoretical_spectra], wrapped_dist, max_dist)
+        print("C++ DecompositableFlowGraph created")
         self.no_theoretical_spectra = 0
         self.graph = nx.DiGraph()
         self.nodes = [None, None] # Reserve IDs for source and sink in subgraphs
@@ -95,15 +106,16 @@ class DecompositableFlowGraph:
         self.dead_end_trashes = [tc.dead_end_trash(dead_end_nodes, self.no_theoretical_spectra) for tc in trash_costructors]
         self.graph.remove_nodes_from(dead_end_nodes)
 
-        print(f"Dead end nodes: {dead_end_nodes}")
-        print(f"Dead end nodes c++: {self.cdead_end_nodes}")
 
+        print(f"Dead end nodes: {len(dead_end_nodes)}")
+        print(f"Dead end nodes c++: {len(self.cdead_end_nodes)}")
+        assert [n.id for n in dead_end_nodes] == self.cdead_end_nodes, "Dead end nodes do not match with c++ dead end nodes"
+        dead_end_nodes = [self.nodes[i] for i in self.cdead_end_nodes]
         print(f"Graph nodes: {self.graph.nodes}")
 
         for_comparison = []
         from tqdm import tqdm
         for subgraph in tqdm(list(nx.weakly_connected_components(self.graph)), desc="Building subgraphs"):
-            print(f"Subgraph: {subgraph}")
             for_comparison.append([n.id for n in subgraph])
             subgraph = FlowSubgraph(self.graph.subgraph(subgraph), self)
             for trash_costructor in trash_costructors:
@@ -111,8 +123,6 @@ class DecompositableFlowGraph:
 
             self.subgraphs.append(subgraph)
 
-        print(f"Subgraphs: {for_comparison}")
-        print("c++ subgraphs:", self.csubgraphs)
         assert compare_subgraphs(self.csubgraphs, for_comparison), "Subgraphs do not match with c++ subgraphs"
         for subgraph in self.subgraphs:
             subgraph.build()
