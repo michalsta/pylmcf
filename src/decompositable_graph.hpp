@@ -1,12 +1,95 @@
+#include <vector>
+#include <span>
+#include <algorithm>
+#include <unordered_map>
+
 #include "py_support.h"
 #include "graph_elements.hpp"
 #include "spectrum.hpp"
 
 
+
+class FlowSubgraph {
+    std::vector<FlowNode> nodes;
+    std::vector<FlowEdge> edges;
+
+public:
+    FlowSubgraph(
+        const std::vector<size_t>& subgraph_node_ids,
+        const std::vector<FlowNode>& all_nodes,
+        const std::vector<FlowEdge>& all_edges
+    ){
+        nodes.reserve(subgraph_node_ids.size()+2);
+        nodes.push_back(FlowNode(0, SourceNode()));
+        nodes.push_back(FlowNode(1, SinkNode()));
+        auto& source_node = nodes[0];
+        auto& sink_node = nodes[1];
+
+        std::unordered_map<size_t, size_t> node_id_map;
+        for (const auto& node_id : subgraph_node_ids)
+        {
+            node_id_map[node_id] = nodes.size();
+            const FlowNodeType& node_type = all_nodes[node_id].get_type();
+            nodes.push_back(FlowNode(nodes.size(), node_type));
+            auto& new_node = nodes.back();
+            if(std::holds_alternative<EmpiricalNode>(node_type))
+            {
+                edges.emplace_back(
+                    edges.size(),
+                    source_node,
+                    new_node,
+                    SrcToEmpiricalEdge()
+                );
+            }
+            else if(std::holds_alternative<TheoreticalNode>(node_type))
+            {
+                edges.emplace_back(
+                    edges.size(),
+                    new_node,
+                    sink_node,
+                    TheoreticalToSinkEdge()
+                );
+            }
+            else throw std::runtime_error("Invalid FlowNode type. This shouldn't happen.");
+        }
+
+        for (const FlowEdge& edge : all_edges)
+        {
+            const FlowNode& start_node = edge.get_start_node();
+            const auto start_node_it = node_id_map.find(start_node.get_id());
+            if (start_node_it == node_id_map.end()) continue;
+            const FlowNode& end_node = edge.get_end_node();
+            const auto end_node_it = node_id_map.find(end_node.get_id());
+            if (end_node_it == node_id_map.end()) continue;
+            edges.emplace_back(
+                    edges.size(),
+                    nodes[start_node_it->second],
+                    nodes[end_node_it->second],
+                    edge.get_type()
+            );
+        }
+    }
+
+    void add_simple_trash(LEMON_INT cost) {
+        edges.emplace_back(
+            edges.size(),
+            nodes[0],
+            nodes[1],
+            SimpleTrashEdge(cost)
+        );
+    }
+
+
+};
+
 class DecompositableFlowGraph {
     std::vector<FlowNode> nodes;
     std::vector<FlowEdge> edges;
+
     const size_t _no_theoretical_spectra;
+
+    std::vector<size_t> dead_end_node_ids;
+    std::vector<FlowSubgraph> flow_subgraphs;
 
 public:
 
@@ -72,14 +155,15 @@ public:
                 );
 
                 for (size_t ii = 0; ii < indices.size(); ++ii)
-                    edges.emplace_back(MatchingEdge(
+                    edges.emplace_back(FlowEdge(
                         edges.size(),
                         nodes[indices[ii] + 2], // +2 to skip the source and sink nodes
                         theoretical_node,
-                        distances[ii]
+                        MatchingEdge(distances[ii])
                     ));
             }
         }
+        build_subgraphs();
     };
 
     size_t no_nodes() const {
@@ -111,7 +195,7 @@ public:
         return neighbourhood_lists;
     };
 
-    std::pair<std::vector<std::vector<size_t>>, std::vector<size_t>> subgraphs() const {
+    std::pair<std::vector<std::vector<size_t>>, std::vector<size_t>> split_into_subgraphs() const {
         std::vector<std::vector<size_t>> subgraphs;
         std::vector<size_t> dead_end_nodes;
 
@@ -150,4 +234,27 @@ public:
         }
         return {subgraphs, dead_end_nodes};
     }
+
+    void build_subgraphs() {
+        auto [_subgraphs, _dead_end_nodes] = this->split_into_subgraphs();
+
+        dead_end_node_ids = std::move(_dead_end_nodes);
+
+        // TODO: optimize, right now this is needlessly O(subgraphs.size() * edges.size()),
+        // can be O(subgraphs.size() + edges.size())
+        flow_subgraphs.reserve(_subgraphs.size());
+        for (const auto& subgraph_node_ids : _subgraphs)
+            flow_subgraphs.emplace_back(
+                FlowSubgraph(
+                    subgraph_node_ids,
+                    nodes,
+                    edges)
+            );
+
+
+
+
+    }
+
 };
+

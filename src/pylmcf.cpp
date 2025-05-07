@@ -70,11 +70,12 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
         .def("closer_than", &Spectrum::closer_than);
 
     py::class_<FlowNode>(m, "CFlowNode")
-        .def("get_id", &FlowNode::get_id);
+        .def("id", &FlowNode::get_id)
+        .def("layer", &FlowNode::layer);
 
     py::class_<FlowEdge>(m, "CFlowEdge")
-        .def("get_start_node_id", &FlowEdge::get_start_node_id)
-        .def("get_end_node_id", &FlowEdge::get_end_node_id);
+        .def("start_node_id", &FlowEdge::get_start_node_id)
+        .def("end_node_id", &FlowEdge::get_end_node_id);
 
 
     py::class_<DecompositableFlowGraph>(m, "CDecompositableFlowGraph")
@@ -84,7 +85,7 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
         .def("no_theoretical_spectra", &DecompositableFlowGraph::no_theoretical_spectra)
         .def("nodes", &DecompositableFlowGraph::get_nodes)
         .def("edges", &DecompositableFlowGraph::get_edges)
-        .def("subgraphs", &DecompositableFlowGraph::subgraphs);
+        .def("subgraphs", &DecompositableFlowGraph::split_into_subgraphs);
 
     m.def("check_spectrum", [](const Spectrum& spectrum) {});
     m.def("check_vspectrum", [](const std::vector<Spectrum*>& spectra) {});
