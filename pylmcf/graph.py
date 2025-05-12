@@ -98,7 +98,9 @@ class DecompositableFlowGraph:
         self.built = True
         self.subgraphs = []
 
-        self.cobj.build_subgraphs()
+        self.cobj.build()
+
+        print("C++ graph built")
 
         dead_end_nodes = [
             node for node, degree in dict(self.graph.degree()).items() if degree < 1
@@ -159,7 +161,7 @@ class DecompositableFlowGraph:
 
 
     def set_point(self, point):
-        #self.cobj.set_point(point)
+        self.cobj.set_point(point)
         assert len(point) == self.no_theoretical_spectra
         self.point = point
         self.total_cost = 0

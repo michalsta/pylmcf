@@ -86,7 +86,7 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
         .def("nodes", &DecompositableFlowGraph::get_nodes)
         .def("edges", &DecompositableFlowGraph::get_edges)
         .def("subgraphs", &DecompositableFlowGraph::split_into_subgraphs)
-        .def("build_subgraphs", &DecompositableFlowGraph::build_subgraphs)
+        .def("build", &DecompositableFlowGraph::build)
         .def("set_point", &DecompositableFlowGraph::set_point)
         .def("total_cost", &DecompositableFlowGraph::total_cost);
 

@@ -19,7 +19,7 @@ class FlowSubgraph {
     lemon::StaticDigraph::NodeMap<LEMON_INT> node_supply_map;
     lemon::StaticDigraph::ArcMap<LEMON_INT> capacities_map;
     lemon::StaticDigraph::ArcMap<LEMON_INT> costs_map;
-    lemon::NetworkSimplex<lemon::StaticDigraph> solver;
+    std::optional<lemon::NetworkSimplex<lemon::StaticDigraph>> solver;
     size_t simple_trash_idx;
     LEMON_INT empirical_intensity;
     LEMON_INT theoretical_intensity;
@@ -34,8 +34,8 @@ public:
         node_supply_map(lemon_graph),
         capacities_map(lemon_graph),
         costs_map(lemon_graph),
-        solver(lemon_graph),
-        simple_trash_idx(-1),
+        solver(),
+        simple_trash_idx(std::numeric_limits<size_t>::max()),
         empirical_intensity(0),
         theoretical_intensity(0)
     {
@@ -97,6 +97,7 @@ public:
             nodes[1],
             SimpleTrashEdge(cost)
         );
+        simple_trash_idx = edges.size() - 1;
     }
 
     void build() {
@@ -144,7 +145,8 @@ public:
                     else { throw std::runtime_error("Invalid FlowEdgeType"); };
                 }, edges[ii].get_type());
         }
-        solver.upperMap(capacities_map);
+        solver.emplace(lemon_graph);//lemon::NetworkSimplex<lemon::StaticDigraph>(lemon_graph);
+        solver->upperMap(capacities_map);
     }
 
     void set_point(const std::vector<INTENSITY_TYPE>& point) {
@@ -163,6 +165,7 @@ public:
                 else if constexpr (std::is_same_v<T, TheoreticalToSinkEdge>) {
                     const auto& theoretical_node_type = std::get<TheoreticalNode>(edge.get_start_node().get_type());
                     LEMON_INT intensity = (LEMON_INT) (theoretical_node_type.get_intensity() * point[theoretical_node_type.get_spectrum_id()]);
+                    lemon_graph.arcFromId(ii);
                     capacities_map[lemon_graph.arcFromId(ii)] = intensity;
                     theoretical_intensity += intensity;
                 }
@@ -172,16 +175,17 @@ public:
             }, edge.get_type());
         }
         const LEMON_INT total_flow = std::max<LEMON_INT>(empirical_intensity, theoretical_intensity);
-        capacities_map[lemon_graph.arcFromId(simple_trash_idx)] = total_flow;
+        if(simple_trash_idx != std::numeric_limits<size_t>::max())
+            capacities_map[lemon_graph.arcFromId(simple_trash_idx)] = total_flow;
         node_supply_map[lemon_graph.nodeFromId(0)] = total_flow;
         node_supply_map[lemon_graph.nodeFromId(1)] = -total_flow;
-        solver.supplyMap(node_supply_map);
-        solver.costMap(costs_map);
-        solver.run();
+        solver->supplyMap(node_supply_map);
+        solver->costMap(costs_map);
+        solver->run();
     }
 
     LEMON_INT total_cost() const {
-        return solver.totalCost();
+        return solver->totalCost();
     };
 };
 
