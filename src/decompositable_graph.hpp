@@ -3,6 +3,9 @@
 #include <algorithm>
 #include <unordered_map>
 
+#include <lemon/static_graph.h>
+#include <lemon/network_simplex.h>
+
 #include "py_support.h"
 #include "graph_elements.hpp"
 #include "spectrum.hpp"
@@ -12,13 +15,30 @@
 class FlowSubgraph {
     std::vector<FlowNode> nodes;
     std::vector<FlowEdge> edges;
+    lemon::StaticDigraph lemon_graph;
+    lemon::StaticDigraph::NodeMap<LEMON_INT> node_supply_map;
+    lemon::StaticDigraph::ArcMap<LEMON_INT> capacities_map;
+    lemon::StaticDigraph::ArcMap<LEMON_INT> costs_map;
+    lemon::NetworkSimplex<lemon::StaticDigraph> solver;
+    size_t simple_trash_idx;
+    LEMON_INT empirical_intensity;
+    LEMON_INT theoretical_intensity;
 
 public:
     FlowSubgraph(
         const std::vector<size_t>& subgraph_node_ids,
         const std::vector<FlowNode>& all_nodes,
         const std::vector<FlowEdge>& all_edges
-    ){
+    ) :
+        lemon_graph(),
+        node_supply_map(lemon_graph),
+        capacities_map(lemon_graph),
+        costs_map(lemon_graph),
+        solver(lemon_graph),
+        simple_trash_idx(-1),
+        empirical_intensity(0),
+        theoretical_intensity(0)
+    {
         nodes.reserve(subgraph_node_ids.size()+2);
         nodes.push_back(FlowNode(0, SourceNode()));
         nodes.push_back(FlowNode(1, SinkNode()));
@@ -79,7 +99,90 @@ public:
         );
     }
 
+    void build() {
+        edges = sorted_copy(edges, [](const FlowEdge& a, const FlowEdge& b) {
+            if(a.get_start_node_id() != b.get_start_node_id())
+                return a.get_start_node_id() < b.get_start_node_id();
+            return a.get_end_node_id() < b.get_end_node_id();
+        });
+        // std::sort(edges.begin(), edges.end(), [](const FlowEdge& a, const FlowEdge& b) {
+        // if(a.get_start_node_id() != b.get_start_node_id())
+        // return a.get_start_node_id() < b.get_start_node_id();
+        //     return a.get_end_node_id() < b.get_end_node_id();
+        // });
+        std::vector<std::pair<int, int>> arcs;
+        arcs.reserve(edges.size());
+        for (const FlowEdge& edge : edges)
+            arcs.emplace_back(edge.get_start_node_id(), edge.get_end_node_id());
+        lemon_graph.build(nodes.size(), arcs.begin(), arcs.end());
 
+        for (size_t ii = 0; ii < nodes.size(); ++ii)
+            node_supply_map[lemon_graph.nodeFromId(ii)] = 0;
+
+        for (size_t ii = 0; ii < edges.size(); ++ii)
+            costs_map[lemon_graph.arcFromId(ii)] = std::visit([&](const auto& arg) {
+                    using T = std::decay_t<decltype(arg)>;
+                    if constexpr (std::is_same_v<T, MatchingEdge>) return arg.get_cost();
+                    else if constexpr (std::is_same_v<T, SrcToEmpiricalEdge>) return (LEMON_INT) 0;
+                    else if constexpr (std::is_same_v<T, TheoreticalToSinkEdge>) return (LEMON_INT) 0;
+                    else if constexpr (std::is_same_v<T, SimpleTrashEdge>) return arg.get_cost();
+                    else { throw std::runtime_error("Invalid FlowEdgeType"); };
+                }, edges[ii].get_type());
+
+        for (size_t ii = 0; ii < edges.size(); ++ii)
+        {
+            capacities_map[lemon_graph.arcFromId(ii)] = std::visit([&](const auto& arg) {
+                    using T = std::decay_t<decltype(arg)>;
+                    if constexpr (std::is_same_v<T, MatchingEdge>) return (LEMON_INT) 0;
+                    else if constexpr (std::is_same_v<T, SrcToEmpiricalEdge>) {
+                        LEMON_INT intensity = (LEMON_INT) std::get<EmpiricalNode>(edges[ii].get_end_node().get_type()).get_intensity();
+                        empirical_intensity += intensity;
+                        return intensity;
+                    }
+                    else if constexpr (std::is_same_v<T, TheoreticalToSinkEdge>) return (LEMON_INT) 0;
+                    else if constexpr (std::is_same_v<T, SimpleTrashEdge>) return (LEMON_INT) 0;
+                    else { throw std::runtime_error("Invalid FlowEdgeType"); };
+                }, edges[ii].get_type());
+        }
+        solver.upperMap(capacities_map);
+    }
+
+    void set_point(const std::vector<INTENSITY_TYPE>& point) {
+        theoretical_intensity = 0;
+        for (size_t ii = 0; ii < edges.size(); ++ii)
+        {
+            const FlowEdge& edge = edges[ii];
+            std::visit([&](const auto& arg) {
+                using T = std::decay_t<decltype(arg)>;
+                if constexpr (std::is_same_v<T, MatchingEdge>) {
+                    const auto& theoretical_node_type = std::get<TheoreticalNode>(edge.get_end_node().get_type());
+                    capacities_map[lemon_graph.arcFromId(ii)] = (LEMON_INT) std::min<double>(
+                        theoretical_node_type.get_intensity() * point[theoretical_node_type.get_spectrum_id()],
+                        std::get<EmpiricalNode>(edge.get_start_node().get_type()).get_intensity());
+                    }
+                else if constexpr (std::is_same_v<T, TheoreticalToSinkEdge>) {
+                    const auto& theoretical_node_type = std::get<TheoreticalNode>(edge.get_start_node().get_type());
+                    LEMON_INT intensity = (LEMON_INT) (theoretical_node_type.get_intensity() * point[theoretical_node_type.get_spectrum_id()]);
+                    capacities_map[lemon_graph.arcFromId(ii)] = intensity;
+                    theoretical_intensity += intensity;
+                }
+                else if constexpr (std::is_same_v<T, SrcToEmpiricalEdge>) {}
+                else if constexpr (std::is_same_v<T, SimpleTrashEdge>) {}
+                else { throw std::runtime_error("Invalid FlowEdgeType"); };
+            }, edge.get_type());
+        }
+        const LEMON_INT total_flow = std::max<LEMON_INT>(empirical_intensity, theoretical_intensity);
+        capacities_map[lemon_graph.arcFromId(simple_trash_idx)] = total_flow;
+        node_supply_map[lemon_graph.nodeFromId(0)] = total_flow;
+        node_supply_map[lemon_graph.nodeFromId(1)] = -total_flow;
+        solver.supplyMap(node_supply_map);
+        solver.costMap(costs_map);
+        solver.run();
+    }
+
+    LEMON_INT total_cost() const {
+        return solver.totalCost();
+    };
 };
 
 class DecompositableFlowGraph {
@@ -89,7 +192,7 @@ class DecompositableFlowGraph {
     const size_t _no_theoretical_spectra;
 
     std::vector<size_t> dead_end_node_ids;
-    std::vector<FlowSubgraph> flow_subgraphs;
+    std::vector<std::unique_ptr<FlowSubgraph>> flow_subgraphs;
 
 public:
 
@@ -244,17 +347,34 @@ public:
         // can be O(subgraphs.size() + edges.size())
         flow_subgraphs.reserve(_subgraphs.size());
         for (const auto& subgraph_node_ids : _subgraphs)
-            flow_subgraphs.emplace_back(
-                FlowSubgraph(
+            flow_subgraphs.emplace_back(std::make_unique<FlowSubgraph>(
                     subgraph_node_ids,
                     nodes,
-                    edges)
-            );
-
-
-
-
+                    edges
+            ));
     }
+
+    void add_simple_trash(LEMON_INT cost) {
+        for (auto& flow_subgraph : flow_subgraphs)
+            flow_subgraph->add_simple_trash(cost);
+    };
+
+    void build() {
+        for (auto& flow_subgraph : flow_subgraphs)
+            flow_subgraph->build();
+    };
+
+    void set_point(const std::vector<INTENSITY_TYPE>& point) {
+        for (auto& flow_subgraph : flow_subgraphs)
+            flow_subgraph->set_point(point);
+    };
+
+    LEMON_INT total_cost() const {
+        LEMON_INT total_cost = 0;
+        for (const auto& flow_subgraph : flow_subgraphs)
+            total_cost += flow_subgraph->total_cost();
+        return total_cost;
+    };
 
 };
 

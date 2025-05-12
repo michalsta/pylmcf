@@ -85,7 +85,12 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
         .def("no_theoretical_spectra", &DecompositableFlowGraph::no_theoretical_spectra)
         .def("nodes", &DecompositableFlowGraph::get_nodes)
         .def("edges", &DecompositableFlowGraph::get_edges)
-        .def("subgraphs", &DecompositableFlowGraph::split_into_subgraphs);
+        .def("subgraphs", &DecompositableFlowGraph::split_into_subgraphs)
+        .def("build_subgraphs", &DecompositableFlowGraph::build_subgraphs)
+        .def("set_point", &DecompositableFlowGraph::set_point)
+        .def("total_cost", &DecompositableFlowGraph::total_cost);
+
+
 
     m.def("check_spectrum", [](const Spectrum& spectrum) {});
     m.def("check_vspectrum", [](const std::vector<Spectrum*>& spectra) {});

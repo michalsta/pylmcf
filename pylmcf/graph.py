@@ -98,6 +98,8 @@ class DecompositableFlowGraph:
         self.built = True
         self.subgraphs = []
 
+        self.cobj.build_subgraphs()
+
         dead_end_nodes = [
             node for node, degree in dict(self.graph.degree()).items() if degree < 1
         ]
@@ -105,6 +107,7 @@ class DecompositableFlowGraph:
         self.csubgraphs, self.cdead_end_nodes = self.cobj.subgraphs()
         self.dead_end_trashes = [tc.dead_end_trash(dead_end_nodes, self.no_theoretical_spectra) for tc in trash_costructors]
         self.graph.remove_nodes_from(dead_end_nodes)
+
 
 
         print(f"Dead end nodes: {len(dead_end_nodes)}")
@@ -156,6 +159,7 @@ class DecompositableFlowGraph:
 
 
     def set_point(self, point):
+        #self.cobj.set_point(point)
         assert len(point) == self.no_theoretical_spectra
         self.point = point
         self.total_cost = 0
