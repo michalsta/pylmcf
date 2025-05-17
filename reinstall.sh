@@ -1,4 +1,4 @@
 pip uninstall pylmcf -y
 rm -rf build *.so pylmcf.egg-info
-pip install -v -e .
+pip install --no-deps -v -e .
 

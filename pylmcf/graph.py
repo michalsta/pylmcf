@@ -5,6 +5,7 @@ from enum import Enum
 from pylmcf.graph_wrapper import GraphWrapper
 from pylmcf.graph_elements import *
 from pylmcf.spectrum import Spectrum
+from pylmcf.trashes import TrashFactorySimple
 from dataclasses import dataclass
 from typing import Union
 from abc import ABC
@@ -98,6 +99,10 @@ class DecompositableFlowGraph:
         self.built = True
         self.subgraphs = []
 
+        for trash_costructor in trash_costructors:
+            assert isinstance(trash_costructor, TrashFactorySimple)
+            self.cobj.add_simple_trash(trash_costructor.trash_cost)
+
         self.cobj.build()
 
         print("C++ graph built")
@@ -131,6 +136,8 @@ class DecompositableFlowGraph:
         assert compare_subgraphs(self.csubgraphs, for_comparison), "Subgraphs do not match with c++ subgraphs"
         for subgraph in self.subgraphs:
             subgraph.build()
+
+
 
     def cgraph_as_nx(self):
         """

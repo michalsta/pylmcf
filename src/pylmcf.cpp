@@ -103,6 +103,20 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
         .def("set_point", &FlowSubgraph::set_point)
         .def("total_cost", &FlowSubgraph::total_cost);
 
+    py::class_<lemon::StaticDigraph>(m, "LemonStaticGraph")
+        .def("no_nodes", &lemon::StaticDigraph::nodeNum)
+        .def("no_edges", &lemon::StaticDigraph::arcNum);
+
+
+    /* py::class_<lemon::NetworkSimplex<lemon::StaticDigraph, int64_t, int64_t>>(m, "LemonNetworkSimplex")
+        .def(py::init<lemon::StaticDigraph&>())
+        .def("supply_map", &lemon::NetworkSimplex<lemon::StaticDigraph, int64_t, int64_t>::supplyMap)
+        .def("cost_map", &lemon::NetworkSimplex<lemon::StaticDigraph, int64_t, int64_t>::costMap)
+        .def("upper_map", &lemon::NetworkSimplex<lemon::StaticDigraph, int64_t, int64_t>::upperMap)
+        .def("run", &lemon::NetworkSimplex<lemon::StaticDigraph, int64_t, int64_t>::run)
+        .def("total_cost", &lemon::NetworkSimplex<lemon::StaticDigraph, int64_t, int64_t>::totalCost)
+        .def("flow", &lemon::NetworkSimplex<lemon::StaticDigraph, int64_t, int64_t>::flow);
+    */
     m.def("check_spectrum", [](const Spectrum& spectrum) {});
     m.def("check_vspectrum", [](const std::vector<Spectrum*>& spectra) {});
 
