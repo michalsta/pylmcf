@@ -88,9 +88,20 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
         .def("subgraphs", &DecompositableFlowGraph::split_into_subgraphs)
         .def("build", &DecompositableFlowGraph::build)
         .def("set_point", &DecompositableFlowGraph::set_point)
-        .def("total_cost", &DecompositableFlowGraph::total_cost);
+        .def("total_cost", &DecompositableFlowGraph::total_cost)
+        .def("add_simple_trash", &DecompositableFlowGraph::add_simple_trash)
+        .def("neighbourhood_lists", &DecompositableFlowGraph::neighbourhood_lists)
+        .def("no_subgraphs", &DecompositableFlowGraph::no_subgraphs)
+        .def("get_subgraph", &DecompositableFlowGraph::get_subgraph, py::return_value_policy::reference);
 
-
+    py::class_<FlowSubgraph>(m, "CFlowSubgraph")
+        .def("no_nodes", &FlowSubgraph::no_nodes)
+        .def("no_edges", &FlowSubgraph::no_edges)
+        .def("nodes", &FlowSubgraph::get_nodes)
+        .def("edges", &FlowSubgraph::get_edges)
+        .def("build", &FlowSubgraph::build)
+        .def("set_point", &FlowSubgraph::set_point)
+        .def("total_cost", &FlowSubgraph::total_cost);
 
     m.def("check_spectrum", [](const Spectrum& spectrum) {});
     m.def("check_vspectrum", [](const std::vector<Spectrum*>& spectra) {});

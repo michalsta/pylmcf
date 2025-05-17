@@ -11,13 +11,16 @@ def test_simple():
 
     G = DecompositableFlowGraph(S1, [S2, S3], lambda x, y: np.linalg.norm(x - y, axis=0), 5)
     #G.show()
-    #G.show_cgraph()
+    G.show_cgraph()
     G.build([TrashFactorySimple(10)])
     #G.show()
-    print(G.set_point([1, 1]))
+    #print(G.set_point([1, 1]))
 
-    #for fr_gr in G.fragment_graphs:
-    #    fr_gr.show()
+    for subgr in G.subgraphs:
+        subgr.show()
+
+    for csubgraph in G.csubgraph_objs():
+        csubgraph.show()
 
 
 if __name__ == "__main__":

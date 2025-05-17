@@ -10,6 +10,7 @@
 #include "graph_elements.hpp"
 #include "spectrum.hpp"
 
+#include <iostream>
 
 
 class FlowSubgraph {
@@ -187,6 +188,23 @@ public:
     LEMON_INT total_cost() const {
         return solver->totalCost();
     };
+
+    size_t no_nodes() const {
+        return nodes.size();
+    };
+
+    size_t no_edges() const {
+        return edges.size();
+    };
+
+    const std::vector<FlowNode>& get_nodes() const {
+        return nodes;
+    };
+
+    const std::vector<FlowEdge>& get_edges() const {
+        return edges;
+    };
+
 };
 
 class DecompositableFlowGraph {
@@ -380,5 +398,14 @@ public:
         return total_cost;
     };
 
+    size_t no_subgraphs() const {
+        return flow_subgraphs.size();
+    };
+
+    const FlowSubgraph& get_subgraph(size_t idx) const {
+        if (idx >= flow_subgraphs.size())
+            throw std::out_of_range("Subgraph index out of range");
+        return *flow_subgraphs[idx];
+    };
 };
 
