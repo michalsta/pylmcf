@@ -53,10 +53,10 @@ class Solver:
         self.empirical_spectrum = empirical_spectrum.scaled(scale_factor)
         del empirical_spectrum
 
-        print("Empirical spectrum:", str(self.empirical_spectrum.cspectrum_wrapper))
+        #print("Empirical spectrum:", str(self.empirical_spectrum.cspectrum_wrapper))
         self.theoretical_spectra = [t.scaled(scale_factor) for t in theoretical_spectra]
         del theoretical_spectra
-        print("Theoretical spectra:", [str(t.cspectrum_wrapper)+'\n' for t in self.theoretical_spectra])
+        #print("Theoretical spectra:", [str(t.cspectrum_wrapper)+'\n' for t in self.theoretical_spectra])
         def wrapped_dist(p, y):
             i = p[1]
             x = p[0][:, i:i+1]
