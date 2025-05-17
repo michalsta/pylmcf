@@ -3,7 +3,7 @@ from pylmcf import pylmcf_cpp
 from functools import cached_property
 
 
-class CSpectrum:
+class CSpectrumWrapper:
     def __init__(self, positions, intensities):
         if not isinstance(positions, np.ndarray):
             raise ValueError("positions must be a numpy array")
@@ -45,6 +45,9 @@ class CSpectrum:
         return self.cspectrum.closer_than(point, df, max_dist)
 
     def __str__(self):
+        return f"CSpectrum(positions={self.positions}, intensities={self.intensities})"
+
+    def __repr__(self):
         return f"CSpectrum(positions={self.positions}, intensities={self.intensities})"
 
 class Spectrum:
@@ -102,7 +105,7 @@ class Spectrum:
 
     @cached_property
     def cspectrum_wrapper(self):
-        return CSpectrum(self.positions, self.intensities)
+        return CSpectrumWrapper(self.positions, self.intensities)
 
     def __str__(self):
         return f"Spectrum(positions={self.positions}, intensities={self.intensities})"

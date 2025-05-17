@@ -22,7 +22,7 @@ else:
 
 if debug:
     assert os.name != "nt", "Debug mode is not supported on Windows"
-    cflags = ["-Og", "-g"]
+    cflags = ["-Og", "-g", "-DDO_TONS_OF_PRINTS"]
 else:
     cflags = []
     if os.name != "nt":

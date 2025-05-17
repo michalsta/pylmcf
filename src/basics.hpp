@@ -24,6 +24,4 @@ inline std::vector<T> sorted_copy(const std::vector<T>& vec, auto compare) {
 };
 
 
-#define DO_TONS_OF_PRINTS
-
 #endif // LEMON_BASICS_HPP
