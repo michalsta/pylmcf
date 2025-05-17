@@ -57,7 +57,7 @@ class Solver:
             i = p[1]
             x = p[0][:, i:i+1]
             return distance_function(x[: np.newaxis], y)*scale_factor
-        self.graph = pylmcf_cpp.CDecompositableFlowGraph(empirical_spectrum.cspectrum, [ts.cspectrum for ts in theoretical_spectra], wrapped_dist, max_distance*scale_factor)
+        self.graph = pylmcf_cpp.CDecompositableFlowGraph(empirical_spectrum.cspectrum, [ts.cspectrum for ts in theoretical_spectra], wrapped_dist, int(max_distance*scale_factor))
 
         self.graph.add_simple_trash(trash_cost*scale_factor)
         self.graph.build()
