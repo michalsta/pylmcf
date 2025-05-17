@@ -47,6 +47,7 @@ public:
         auto& sink_node = nodes[1];
 
         std::unordered_map<size_t, size_t> node_id_map;
+
         for (const auto& node_id : subgraph_node_ids)
         {
             node_id_map[node_id] = nodes.size();
@@ -294,6 +295,11 @@ public:
 
         for (size_t theoretical_spectrum_idx = 0; theoretical_spectrum_idx < theoretical_spectra.size(); ++theoretical_spectrum_idx)
         {
+            #ifdef DO_TONS_OF_PRINTS
+            size_t no_processed = 0;
+            size_t no_included = 0;
+            #endif
+
             const auto& theoretical_spectrum = theoretical_spectra[theoretical_spectrum_idx];
 
             for (size_t theoretical_peak_idx = 0; theoretical_peak_idx < theoretical_spectrum->size(); ++theoretical_peak_idx) {
@@ -311,6 +317,11 @@ public:
                     dist_fun,
                     max_dist
                 );
+                #ifdef DO_TONS_OF_PRINTS
+                no_processed += theoretical_spectrum->size();
+                no_included += indices.size();
+                std::cout << no_included << " / " << no_processed << std::endl;
+                #endif
 
                 for (size_t ii = 0; ii < indices.size(); ++ii)
                     edges.emplace_back(FlowEdge(
@@ -402,11 +413,16 @@ public:
         // can be O(subgraphs.size() + edges.size())
         flow_subgraphs.reserve(_subgraphs.size());
         for (const auto& subgraph_node_ids : _subgraphs)
+        {
+            #ifdef DO_TONS_OF_PRINTS
+            std::cout << "Subgraph" << std::endl;
+            #endif
             flow_subgraphs.emplace_back(std::make_unique<FlowSubgraph>(
                     subgraph_node_ids,
                     nodes,
                     edges
             ));
+        }
     }
 
     void add_simple_trash(LEMON_INT cost) {
