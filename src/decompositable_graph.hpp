@@ -174,7 +174,6 @@ public:
         {
             capacities_map[lemon_graph.arcFromId(simple_trash_idx)] = total_flow;
             costs_map[lemon_graph.arcFromId(simple_trash_idx)] = std::get<SimpleTrashEdge>(edges[simple_trash_idx].get_type()).get_cost();
-            std::cerr << "Simple trash cost: " << costs_map[lemon_graph.arcFromId(simple_trash_idx)] << std::endl;
         }
         node_supply_map[lemon_graph.nodeFromId(0)] = total_flow;
         node_supply_map[lemon_graph.nodeFromId(1)] = -total_flow;
