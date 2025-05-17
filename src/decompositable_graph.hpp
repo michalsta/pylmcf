@@ -320,7 +320,7 @@ public:
                 #ifdef DO_TONS_OF_PRINTS
                 no_processed += theoretical_spectrum->size();
                 no_included += indices.size();
-                std::cout << no_included << " / " << no_processed << std::endl;
+                std::cout << no_included << " / " << no_processed << " = " << static_cast<float>(no_included) / static_cast<float>(no_processed) << std::endl;
                 #endif
 
                 for (size_t ii = 0; ii < indices.size(); ++ii)

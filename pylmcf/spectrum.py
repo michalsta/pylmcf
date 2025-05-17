@@ -44,19 +44,8 @@ class CSpectrum:
             return dist_fun(point[: np.newaxis], vec)
         return self.cspectrum.closer_than(point, df, max_dist)
 
-    @staticmethod
-    def FromMasserstein(masserstein_spectrum):
-        locs, intensities = zip(*masserstein_spectrum.confs)
-        return Spectrum_1D(np.array(locs), np.array(intensities))
-
-    @staticmethod
-    def Concatenate(spectra):
-        assert all([isinstance(s, Spectrum) for s in spectra])
-        assert all([s.positions.shape[0] == spectra[0].positions.shape[0] for s in spectra])
-        positions = np.concatenate([s.positions for s in spectra], axis=1)
-        intensities = np.concatenate([s.intensities for s in spectra])
-        return Spectrum(positions, intensities)
-
+    def __str__(self):
+        return f"CSpectrum(positions={self.positions}, intensities={self.intensities})"
 
 class Spectrum:
     def __init__(self, positions, intensities):
@@ -114,6 +103,9 @@ class Spectrum:
     @cached_property
     def cspectrum_wrapper(self):
         return CSpectrum(self.positions, self.intensities)
+
+    def __str__(self):
+        return f"Spectrum(positions={self.positions}, intensities={self.intensities})"
 
 class Spectrum_1D(Spectrum):
     def __init__(self, positions, intensities):
