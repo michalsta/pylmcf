@@ -92,7 +92,9 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
         .def("add_simple_trash", &DecompositableFlowGraph::add_simple_trash)
         .def("neighbourhood_lists", &DecompositableFlowGraph::neighbourhood_lists)
         .def("no_subgraphs", &DecompositableFlowGraph::no_subgraphs)
-        .def("get_subgraph", &DecompositableFlowGraph::get_subgraph, py::return_value_policy::reference);
+        .def("get_subgraph", &DecompositableFlowGraph::get_subgraph, py::return_value_policy::reference)
+        .def("__str__", &DecompositableFlowGraph::lemon_to_string)
+        .def("flows_for_spectrum", &DecompositableFlowGraph::flows_for_spectrum);
 
     py::class_<FlowSubgraph>(m, "CFlowSubgraph")
         .def("no_nodes", &FlowSubgraph::no_nodes)

@@ -180,6 +180,7 @@ class DecompositableFlowGraph:
         print(ret, cret)
 
         assert ret == cret
+        return cret
 
     def show(self):
         from matplotlib import pyplot as plt

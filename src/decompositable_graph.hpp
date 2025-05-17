@@ -106,11 +106,6 @@ public:
                 return a.get_start_node_id() < b.get_start_node_id();
             return a.get_end_node_id() < b.get_end_node_id();
         });
-        // std::sort(edges.begin(), edges.end(), [](const FlowEdge& a, const FlowEdge& b) {
-        // if(a.get_start_node_id() != b.get_start_node_id())
-        // return a.get_start_node_id() < b.get_start_node_id();
-        //     return a.get_end_node_id() < b.get_end_node_id();
-        // });
         std::vector<std::pair<int, int>> arcs;
         arcs.reserve(edges.size());
         for (const FlowEdge& edge : edges)
@@ -175,7 +170,6 @@ public:
             }, edge.get_type());
         }
         const LEMON_INT total_flow = std::max<LEMON_INT>(empirical_intensity, theoretical_intensity);
-        std::cerr << "Total flow: " << total_flow << std::endl;
         if(simple_trash_idx != std::numeric_limits<size_t>::max())
         {
             capacities_map[lemon_graph.arcFromId(simple_trash_idx)] = total_flow;
@@ -231,6 +225,35 @@ public:
         return edges;
     };
 
+    void flows_for_spectrum(size_t spectrum_id,
+                            std::vector<size_t>& empirical_peak_indices,
+                            std::vector<size_t>& theoretical_peak_indices,
+                            std::vector<LEMON_INT>& flows) const
+    {
+        for (size_t ii = 0; ii < edges.size(); ++ii)
+        {
+            const FlowEdge& edge = edges[ii];
+            const LEMON_INT flow = solver->flow(lemon_graph.arcFromId(ii));
+            if (flow == 0) continue;
+            std::visit([&](const auto& arg) {
+                using T = std::decay_t<decltype(arg)>;
+                if constexpr (std::is_same_v<T, MatchingEdge>) {
+                    const auto& theoretical_node_type = std::get<TheoreticalNode>(edge.get_end_node().get_type());
+                    if(theoretical_node_type.get_spectrum_id() == spectrum_id)
+                    {
+                        empirical_peak_indices.push_back(std::get<EmpiricalNode>(edge.get_start_node().get_type()).get_peak_index());
+                        theoretical_peak_indices.push_back(theoretical_node_type.get_peak_index());
+                        flows.push_back(flow);
+                    }
+                }
+                else if constexpr (std::is_same_v<T, TheoreticalToSinkEdge>) {}
+                else if constexpr (std::is_same_v<T, SrcToEmpiricalEdge>) {}
+                else if constexpr (std::is_same_v<T, SimpleTrashEdge>) {}
+                else { throw std::runtime_error("Invalid FlowEdgeType"); };
+            }, edge.get_type());
+        }
+    };
+
 };
 
 class DecompositableFlowGraph {
@@ -243,20 +266,6 @@ class DecompositableFlowGraph {
     std::vector<std::unique_ptr<FlowSubgraph>> flow_subgraphs;
 
 public:
-
-    // DecompositableFlowGraph(
-    //     const Spectrum* empirical_spectrum,
-    //     const std::vector<const Spectrum*>& theoretical_spectra,
-    //     const std::vector<const py::function*>& dist_funs,
-    //     const std::vector<const LEMON_INT>& max_dists
-    // ) : DecompositableFlowGraph(
-    //     empirical_spectrum,
-    //     std::span<const Spectrum*>(theoretical_spectra.data(), theoretical_spectra.size()),
-    //     std::span<const py::function*>(dist_funs.data(), dist_funs.size()),
-    //     std::span<const LEMON_INT>(max_dists.data(), max_dists.size())
-    // ) {};
-
-
     DecompositableFlowGraph(
     const Spectrum* empirical_spectrum,
     const std::vector<Spectrum*>& theoretical_spectra,
@@ -431,6 +440,22 @@ public:
         if (idx >= flow_subgraphs.size())
             throw std::out_of_range("Subgraph index out of range");
         return *flow_subgraphs[idx];
+    };
+
+    std::string lemon_to_string() const {
+        std::string result;
+        for (const auto& flow_subgraph : flow_subgraphs)
+            result += flow_subgraph->lemon_to_string();
+        return result;
+    };
+
+    std::tuple<std::vector<size_t>, std::vector<size_t>, std::vector<LEMON_INT>> flows_for_spectrum(size_t spectrum_id) const {
+        std::vector<size_t> empirical_peak_indices;
+        std::vector<size_t> theoretical_peak_indices;
+        std::vector<LEMON_INT> flows;
+        for (const auto& flow_subgraph : flow_subgraphs)
+            flow_subgraph->flows_for_spectrum(spectrum_id, empirical_peak_indices, theoretical_peak_indices, flows);
+        return {empirical_peak_indices, theoretical_peak_indices, flows};
     };
 };
 
