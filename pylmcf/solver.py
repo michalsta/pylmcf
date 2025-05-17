@@ -83,3 +83,16 @@ class Solver:
             empirical_peak_idx, theoretical_peak_idx, flow = self.graph.flows_for_spectrum(i)
             result.append(namedtuple('Flow', ['empirical_peak_idx', 'theoretical_peak_idx', 'flow'])(empirical_peak_idx, theoretical_peak_idx, flow / self.scale_factor))
         return result
+
+    def solve(self, start_point = None):
+        def opt_fun(point):
+            ret = self.DG.set_point(point)
+            #print("Optimizing with point:", point, "cost:", ret)
+            print(int(np.log10(ret)), ret)
+            return ret
+        if start_point is None:
+            start_point = [1.0] * len(self.theoretical_spectra)
+        start_point = self.scale_factor * np.array(start_point)
+
+        return minimize(opt_fun, method='Nelder-Mead', x0 = start_point, bounds=[(0, None)] * len(self.theoretical_spectra), options={'disp': True, 'maxiter':100000})
+
