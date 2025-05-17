@@ -57,6 +57,37 @@ public:
         if (std::holds_alternative<TheoreticalNode>(type)) return 2;
         throw std::runtime_error("Invalid FlowNode type");
     };
+
+    std::string type_str() const {
+        return std::visit([](const auto& arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, SourceNode>) {
+                return "SourceNode";
+            } else if constexpr (std::is_same_v<T, SinkNode>) {
+                return "SinkNode";
+            } else if constexpr (std::is_same_v<T, EmpiricalNode>) {
+                return "EmpiricalNode";
+            } else if constexpr (std::is_same_v<T, TheoreticalNode>) {
+                return "TheoreticalNode";
+            }
+        }, type);
+    };
+
+    std::string to_string() const {
+        std::string result = type_str() + "(" + std::to_string(id);
+        std::visit([&result](const auto& arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, SourceNode>) { }
+            else if constexpr (std::is_same_v<T, SinkNode>) { }
+            else if constexpr (std::is_same_v<T, EmpiricalNode>) {
+                result += ", peak_idx: " + std::to_string(arg.get_peak_index()) + ", intensity: " + std::to_string(arg.get_intensity());
+            } else if constexpr (std::is_same_v<T, TheoreticalNode>) {
+                result += ", spectrum_id: " + std::to_string(arg.get_spectrum_id()) + ", peak_idx: " + std::to_string(arg.get_peak_index()) + ", intensity: " + std::to_string(arg.get_intensity());
+            }
+        }, type);
+        result += ")";
+        return result;
+    };
 };
 /*
 class SourceNode final : public FlowNode {
@@ -133,6 +164,11 @@ public:
     const size_t get_start_node_id() const { return start_node.get_id(); }
     const size_t get_end_node_id() const { return end_node.get_id(); }
     const FlowEdgeType& get_type() const { return type; }
+
+    std::string to_string() const {
+        std::string result = "FlowEdge(" + std::to_string(id) + ", " + start_node.to_string() + ", " + end_node.to_string() + ")";
+        return result;
+    };
 };
 /*
 class MatchingEdge final : public FlowEdge {

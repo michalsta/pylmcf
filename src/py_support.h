@@ -35,4 +35,15 @@ py::array_t<T> mallocd_span_to_owning_numpy(std::span<T> span) {
     return py::array_t<T>(span.size(), span.data(), capsule);
 }
 
+template <typename T>
+py::array_t<T> vector_to_numpy_copy(const std::vector<T>& vec) {
+    // Create a new py::array_t with the same size
+    py::array_t<T> arr(vec.size());
+
+    // Copy the data
+    std::memcpy(arr.mutable_data(), vec.data(), vec.size() * sizeof(T));
+
+    return arr;
+}
+
 #endif // PYLMCF_PY_SUPPORT_H

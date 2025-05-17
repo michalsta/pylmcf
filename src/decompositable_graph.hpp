@@ -189,6 +189,25 @@ public:
         return solver->totalCost();
     };
 
+    std::string to_string() const {
+        std::string result;
+        result += "FlowSubgraph:\n";
+        result += "Nodes:\n";
+        for (const auto& node : nodes) {
+            result += node.to_string() + "\n";
+        }
+        result += "Edges:\n";
+        for (int ii = 0; ii < lemon_graph.arcNum(); ++ii) {
+            result += "Edge " + std::to_string(lemon_graph.id(lemon_graph.arcFromId(ii))) + ": " +
+                      std::to_string(lemon_graph.id(lemon_graph.source(lemon_graph.arcFromId(ii)))) + " -> " +
+                      std::to_string(lemon_graph.id(lemon_graph.target(lemon_graph.arcFromId(ii)))) + " cost: " +
+                      std::to_string(costs_map[lemon_graph.arcFromId(ii)]) + " capacity: " +
+                      std::to_string(capacities_map[lemon_graph.arcFromId(ii)]) + " flow: " +
+                      std::to_string(solver->flow(lemon_graph.arcFromId(ii))) + "\n";
+        }
+        return result;
+    };
+
     std::string lemon_to_string() const {
         std::string result;
         result += "Lemon graph:\n";
@@ -455,6 +474,13 @@ public:
         if (idx >= flow_subgraphs.size())
             throw std::out_of_range("Subgraph index out of range");
         return *flow_subgraphs[idx];
+    };
+
+    std::string to_string() const {
+        std::string result;
+        for (const auto& flow_subgraph : flow_subgraphs)
+            result += flow_subgraph->to_string();
+        return result;
     };
 
     std::string lemon_to_string() const {

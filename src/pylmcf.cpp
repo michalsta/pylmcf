@@ -93,8 +93,14 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
         .def("neighbourhood_lists", &DecompositableFlowGraph::neighbourhood_lists)
         .def("no_subgraphs", &DecompositableFlowGraph::no_subgraphs)
         .def("get_subgraph", &DecompositableFlowGraph::get_subgraph, py::return_value_policy::reference)
-        .def("__str__", &DecompositableFlowGraph::lemon_to_string)
-        .def("flows_for_spectrum", &DecompositableFlowGraph::flows_for_spectrum);
+        .def("__str__", &DecompositableFlowGraph::to_string)
+        .def("lemon_to_string", &DecompositableFlowGraph::lemon_to_string)
+        .def("flows_for_spectrum", [](DecompositableFlowGraph& self, size_t spectrum_id) {
+            auto [empirical_peak_indices, theoretical_peak_indices, flows] = self.flows_for_spectrum(spectrum_id);
+            return std::make_tuple(vector_to_numpy_copy(empirical_peak_indices),
+                                   vector_to_numpy_copy(theoretical_peak_indices),
+                                   vector_to_numpy_copy(flows));
+        }, py::return_value_policy::move);
 
     py::class_<FlowSubgraph>(m, "CFlowSubgraph")
         .def("no_nodes", &FlowSubgraph::no_nodes)

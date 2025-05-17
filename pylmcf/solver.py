@@ -5,6 +5,7 @@ import pylmcf_cpp
 from tqdm import tqdm
 from scipy.optimize import minimize
 import numpy as np
+from collections import namedtuple
 
 class DeconvolutionSolver:
     def __init__(self, empirical_spectrum, theoretical_spectra, distance_function, max_distance, trash_cost, scale_factor=1000000.0):
@@ -50,15 +51,17 @@ class Solver:
 
         self.scale_factor = scale_factor
         self.empirical_spectrum = empirical_spectrum.scaled(scale_factor)
+        del empirical_spectrum
 
         print("Empirical spectrum:", str(self.empirical_spectrum.cspectrum_wrapper))
         self.theoretical_spectra = [t.scaled(scale_factor) for t in theoretical_spectra]
+        del theoretical_spectra
         print("Theoretical spectra:", [str(t.cspectrum_wrapper)+'\n' for t in self.theoretical_spectra])
         def wrapped_dist(p, y):
             i = p[1]
             x = p[0][:, i:i+1]
             return distance_function(x[: np.newaxis], y)*scale_factor
-        self.graph = pylmcf_cpp.CDecompositableFlowGraph(empirical_spectrum.cspectrum, [ts.cspectrum for ts in theoretical_spectra], wrapped_dist, int(max_distance*scale_factor))
+        self.graph = pylmcf_cpp.CDecompositableFlowGraph(self.empirical_spectrum.cspectrum, [ts.cspectrum for ts in self.theoretical_spectra], wrapped_dist, int(max_distance*scale_factor))
 
         self.graph.add_simple_trash(trash_cost*scale_factor)
         self.graph.build()
@@ -77,5 +80,6 @@ class Solver:
     def flows(self):
         result = []
         for i in range(len(self.theoretical_spectra)):
-            result.append(self.graph.flows_for_spectrum(i))
+            empirical_peak_idx, theoretical_peak_idx, flow = self.graph.flows_for_spectrum(i)
+            result.append(namedtuple('Flow', ['empirical_peak_idx', 'theoretical_peak_idx', 'flow'])(empirical_peak_idx, theoretical_peak_idx, flow / self.scale_factor))
         return result

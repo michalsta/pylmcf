@@ -17,7 +17,7 @@ def test_flows():
         distance_function=dist_fun,
         max_distance=max_distance,
         trash_cost=trash_cost,
-        scale_factor=1
+        scale_factor=10000
     )
 
     solver.set_point([1])
