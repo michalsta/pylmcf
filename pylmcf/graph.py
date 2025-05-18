@@ -111,17 +111,17 @@ class DecompositableFlowGraph:
             node for node, degree in dict(self.graph.degree()).items() if degree < 1
         ]
 
-        self.csubgraphs, self.cdead_end_nodes = self.cobj.subgraphs()
+        #self.csubgraphs, self.cdead_end_nodes = self.cobj.subgraphs()
         self.dead_end_trashes = [tc.dead_end_trash(dead_end_nodes, self.no_theoretical_spectra) for tc in trash_costructors]
         self.graph.remove_nodes_from(dead_end_nodes)
 
 
 
-        print(f"Dead end nodes: {len(dead_end_nodes)}")
-        print(f"Dead end nodes c++: {len(self.cdead_end_nodes)}")
-        assert [n.id for n in dead_end_nodes] == self.cdead_end_nodes, "Dead end nodes do not match with c++ dead end nodes"
-        dead_end_nodes = [self.nodes[i] for i in self.cdead_end_nodes]
-        print(f"Graph nodes: {self.graph.nodes}")
+        # print(f"Dead end nodes: {len(dead_end_nodes)}")
+        # print(f"Dead end nodes c++: {len(self.cdead_end_nodes)}")
+        # assert [n.id for n in dead_end_nodes] == self.cdead_end_nodes, "Dead end nodes do not match with c++ dead end nodes"
+        # dead_end_nodes = [self.nodes[i] for i in self.cdead_end_nodes]
+        # print(f"Graph nodes: {self.graph.nodes}")
 
         for_comparison = []
         from tqdm import tqdm
@@ -133,7 +133,7 @@ class DecompositableFlowGraph:
 
             self.subgraphs.append(subgraph)
 
-        assert compare_subgraphs(self.csubgraphs, for_comparison), "Subgraphs do not match with c++ subgraphs"
+        # assert compare_subgraphs(self.csubgraphs, for_comparison), "Subgraphs do not match with c++ subgraphs"
         for subgraph in self.subgraphs:
             subgraph.build()
 

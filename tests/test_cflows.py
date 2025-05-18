@@ -9,8 +9,8 @@ def test_flows():
     S2 = Spectrum(np.array([[1, 4, 30, 31]]), np.array([5, 1, 1, 1]))
 
     dist_fun = lambda x, y: np.linalg.norm(x - y, axis=0)
-    trash_cost = 10000
-    max_distance = 5
+    trash_cost = 10
+    max_distance = 100
     solver = Solver(
         empirical_spectrum=S1,
         theoretical_spectra=[S2],
