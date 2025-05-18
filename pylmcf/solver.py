@@ -97,3 +97,22 @@ class Solver:
 
         return minimize(opt_fun, method='Nelder-Mead', x0 = start_point, bounds=[(0, None)] * len(self.theoretical_spectra), options={'disp': True, 'maxiter':100000})
 
+    def no_subgraphs(self):
+        return self.graph.no_subgraphs()
+
+    def print_diagnostics(self, subgraphs_too=False):
+        print("Diagnostics:")
+        print("No subgraphs:", self.graph.no_subgraphs())
+        print("No empirical nodes:", self.graph.count_empirical_nodes())
+        print("No theoretical nodes:", self.graph.count_theoretical_nodes())
+        print("Matching density:", self.graph.matching_density())
+        print("Total cost:", self.graph.total_cost())
+        #print("Subgraphs:", self.graph.subgraphs())
+        for ii in range(self.graph.no_subgraphs()):
+            s = self.graph.get_subgraph(ii)
+            print("Subgraph", ii, ":")
+            print("  No. empirical nodes:", s.count_empirical_nodes())
+            print("  No. theoretical nodes:", s.count_theoretical_nodes())
+            print("  Cost:", s.total_cost())
+            #print("  Flow:", s.flow())
+            print("  Matching density:", s.matching_density())

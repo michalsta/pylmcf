@@ -85,7 +85,7 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
         .def("no_theoretical_spectra", &DecompositableFlowGraph::no_theoretical_spectra)
         .def("nodes", &DecompositableFlowGraph::get_nodes)
         .def("edges", &DecompositableFlowGraph::get_edges)
-        .def("subgraphs", &DecompositableFlowGraph::split_into_subgraphs)
+        .def("split_into_subgraphs", &DecompositableFlowGraph::split_into_subgraphs)
         .def("build", &DecompositableFlowGraph::build)
         .def("set_point", &DecompositableFlowGraph::set_point)
         .def("total_cost", &DecompositableFlowGraph::total_cost)
@@ -100,7 +100,14 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
             return std::make_tuple(vector_to_numpy_copy(empirical_peak_indices),
                                    vector_to_numpy_copy(theoretical_peak_indices),
                                    vector_to_numpy_copy(flows));
-        }, py::return_value_policy::move);
+        }, py::return_value_policy::move)
+        .def("count_empirical_nodes", &DecompositableFlowGraph::count_nodes_of_type<EmpiricalNode>)
+        .def("count_theoretical_nodes", &DecompositableFlowGraph::count_nodes_of_type<TheoreticalNode>)
+        .def("count_matching_edges", &DecompositableFlowGraph::count_edges_of_type<MatchingEdge>)
+        .def("count_theoretical_to_sink_edges", &DecompositableFlowGraph::count_edges_of_type<TheoreticalToSinkEdge>)
+        .def("count_src_to_empirical_edges", &DecompositableFlowGraph::count_edges_of_type<SrcToEmpiricalEdge>)
+        .def("count_simple_trash_edges", &DecompositableFlowGraph::count_edges_of_type<SimpleTrashEdge>)
+        .def("matching_density", &DecompositableFlowGraph::matching_density);
 
     py::class_<FlowSubgraph>(m, "CFlowSubgraph")
         .def("no_nodes", &FlowSubgraph::no_nodes)
@@ -109,7 +116,17 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
         .def("edges", &FlowSubgraph::get_edges)
         .def("build", &FlowSubgraph::build)
         .def("set_point", &FlowSubgraph::set_point)
-        .def("total_cost", &FlowSubgraph::total_cost);
+        .def("total_cost", &FlowSubgraph::total_cost)
+        .def("add_simple_trash", &FlowSubgraph::add_simple_trash)
+        .def("lemon_to_string", &FlowSubgraph::lemon_to_string)
+        .def("to_string", &FlowSubgraph::to_string)
+        .def("count_empirical_nodes", &FlowSubgraph::count_nodes_of_type<EmpiricalNode>)
+        .def("count_theoretical_nodes", &FlowSubgraph::count_nodes_of_type<TheoreticalNode>)
+        .def("count_matching_edges", &FlowSubgraph::count_edges_of_type<MatchingEdge>)
+        .def("count_theoretical_to_sink_edges", &FlowSubgraph::count_edges_of_type<TheoreticalToSinkEdge>)
+        .def("count_src_to_empirical_edges", &FlowSubgraph::count_edges_of_type<SrcToEmpiricalEdge>)
+        .def("count_simple_trash_edges", &FlowSubgraph::count_edges_of_type<SimpleTrashEdge>)
+        .def("matching_density", &FlowSubgraph::matching_density);
 
     py::class_<lemon::StaticDigraph>(m, "LemonStaticGraph")
         .def("no_nodes", &lemon::StaticDigraph::nodeNum)

@@ -13,6 +13,7 @@
 #include <iostream>
 
 
+
 class FlowSubgraph {
     std::vector<FlowNode> nodes;
     std::vector<FlowEdge> edges;
@@ -273,6 +274,30 @@ public:
         }
     };
 
+    template<typename T>
+    size_t count_nodes_of_type() const {
+        size_t result = 0;
+        for (const auto& node : nodes)
+            if(std::holds_alternative<T>(node.get_type()))
+                result++;
+        return result;
+    }
+
+    template<typename T>
+    size_t count_edges_of_type() const {
+        size_t result = 0;
+        for (const auto& edge : edges)
+            if(std::holds_alternative<T>(edge.get_type()))
+                result++;
+        return result;
+    }
+
+    double matching_density() const {
+        const double nominator = count_edges_of_type<MatchingEdge>();
+        const double denominator = count_nodes_of_type<EmpiricalNode>() * count_nodes_of_type<TheoreticalNode>();
+        return nominator / denominator;
+    }
+
 };
 
 class DecompositableFlowGraph {
@@ -498,5 +523,42 @@ public:
             flow_subgraph->flows_for_spectrum(spectrum_id, empirical_peak_indices, theoretical_peak_indices, flows);
         return {empirical_peak_indices, theoretical_peak_indices, flows};
     };
+
+    size_t count_matching_edges() const {
+        size_t result = 0;
+        for (const auto& edge : edges)
+            std::visit([&](const auto& arg) {
+                using T = std::decay_t<decltype(arg)>;
+                if constexpr (std::is_same_v<T, MatchingEdge>) result++;
+            },
+            edge.get_type());
+        return result;
+    }
+
+    template<typename T>
+    size_t count_nodes_of_type() const {
+        size_t result = 0;
+        for (const auto& node : nodes)
+            if(std::holds_alternative<T>(node.get_type()))
+                result++;
+        return result;
+    }
+
+    template<typename T>
+    size_t count_edges_of_type() const {
+        size_t result = 0;
+        for (const auto& edge : edges)
+            if(std::holds_alternative<T>(edge.get_type()))
+                result++;
+        return result;
+    }
+
+    double matching_density() const {
+        const double nominator = count_edges_of_type<MatchingEdge>();
+        const double denominator = 0;
+        for (const auto& flow_subgraph : flow_subgraphs)
+            denominator += flow_subgraph->count_nodes_of_type<EmpiricalNode>() * flow_subgraph->count_nodes_of_type<TheoreticalNode>();
+        return nominator / denominator;
+    }
 };
 
