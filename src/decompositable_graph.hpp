@@ -555,7 +555,7 @@ public:
 
     double matching_density() const {
         const double nominator = count_edges_of_type<MatchingEdge>();
-        const double denominator = 0;
+        double denominator = 0;
         for (const auto& flow_subgraph : flow_subgraphs)
             denominator += flow_subgraph->count_nodes_of_type<EmpiricalNode>() * flow_subgraph->count_nodes_of_type<TheoreticalNode>();
         return nominator / denominator;
