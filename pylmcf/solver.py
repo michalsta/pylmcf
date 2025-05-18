@@ -11,24 +11,20 @@ class DeconvolutionSolver:
     def __init__(self, empirical_spectrum, theoretical_spectra, distance_function, max_distance, trash_cost, scale_factor=1000000.0):
         self.scale_factor = scale_factor
         self.empirical_spectrum = empirical_spectrum.scaled(scale_factor)
-        print("Empirical spectrum:", self.empirical_spectrum.intensities)
         self.theoretical_spectra = [t.scaled(scale_factor) for t in theoretical_spectra]
-        print("Theoretical spectra:", [t.intensities for t in self.theoretical_spectra])
         dist_fun = lambda x, y: distance_function(x, y) * scale_factor
         self.DG = DecompositableFlowGraph(self.empirical_spectrum, self.theoretical_spectra, dist_fun, max_distance*scale_factor)
-
-        #self.DG.build([TrashFactoryTheory(trash_cost*scale_factor), TrashFactoryEmpirical(trash_cost*scale_factor)])
         return self.DG.build([TrashFactorySimple(trash_cost*scale_factor)])
 
     def set_point(self, point):
         return self.DG.set_point(point) / self.scale_factor / self.scale_factor
 
 
-    def solve(self, start_point = None):
+    def solve(self, start_point = None, debug_prints=False):
         def opt_fun(point):
             ret = self.DG.set_point(point)
-            #print("Optimizing with point:", point, "cost:", ret)
-            print(int(np.log10(ret)), ret)
+            if debug_prints:
+                print(int(np.log10(ret)), ret)
             return ret
         if start_point is None:
             start_point = [1.0] * len(self.theoretical_spectra)
@@ -51,18 +47,14 @@ class Solver:
 
         self.scale_factor = scale_factor
         self.empirical_spectrum = empirical_spectrum.scaled(scale_factor)
-        del empirical_spectrum
-
-        #print("Empirical spectrum:", str(self.empirical_spectrum.cspectrum_wrapper))
         self.theoretical_spectra = [t.scaled(scale_factor) for t in theoretical_spectra]
-        del theoretical_spectra
-        #print("Theoretical spectra:", [str(t.cspectrum_wrapper)+'\n' for t in self.theoretical_spectra])
+
         def wrapped_dist(p, y):
             i = p[1]
             x = p[0][:, i:i+1]
             return distance_function(x[: np.newaxis], y)*scale_factor
-        self.graph = pylmcf_cpp.CDecompositableFlowGraph(self.empirical_spectrum.cspectrum, [ts.cspectrum for ts in self.theoretical_spectra], wrapped_dist, int(max_distance*scale_factor))
 
+        self.graph = pylmcf_cpp.CDecompositableFlowGraph(self.empirical_spectrum.cspectrum, [ts.cspectrum for ts in self.theoretical_spectra], wrapped_dist, int(max_distance*scale_factor))
         self.graph.add_simple_trash(int(trash_cost*scale_factor))
         self.graph.build()
         self.point = None
@@ -84,12 +76,12 @@ class Solver:
             result.append(namedtuple('Flow', ['empirical_peak_idx', 'theoretical_peak_idx', 'flow'])(empirical_peak_idx, theoretical_peak_idx, flow / self.scale_factor))
         return result
 
-    def solve(self, start_point = None):
+    def solve(self, start_point = None, debug_prints=False):
         def opt_fun(point):
             self.graph.set_point(point)
             ret = self.graph.total_cost()
-            #print("Optimizing with point:", point, "cost:", ret)
-            print(int(np.log10(ret+1)), ret)
+            if debug_prints:
+                print(int(np.log10(ret+1)), ret)
             return ret
         if start_point is None:
             start_point = [1.0] * len(self.theoretical_spectra)
@@ -107,12 +99,10 @@ class Solver:
         print("No theoretical nodes:", self.graph.count_theoretical_nodes())
         print("Matching density:", self.graph.matching_density())
         print("Total cost:", self.graph.total_cost())
-        #print("Subgraphs:", self.graph.subgraphs())
         for ii in range(self.graph.no_subgraphs()):
             s = self.graph.get_subgraph(ii)
             print("Subgraph", ii, ":")
             print("  No. empirical nodes:", s.count_empirical_nodes())
             print("  No. theoretical nodes:", s.count_theoretical_nodes())
             print("  Cost:", s.total_cost())
-            #print("  Flow:", s.flow())
             print("  Matching density:", s.matching_density())
