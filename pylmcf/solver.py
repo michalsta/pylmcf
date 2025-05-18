@@ -63,7 +63,7 @@ class Solver:
             return distance_function(x[: np.newaxis], y)*scale_factor
         self.graph = pylmcf_cpp.CDecompositableFlowGraph(self.empirical_spectrum.cspectrum, [ts.cspectrum for ts in self.theoretical_spectra], wrapped_dist, int(max_distance*scale_factor))
 
-        self.graph.add_simple_trash(trash_cost*scale_factor)
+        self.graph.add_simple_trash(int(trash_cost*scale_factor))
         self.graph.build()
         self.point = None
 
@@ -86,9 +86,10 @@ class Solver:
 
     def solve(self, start_point = None):
         def opt_fun(point):
-            ret = self.DG.set_point(point)
+            self.graph.set_point(point)
+            ret = self.graph.total_cost()
             #print("Optimizing with point:", point, "cost:", ret)
-            print(int(np.log10(ret)), ret)
+            print(int(np.log10(ret+1)), ret)
             return ret
         if start_point is None:
             start_point = [1.0] * len(self.theoretical_spectra)
