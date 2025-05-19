@@ -4,7 +4,7 @@ from setuptools import setup
 
 __version__ = open("pyproject.toml").read().split('version = "')[1].split('"')[0]
 debug = False
-asan = ['-fsanitize=address']
+asan = ["-fsanitize=address"]
 asan = []
 # run with:
 # DYLD_INSERT_LIBRARIES=/Library/Developer/CommandLineTools/usr/lib/clang/17/lib/darwin/libclang_rt.asan_osx_dynamic.dylib
@@ -36,7 +36,7 @@ ext_modules = [
         define_macros=[("LMCF_VERSION", __version__)] + os_flags,
         cxx_std=20,
         extra_compile_args=cflags + asan,
-        extra_link_args=asan if debug else []
+        extra_link_args=asan if debug else [],
     )
 ]
 

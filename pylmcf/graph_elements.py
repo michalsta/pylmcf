@@ -5,9 +5,11 @@ from typing import Union
 
 BIGINT = np.int64(2**56)
 
+
 @dataclass(frozen=True)
 class FlowNode:
     id: int
+
 
 @dataclass(frozen=True)
 class SourceNode(FlowNode):
@@ -27,6 +29,7 @@ class SinkNode(FlowNode):
 class EmpiricalNode(FlowNode):
     peak_idx: int
     intensity: int
+
     @property
     def layer(self):
         return 1
@@ -37,12 +40,14 @@ class TheoreticalNode(FlowNode):
     spectrum_id: int
     peak_idx: int
     intensity: int
+
     @property
     def layer(self):
         return 2
 
 
 Node = Union[SourceNode, SinkNode, EmpiricalNode, TheoreticalNode]
+
 
 @dataclass(frozen=True)
 class FlowEdge:
@@ -65,30 +70,37 @@ class MatchingEdge(FlowEdge):
     theo_peak_idx: int
     cost: int
 
+
 @dataclass(frozen=True)
 class SrcToEmpEdge(FlowEdge):
     emp_peak_intensity: int
+
     @property
     def cost(self):
         return 0
+
 
 @dataclass(frozen=True)
 class TheoToSinkEdge(FlowEdge):
     theo_spectrum_id: int
     theo_peak_intensity: int
+
     @property
     def cost(self):
         return 0
+
 
 @dataclass(frozen=True)
 class SimpleTrashEdge(FlowEdge):
     cost: int
 
+
 @dataclass(frozen=True)
 class TheoryTrashEdge(FlowEdge):
-    #theo_spectrum_id: int
-    #theo_peak_intensity: int
+    # theo_spectrum_id: int
+    # theo_peak_intensity: int
     cost: int
+
 
 @dataclass(frozen=True)
 class EmpiricalTrashEdge(FlowEdge):

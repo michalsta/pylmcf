@@ -29,19 +29,21 @@ class CSpectrumWrapper:
         return self.cspectrum.intensities()
 
     def get_point(self, idx):
-        '''
+        """
         Returns the point at index idx
-        '''
+        """
         return self.cspectrum.get_point(idx)
 
     def closer_than(self, point, max_dist, dist_fun):
-        '''
+        """
         Returns the indices of the positions that are closer than max_dist to the point, and the distances
-        '''
+        """
+
         def df(pt, vec):
             pos, idx = pt
-            point = pos[:,idx:idx+1]
+            point = pos[:, idx : idx + 1]
             return dist_fun(point[: np.newaxis], vec)
+
         return self.cspectrum.closer_than(point, df, max_dist)
 
     def __str__(self):
@@ -49,6 +51,7 @@ class CSpectrumWrapper:
 
     def __repr__(self):
         return f"CSpectrum(positions={self.positions}, intensities={self.intensities})"
+
 
 class Spectrum:
     def __init__(self, positions, intensities):
@@ -76,7 +79,9 @@ class Spectrum:
     @staticmethod
     def Concatenate(spectra):
         assert all([isinstance(s, Spectrum) for s in spectra])
-        assert all([s.positions.shape[0] == spectra[0].positions.shape[0] for s in spectra])
+        assert all(
+            [s.positions.shape[0] == spectra[0].positions.shape[0] for s in spectra]
+        )
         positions = np.concatenate([s.positions for s in spectra], axis=1)
         intensities = np.concatenate([s.intensities for s in spectra])
         return Spectrum(positions, intensities)
@@ -88,15 +93,15 @@ class Spectrum:
         return Spectrum(self.positions.copy(), self.intensities * factor)
 
     def get_point(self, idx):
-        '''
+        """
         Returns the point at index idx
-        '''
+        """
         return self.cspectrum_wrapper.get_point(idx)
 
     def closer_than(self, point, max_dist, dist_fun):
-        '''
+        """
         Returns the indices of the positions that are closer than max_dist to the point, and the distances
-        '''
+        """
         return self.cspectrum_wrapper.closer_than(point, max_dist, dist_fun)
 
     @cached_property
@@ -109,6 +114,7 @@ class Spectrum:
 
     def __str__(self):
         return f"Spectrum(positions={self.positions}, intensities={self.intensities})"
+
 
 class Spectrum_1D(Spectrum):
     def __init__(self, positions, intensities):

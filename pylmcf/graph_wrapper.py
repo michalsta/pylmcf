@@ -15,18 +15,24 @@ class GraphWrapper:
         self.edge_capacities = None
         self.solved = False
 
-
     @property
     def nx_graph(self):
         self._nx_graph = nx.DiGraph()
         self._nx_graph.add_nodes_from(range(self.no_nodes))
-        self._nx_graph.add_edges_from([(self.edge_starts[i], self.edge_ends[i], {"cost": self.edge_costs[i]}) for i in range(len(self.edge_starts))])
+        self._nx_graph.add_edges_from(
+            [
+                (self.edge_starts[i], self.edge_ends[i], {"cost": self.edge_costs[i]})
+                for i in range(len(self.edge_starts))
+            ]
+        )
         if self.node_supply is not None:
             for i in range(self.no_nodes):
                 self._nx_graph.nodes[i]["supply"] = self.node_supply[i]
         if self.edge_capacities is not None:
             for i in range(len(self.edge_starts)):
-                self._nx_graph[self.edge_starts[i]][self.edge_ends[i]]["capacity"] = self.edge_capacities[i]
+                self._nx_graph[self.edge_starts[i]][self.edge_ends[i]]["capacity"] = (
+                    self.edge_capacities[i]
+                )
         return self._nx_graph
 
     def set_edge_capacities(self, capacities):
@@ -53,7 +59,14 @@ class GraphWrapper:
 
     def plot(self):
         from matplotlib import pyplot as plt
-        edge_labels = {(self.edge_starts[i], self.edge_ends[i]): f"cost: {self.edge_costs[i]} cap: {self.edge_capacities[i]}" for i in range(len(self.edge_starts))}
+
+        edge_labels = {
+            (
+                self.edge_starts[i],
+                self.edge_ends[i],
+            ): f"cost: {self.edge_costs[i]} cap: {self.edge_capacities[i]}"
+            for i in range(len(self.edge_starts))
+        }
         pos = nx.spring_layout(self.nx_graph)
         nx.draw(self.nx_graph, with_labels=True, pos=pos)
         nx.draw_networkx_edge_labels(self.nx_graph, edge_labels=edge_labels, pos=pos)
