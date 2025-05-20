@@ -126,7 +126,8 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
         .def("count_theoretical_to_sink_edges", &FlowSubgraph::count_edges_of_type<TheoreticalToSinkEdge>)
         .def("count_src_to_empirical_edges", &FlowSubgraph::count_edges_of_type<SrcToEmpiricalEdge>)
         .def("count_simple_trash_edges", &FlowSubgraph::count_edges_of_type<SimpleTrashEdge>)
-        .def("matching_density", &FlowSubgraph::matching_density);
+        .def("matching_density", &FlowSubgraph::matching_density)
+        .def("theoretical_spectra_involved", &FlowSubgraph::theoretical_spectra_involved);
 
     py::class_<lemon::StaticDigraph>(m, "LemonStaticGraph")
         .def("no_nodes", &lemon::StaticDigraph::nodeNum)

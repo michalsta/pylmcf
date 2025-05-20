@@ -25,12 +25,14 @@ class FlowSubgraph {
     size_t simple_trash_idx;
     LEMON_INT empirical_intensity;
     LEMON_INT theoretical_intensity;
+    const size_t no_theoretical_spectra;
 
 public:
     FlowSubgraph(
         const std::vector<size_t>& subgraph_node_ids,
         const std::vector<FlowNode>& all_nodes,
-        const std::vector<FlowEdge>& all_edges
+        const std::vector<FlowEdge>& all_edges,
+        size_t no_theoretical_spectra
     ) :
         lemon_graph(),
         node_supply_map(lemon_graph),
@@ -39,7 +41,8 @@ public:
         solver(),
         simple_trash_idx(std::numeric_limits<size_t>::max()),
         empirical_intensity(0),
-        theoretical_intensity(0)
+        theoretical_intensity(0),
+        no_theoretical_spectra(no_theoretical_spectra)
     {
         nodes.reserve(subgraph_node_ids.size()+2);
         nodes.push_back(FlowNode(0, SourceNode()));
@@ -298,6 +301,24 @@ public:
         return nominator / denominator;
     }
 
+    std::vector<size_t> theoretical_spectra_involved() const {
+        std::unique_ptr<bool[]> involved = std::make_unique<bool[]>(no_theoretical_spectra);
+        std::fill(involved.get(), involved.get() + no_theoretical_spectra, false);
+        for (const auto& node : nodes)
+        {
+            if (auto node_type = std::get_if<TheoreticalNode>(&node.get_type()))
+            {
+                const auto& theoretical_node = *node_type;
+                involved[theoretical_node.get_spectrum_id()] = true;
+            }
+        }
+        std::vector<size_t> result;
+        for (size_t ii = 0; ii < no_theoretical_spectra; ++ii)
+            if(involved[ii])
+                result.push_back(ii);
+        return result;
+    }
+
 };
 
 class DecompositableFlowGraph {
@@ -464,7 +485,8 @@ public:
             flow_subgraphs.emplace_back(std::make_unique<FlowSubgraph>(
                     subgraph_node_ids,
                     nodes,
-                    edges
+                    edges,
+                    _no_theoretical_spectra
             ));
         }
     }

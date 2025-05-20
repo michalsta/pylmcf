@@ -155,3 +155,4 @@ class Solver:
             print("  No. theoretical nodes:", s.count_theoretical_nodes())
             print("  Cost:", s.total_cost())
             print("  Matching density:", s.matching_density())
+            print("  Theoretical spectra involved:", s.theoretical_spectra_involved())
