@@ -256,6 +256,7 @@ class SingleTheoryMatching:
         self.scaled_matching_capacities = np.minimum(
             empirical_layer_intensities, theoretical_layer_intensities
         )
+
         self.G.set_edge_capacities(
             self.matching_edge_ids, self.scaled_matching_capacities
         )
