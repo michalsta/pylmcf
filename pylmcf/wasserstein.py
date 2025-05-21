@@ -9,6 +9,10 @@ import networkx as nx
 # from .numba_helper import match_nodes
 import pylmcf_cpp
 
+
+# =========================== OBSOLETE CODE BELOW DO NOT USE ==========================
+
+
 def XXX_solve(G):
     G.solve()
 
@@ -235,7 +239,7 @@ class SingleTheoryMatching:
 
         self._matching_flow = None
 
-        #self.print_summary()
+        # self.print_summary()
 
     def set_edge_capacities(self, scale_factor: float):
         scaled_intensities = self.theoretical_spectrum.intensities * scale_factor
@@ -252,9 +256,10 @@ class SingleTheoryMatching:
         self.scaled_matching_capacities = np.minimum(
             empirical_layer_intensities, theoretical_layer_intensities
         )
-        self.G.set_edge_capacities(self.matching_edge_ids, self.scaled_matching_capacities)
+        self.G.set_edge_capacities(
+            self.matching_edge_ids, self.scaled_matching_capacities
+        )
         self._matching_flow = None
-
 
     def matching_flow(self):
         if self._matching_flow is None:
@@ -267,9 +272,11 @@ class SingleTheoryMatching:
 
     def result(self):
         return {
-            'empirical_indexes': self.WNM.empirical_node_id_to_idx(self.matching_edge_start_nodes),
-            'theoretical_indexes': self.node_id_to_idx(self.matching_edge_end_nodes),
-            'flows': self.matching_flow()
+            "empirical_indexes": self.WNM.empirical_node_id_to_idx(
+                self.matching_edge_start_nodes
+            ),
+            "theoretical_indexes": self.node_id_to_idx(self.matching_edge_end_nodes),
+            "flows": self.matching_flow(),
         }
 
     @property
@@ -347,7 +354,9 @@ class WassersteinMatching:
     @property
     def source_to_empirical_flow(self):
         if self._source_to_empirical_flow is None:
-            self._source_to_empirical_flow = self.G.flows[self.source_to_empirical_edge_ids]
+            self._source_to_empirical_flow = self.G.flows[
+                self.source_to_empirical_edge_ids
+            ]
         return self._source_to_empirical_flow
 
     @property
@@ -362,13 +371,21 @@ class WassersteinMatching:
     def density(self):
         return self.no_edges / self.no_possible_edges
 
+
 class WassersteinNetwork:
-    def __init__(self, empirical_spectrum, theoretical_spectra, trashes, dist_fun, distance_limit=None):
+    def __init__(
+        self,
+        empirical_spectrum,
+        theoretical_spectra,
+        trashes,
+        dist_fun,
+        distance_limit=None,
+    ):
         self.empirical_spectrum = empirical_spectrum
         self.theoretical_spectra = theoretical_spectra
         if distance_limit is None:
             distance_limit = max((t.distance_limit() for t in trashes), default=np.inf)
-        G = DecompositableFlowGraph()
+        G = FlowGraph()
         self.G = G
         self.source = G.source
         self.sink = G.sink
@@ -380,13 +397,17 @@ class WassersteinNetwork:
             trash.add_to_network(self)
         G.build()
 
-
     def solve(self, scale_factors):
         # print("WassersteinNetwork: solve")
         self.matching.set_edge_capacities(scale_factors)
         self.total_supply = max(
             np.sum(self.empirical_spectrum.intensities),
-            np.sum([sf*np.sum(spectrum.intensities) for sf, spectrum in zip(scale_factors, self.theoretical_spectra)]),
+            np.sum(
+                [
+                    sf * np.sum(spectrum.intensities)
+                    for sf, spectrum in zip(scale_factors, self.theoretical_spectra)
+                ]
+            ),
         )
         for trash in self.trashes:
             trash.set_edge_capacities()
@@ -406,7 +427,6 @@ class WassersteinNetwork:
         for trash in self.trashes:
             trash.print_summary()
         self.matching.print_summary()
-
 
     def total_cost(self):
         return self.G.total_cost
@@ -455,7 +475,9 @@ class WassersteinSolver:
             self.theoretical_spectra,
             trashes,
             scaled_dist_fun,
-            distance_limit=None if distance_limit is None else distance_limit * self.costs_scaling,
+            distance_limit=(
+                None if distance_limit is None else distance_limit * self.costs_scaling
+            ),
         )
 
     def run(self, point=None):
@@ -468,7 +490,10 @@ class WassersteinSolver:
         # print("Total cost", self.WN.total_cost())
         self.total_time = time.perf_counter() - start_time
         # print("Total time", self.total_time)
-        print("Total cost", self.WN.total_cost() / self.intensity_scaling / self.costs_scaling)
+        print(
+            "Total cost",
+            self.WN.total_cost() / self.intensity_scaling / self.costs_scaling,
+        )
         return self.WN.total_cost() / self.intensity_scaling / self.costs_scaling
 
     def result(self):
@@ -482,7 +507,9 @@ class WassersteinSolver:
         target_function = lambda x: self.run(x)
         from scipy.optimize import minimize
 
-        simplex = np.zeros((len(self.theoretical_spectra) + 1, len(self.theoretical_spectra)))
+        simplex = np.zeros(
+            (len(self.theoretical_spectra) + 1, len(self.theoretical_spectra))
+        )
         for ii in range(len(self.theoretical_spectra)):
             simplex[ii + 1, ii] = 1.0
         res = minimize(
@@ -490,23 +517,25 @@ class WassersteinSolver:
             np.full(len(self.theoretical_spectra), 0.5),
             bounds=[(0, None)] * len(self.theoretical_spectra),
             method="Nelder-Mead",
-            options={'initial_simplex':simplex}
-            #method="Powell",
-            #method="SLSQP",
-            #method="trust-constr",
-            #method="L-BFGS-B",
-            #method="COBYLA",
-            #method="TNC",
+            options={"initial_simplex": simplex},
+            # method="Powell",
+            # method="SLSQP",
+            # method="trust-constr",
+            # method="L-BFGS-B",
+            # method="COBYLA",
+            # method="TNC",
         )
-        print(f'NM cost: {res.fun}')
+        print(f"NM cost: {res.fun}")
         return res.x
 
-    #def estimate_proportions(self):
+    # def estimate_proportions(self):
     #    start_point = np.full(len(self.theoretical_spectra), 1.0)
 
 
 def wasserstein_integer_compat(X1, Y1, intensities1, X2, Y2, intensities2, trash_cost):
     S1 = Spectrum(np.array([X1, Y1]), intensities1)
     S2 = Spectrum(np.array([X2, Y2]), intensities2)
-    solver = WassersteinSolver(S1, [S2], [SimpleTrash(trash_cost)], intensity_scaling=1, costs_scaling=1)
-    return {'total_cost': solver.run()}
+    solver = WassersteinSolver(
+        S1, [S2], [SimpleTrash(trash_cost)], intensity_scaling=1, costs_scaling=1
+    )
+    return {"total_cost": solver.run()}
