@@ -130,6 +130,7 @@ class Solver:
             start_point = [1.0] * len(self.theoretical_spectra)
         start_point = self.scale_factor * np.array(start_point)
 
+
         return minimize(
             opt_fun,
             method="Nelder-Mead",
