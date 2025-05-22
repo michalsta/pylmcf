@@ -93,6 +93,21 @@ class Spectrum:
     def scaled(self, factor):
         return Spectrum(self.positions.copy(), self.intensities * factor)
 
+    @cached_property
+    def sum_intensities(self):
+        return np.sum(self.intensities)
+
+    def normalized(self, to_total_intensity=1.0):
+        """
+        Normalizes the spectrum to a total intensity of to_total_intensity
+        """
+        if self.sum_intensities == 0:
+            raise ValueError("Cannot normalize a spectrum with zero intensity")
+        return Spectrum(
+            self.positions.copy(),
+            self.intensities * (to_total_intensity / self.sum_intensities),
+        )
+
     def get_point(self, idx):
         """
         Returns the point at index idx
