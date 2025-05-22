@@ -54,7 +54,7 @@ class CSpectrumWrapper:
 
 
 class Spectrum:
-    def __init__(self, positions, intensities):
+    def __init__(self, positions, intensities, label=None):
         if not isinstance(positions, np.ndarray):
             raise ValueError("positions must be a numpy array")
         if not isinstance(intensities, np.ndarray):
@@ -70,6 +70,7 @@ class Spectrum:
         assert positions.shape[1] == len(intensities)
         self.positions = positions
         self.intensities = intensities
+        self.label = label
 
     @staticmethod
     def FromMasserstein(masserstein_spectrum):
