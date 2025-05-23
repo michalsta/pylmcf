@@ -144,7 +144,7 @@ namespace lemon {
 
     template <typename Digraph, typename NodeRefMap, typename ArcRefMap>
     void build(const Digraph& digraph, NodeRefMap& nodeRef, ArcRefMap& arcRef) {
-      typedef typename Digraph::Node GNode;
+      // typedef typename Digraph::Node GNode;
       typedef typename Digraph::Arc GArc;
 
       built = true;
