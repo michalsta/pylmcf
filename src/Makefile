@@ -4,7 +4,7 @@
 
 #INCLUDEDIRS=-I.. -I$(wildcard /opt/homebrew/Cellar/pybind11/*/include/) -I$(wildcard /opt/homebrew/Cellar/python@3.13/*/Frameworks/Python.framework/Versions/3.13/include/python3.13)
 INCLUDEDIRS=-I.. $(shell python -m pybind11 --include)
-CFLAGS=-std=c++20 -Wall
+CFLAGS=-std=c++20 -Wall -Wextra
 syntax:
 	$(CXX) $(CFLAGS) $(INCLUDEDIRS) -fsyntax-only test_compile_all.cpp
 lmcf.so:

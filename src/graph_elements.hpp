@@ -127,8 +127,8 @@ public:
     LEMON_INT get_id() const { return id; }
     const FlowNode& get_start_node() const { return start_node; }
     const FlowNode& get_end_node() const { return end_node; }
-    const size_t get_start_node_id() const { return start_node.get_id(); }
-    const size_t get_end_node_id() const { return end_node.get_id(); }
+    size_t get_start_node_id() const { return start_node.get_id(); }
+    size_t get_end_node_id() const { return end_node.get_id(); }
     const FlowEdgeType& get_type() const { return type; }
 
     std::string to_string() const {
