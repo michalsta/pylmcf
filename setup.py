@@ -12,7 +12,7 @@ asan = []
 
 import os
 
-sources = ["src/pylmcf.cpp", "lemon/base.cc"]
+sources = ["src/pylmcf.cpp"]
 
 if os.name == "nt":
     sources += ["lemon/bits/windows.cc"]
