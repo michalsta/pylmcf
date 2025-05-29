@@ -71,11 +71,16 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
 
     py::class_<FlowNode>(m, "CFlowNode")
         .def("id", &FlowNode::get_id)
-        .def("layer", &FlowNode::layer);
+        .def("layer", &FlowNode::layer)
+        .def("type_str", &FlowNode::type_str)
+        .def("__repr__", &FlowNode::to_string)
+        .def("__str__", &FlowNode::to_string);
 
     py::class_<FlowEdge>(m, "CFlowEdge")
         .def("start_node_id", &FlowEdge::get_start_node_id)
-        .def("end_node_id", &FlowEdge::get_end_node_id);
+        .def("end_node_id", &FlowEdge::get_end_node_id)
+        .def("__repr__", &FlowEdge::to_string)
+        .def("__str__", &FlowEdge::to_string);
 
 
     py::class_<DecompositableFlowGraph>(m, "CDecompositableFlowGraph")
