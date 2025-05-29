@@ -45,7 +45,6 @@ class FlowSubgraphWrapper:
         nx_graph = nx.DiGraph()
         cnodes = self.subgraph.nodes()
         cedges = self.subgraph.edges()
-        print(cnodes, cedges)
         for node in cnodes:
             nx_graph.add_node(node.id(), layer=node.layer(), type=node.type_str(), str=str(node))
         for edge in cedges:
