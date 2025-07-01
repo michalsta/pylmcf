@@ -149,6 +149,8 @@ class Solver:
         print("No theoretical nodes:", self.graph.count_theoretical_nodes())
         print("Matching density:", self.graph.matching_density())
         print("Total cost:", self.graph.total_cost())
+        if not subgraphs_too:
+            return
         for ii in range(self.graph.no_subgraphs()):
             s = self.graph.get_subgraph(ii)
             print("Subgraph", ii, ":")
