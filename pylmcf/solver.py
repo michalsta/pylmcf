@@ -66,7 +66,7 @@ class Solver:
         distance_function,
         max_distance,
         trash_cost,
-        scale_factor=1000000.0,
+        scale_factor=None,
     ):
         assert isinstance(empirical_spectrum, Spectrum)
         assert isinstance(theoretical_spectra, list)
@@ -74,7 +74,19 @@ class Solver:
         assert callable(distance_function)
         assert isinstance(max_distance, (int, float))
         assert isinstance(trash_cost, (int, float))
-        assert isinstance(scale_factor, (int, float))
+        assert scale_factor is None or isinstance(scale_factor, (int, float))
+
+        if scale_factor is None:
+            ALMOST_MAXINT = 2**30
+            empirical_sum_intensity = empirical_spectrum.sum_intensities
+            theoretical_sum_intensity = sum(
+                t.sum_intensities for t in theoretical_spectra
+            )
+            max_sum_intensity = max(
+                empirical_sum_intensity, theoretical_sum_intensity
+            )
+            scale_factor = np.sqrt(ALMOST_MAXINT / (max_sum_intensity * trash_cost))
+            assert scale_factor > 0, "Can't auto-compute a sensible scale factor. You might have some luck with setting it manually, but it probably means something about your data or trash_cost is off."
 
         self.scale_factor = scale_factor
         self.empirical_spectrum = empirical_spectrum.scaled(scale_factor)
@@ -149,6 +161,8 @@ class Solver:
         print("No theoretical nodes:", self.graph.count_theoretical_nodes())
         print("Matching density:", self.graph.matching_density())
         print("Total cost:", self.graph.total_cost())
+        if not subgraphs_too:
+            return
         for ii in range(self.graph.no_subgraphs()):
             s = self.graph.get_subgraph(ii)
             print("Subgraph", ii, ":")
