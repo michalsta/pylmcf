@@ -91,7 +91,7 @@ class Spectrum:
         return len(self.intensities)
 
     def scaled(self, factor):
-        return Spectrum(self.positions.copy(), self.intensities * factor)
+        return Spectrum(self.positions.copy(), self.intensities * factor, label=self.label)
 
     @cached_property
     def sum_intensities(self):
@@ -106,6 +106,7 @@ class Spectrum:
         return Spectrum(
             self.positions.copy(),
             self.intensities * (to_total_intensity / self.sum_intensities),
+            label=self.label
         )
 
     def get_point(self, idx):
