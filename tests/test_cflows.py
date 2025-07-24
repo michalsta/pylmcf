@@ -32,8 +32,8 @@ def test_flows():
 
     DGW = DecompositableGraphWrapper(solver.graph)
     SG = list(DGW.get_subgraphs())[0]
-    print(SG.as_nx_graph())
-    SG.show()
+    #print(SG.as_nx_graph())
+    #SG.show()
 
 
 if __name__ == "__main__":
