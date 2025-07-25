@@ -1,6 +1,6 @@
 import pylmcf_cpp
-from .wasserstein import *
 from .spectrum import *
+from .graph import *
 
 import os
 import importlib.metadata

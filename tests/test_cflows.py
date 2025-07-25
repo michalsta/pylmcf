@@ -3,7 +3,7 @@ import numpy as np
 
 from pylmcf.spectrum import Spectrum
 from pylmcf.solver import Solver
-from pylmcf.graph_wrapper import DecompositableGraphWrapper, FlowSubgraphWrapper
+from pylmcf.graph_wrapper import DecompositableGraphWrapper
 
 
 def test_flows():
@@ -30,8 +30,8 @@ def test_flows():
     for flow in solver.flows():
         print(flow)
 
-    DGW = DecompositableGraphWrapper(solver.graph)
-    SG = list(DGW.get_subgraphs())[0]
+    #DGW = DecompositableGraphWrapper(solver.graph)
+    #SG = list(DGW.get_subgraphs())[0]
     #print(SG.as_nx_graph())
     #SG.show()
 
