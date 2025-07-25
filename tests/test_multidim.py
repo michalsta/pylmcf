@@ -1,16 +1,17 @@
-from pylmcf.wasserstein import WassersteinSolver
 from pylmcf.spectrum import Spectrum, Spectrum_1D
-from pylmcf.trashes import SimpleTrash, TrashFactorySimple
+from pylmcf.trashes import TrashFactorySimple
 from pylmcf.graph import DecompositableFlowGraph
-from pylmcf.solver import DeconvolutionSolver
+from pylmcf.solver import Solver, DeconvolutionSolver
 import numpy as np
 
 
 def test_1d():
     E = Spectrum_1D([1], [1])
     T = Spectrum_1D([2], [1])
-    solver = WassersteinSolver(E, [T], [SimpleTrash(10)])
-    assert solver.run() == 1
+    solver = Solver(E, [T], lambda x, y: np.linalg.norm(x - y, axis=0), 10, 10, 100)
+    #solver = WassersteinSolver(E, [T], [SimpleTrash(10)])
+    solver.set_point([1])
+    assert solver.total_cost() == 1
 
 
 def test_2d():
@@ -20,9 +21,10 @@ def test_2d():
     s2_pos = np.array([[1, 1, 0], [1, 0, 1]])
     s2_int = np.array([1, 1, 1])
     s2 = Spectrum(s2_pos, s2_int)
-    solver = WassersteinSolver(s1, [s2], [SimpleTrash(1000000)], costs_scaling=1000)
+    solver = Solver(s1, [s2], lambda x, y: np.linalg.norm(x - y, axis=0), 1000000, 1000000, 1000)
+    solver.set_point([1])
     # print(solver.run())
-    assert solver.run() == 1.414
+    assert solver.total_cost() == 1.414
 
     # new algo
     DG = DecompositableFlowGraph(
