@@ -3,12 +3,7 @@ from .spectrum import *
 from .graph import *
 
 import os
-import importlib.metadata
 
-__version__ = importlib.metadata.version("pylmcf")
+from .__version__ import __version__, include
 
-def include() -> str:
-    """
-    Returns the include path for the C++ library
-    """
-    return os.path.join(os.path.abspath(os.path.dirname(__file__)), "include")
+

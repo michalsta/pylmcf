@@ -1,6 +1,6 @@
 import argparse
 
-from pylmcf import __version__
+from .__version__ import __version__, include
 
 
 def main():
@@ -20,7 +20,6 @@ def main():
     args = parser.parse_args()
 
     if args.include:
-        from pylmcf import include
         print(include())
     elif args.version:
         print(f"Version: {__version__}")
