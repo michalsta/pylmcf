@@ -1,5 +1,4 @@
 import pylmcf
-from pylmcf.trashes import SimpleTrash
 import numpy as np
 from pylmcf.solver import DeconvolutionSolver
 

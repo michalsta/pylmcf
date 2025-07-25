@@ -1,6 +1,4 @@
-from pylmcf.graph import FlowGraph
 from pylmcf.spectrum import Spectrum_1D
-from pylmcf.trashes import SimpleTrash
 from pylmcf.solver import Solver
 import numpy as np
 import math
