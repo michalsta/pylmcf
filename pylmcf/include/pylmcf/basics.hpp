@@ -2,6 +2,11 @@
 #define LEMON_BASICS_HPP
 
 #include <cstdint>
+#include <stdexcept>
+#include <vector>
+#include <algorithm>
+#include <span>
+
 
 #define LEMON_INT int64_t
 #define LEMON_INDEX int
