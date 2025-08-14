@@ -3,7 +3,6 @@ import numpy as np
 
 from pylmcf.spectrum import Spectrum
 from pylmcf.solver import Solver
-from pylmcf.graph_wrapper import DecompositableGraphWrapper
 
 
 def test_flows():
