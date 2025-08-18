@@ -21,7 +21,7 @@ class FlowSubgraph {
     lemon::StaticDigraph::NodeMap<LEMON_INT> node_supply_map;
     lemon::StaticDigraph::ArcMap<LEMON_INT> capacities_map;
     lemon::StaticDigraph::ArcMap<LEMON_INT> costs_map;
-    std::optional<lemon::NetworkSimplex<lemon::StaticDigraph>> solver;
+    std::optional<lemon::NetworkSimplex<lemon::StaticDigraph, LEMON_INT, LEMON_INT>> solver;
     size_t simple_trash_idx;
     LEMON_INT empirical_intensity;
     LEMON_INT theoretical_intensity;
@@ -190,6 +190,7 @@ public:
     }
 
     LEMON_INT total_cost() const {
+        if(!solver) throw std::runtime_error("You must call build() and set_point() before calling total_cost().");
         return solver->totalCost();
     };
 

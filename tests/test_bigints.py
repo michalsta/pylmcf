@@ -22,9 +22,9 @@ def test_scale():
         )
         DG.add_simple_trash(10)
         DG.build()
-        point = [1.0] * len([theoretical_spectrum])
-        print(DG.total_cost())
-        #assert DG.total_cost() == scale_factor
+        DG.set_point([1.0])
+        #print(DG.total_cost())
+        assert DG.total_cost() == scale_factor
 
 if __name__ == "__main__":
     test_scale()
