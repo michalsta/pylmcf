@@ -77,7 +77,7 @@ class Solver:
         assert scale_factor is None or isinstance(scale_factor, (int, float))
 
         if scale_factor is None:
-            ALMOST_MAXINT = 2**30
+            ALMOST_MAXINT = 2**60
             empirical_sum_intensity = empirical_spectrum.sum_intensities
             theoretical_sum_intensity = sum(
                 t.sum_intensities for t in theoretical_spectra
@@ -160,6 +160,7 @@ class Solver:
         print("No empirical nodes:", self.graph.count_empirical_nodes())
         print("No theoretical nodes:", self.graph.count_theoretical_nodes())
         print("Matching density:", self.graph.matching_density())
+        print("Scale factor:", self.scale_factor, f" log10: {np.log10(self.scale_factor)}")
         print("Total cost:", self.graph.total_cost())
         if not subgraphs_too:
             return

@@ -6,7 +6,6 @@ import numpy as np
 def test_scale():
     for exponent in range(0, 18):
         scale_factor = 10 ** exponent
-        almost_max_int = 2**62
         empirical_spectrum = Spectrum_1D(np.array([1]), np.array([1])).scaled(scale_factor)
         theoretical_spectrum = Spectrum_1D(np.array([2]), np.array([1])).scaled(scale_factor)
         print(empirical_spectrum)

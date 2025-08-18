@@ -23,7 +23,7 @@ def test_flows():
 
     solver.set_point([1])
 
-    # solver.print()
+    solver.print_diagnostics()
 
     print("Flows:")
     for flow in solver.flows():
