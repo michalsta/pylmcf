@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pylmcf"
-version = "0.0.2"
+version = "0.0.4"
 description = "Python bindings for LEMON Min Cost Flow algorithm"
 authors = [
     { name="Michał Startek", email="michal.startek@mimuw.edu.pl" }
