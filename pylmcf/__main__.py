@@ -8,12 +8,12 @@ def main():
         description="Python wrapper for the LMCF C++ library",
     )
     parser.add_argument(
-        "--version",
+        "--version", "-v",
         action="store_true",
         help="Print the version of the library",
     )
     parser.add_argument(
-        "--include",
+        "--include", "-i",
         action="store_true",
         help="Print the include path for the C++ library",
     )
@@ -22,7 +22,7 @@ def main():
     if args.include:
         print(include())
     elif args.version:
-        print(f"Version: {__version__}")
+        print(f"{__version__}")
     else:
         parser.print_help()
 
