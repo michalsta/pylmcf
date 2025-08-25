@@ -1,4 +1,4 @@
-from pylmcf.spectrum import Distribution, Spectrum_1D
+from pylmcf.spectrum import Distribution, Distribution_1D
 from pylmcf.trashes import TrashFactorySimple
 from pylmcf.graph import DecompositableFlowGraph
 from pylmcf.solver import Solver, DeconvolutionSolver
@@ -6,8 +6,8 @@ import numpy as np
 
 
 def test_1d():
-    E = Spectrum_1D([1], [1])
-    T = Spectrum_1D([2], [1])
+    E = Distribution_1D([1], [1])
+    T = Distribution_1D([2], [1])
     solver = Solver(E, [T], lambda x, y: np.linalg.norm(x - y, axis=0), 10, 10, 100)
     #solver = WassersteinSolver(E, [T], [SimpleTrash(10)])
     solver.set_point([1])

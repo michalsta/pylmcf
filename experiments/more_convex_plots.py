@@ -1,4 +1,4 @@
-from pylmcf import Spectrum_1D, WassersteinSolver, Distribution
+from pylmcf import Distribution_1D, WassersteinSolver, Distribution
 import pylmcf
 import numpy as np
 from tqdm import tqdm

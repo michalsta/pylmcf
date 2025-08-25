@@ -75,7 +75,7 @@ class Distribution:
     @staticmethod
     def FromMasserstein(masserstein_spectrum):
         locs, intensities = zip(*masserstein_spectrum.confs)
-        return Spectrum_1D(np.array(locs), np.array(intensities))
+        return Distribution_1D(np.array(locs), np.array(intensities))
 
     @staticmethod
     def Concatenate(spectra):
@@ -133,7 +133,7 @@ class Distribution:
         return f"Spectrum(positions={self.positions}, intensities={self.intensities})"
 
 
-class Spectrum_1D(Distribution):
+class Distribution_1D(Distribution):
     def __init__(self, positions, intensities):
         if not isinstance(positions, np.ndarray):
             positions = np.array(positions)
