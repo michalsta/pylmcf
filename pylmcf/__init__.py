@@ -1,5 +1,5 @@
 import pylmcf_cpp
-from .spectrum import *
+from .distribution import *
 from .graph import *
 
 import os

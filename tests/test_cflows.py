@@ -1,7 +1,7 @@
 import numpy as np
 
 
-from pylmcf.spectrum import Distribution
+from pylmcf.distribution import Distribution
 from pylmcf.solver import Solver
 
 

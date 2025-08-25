@@ -1,4 +1,4 @@
-from pylmcf.spectrum import Distribution_1D
+from pylmcf.distribution import Distribution_1D
 from pylmcf.solver import Solver
 import numpy as np
 import math

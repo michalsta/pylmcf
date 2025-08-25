@@ -1,5 +1,5 @@
 from pylmcf_cpp import CDecompositableFlowGraph
-from pylmcf.spectrum import Distribution_1D
+from pylmcf.distribution import Distribution_1D
 import numpy as np
 
 

@@ -1,4 +1,4 @@
-from pylmcf.spectrum import Distribution, Distribution_1D
+from pylmcf.distribution import Distribution, Distribution_1D
 from pylmcf.trashes import TrashFactorySimple
 from pylmcf.graph import DecompositableFlowGraph
 from pylmcf.solver import Solver, DeconvolutionSolver

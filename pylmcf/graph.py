@@ -4,7 +4,7 @@ from functools import cached_property
 from enum import Enum
 from pylmcf.graph_wrapper import GraphWrapper
 from pylmcf.graph_elements import *
-from pylmcf.spectrum import Distribution
+from pylmcf.distribution import Distribution
 from pylmcf.trashes import TrashFactorySimple
 from dataclasses import dataclass
 from typing import Union

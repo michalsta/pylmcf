@@ -5,7 +5,7 @@ from pylmcf.trashes import (
     TrashFactoryEmpirical,
     TrashFactoryTheory,
 )
-from pylmcf.spectrum import Distribution
+from pylmcf.distribution import Distribution
 import pylmcf_cpp
 from tqdm import tqdm
 from scipy.optimize import minimize
