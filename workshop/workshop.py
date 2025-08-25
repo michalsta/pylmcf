@@ -1,5 +1,5 @@
 from pylmcf.graph import DecompositableFlowGraph
-from pylmcf.spectrum import Spectrum
+from pylmcf.spectrum import Distribution
 from pylmcf.solver import DeconvolutionSolver
 
 
@@ -27,7 +27,7 @@ def to_spectrum(df):
     A = np.array([df['1H'], df['13C'] / 10.0])
     W = np.array(df["weight"])
     W = np.maximum(W, 0)
-    return Spectrum(A, W)
+    return Distribution(A, W)
 
 lib = [(name, to_spectrum(group)) for name, group in lib.groupby("name")]
 target = to_spectrum(target)

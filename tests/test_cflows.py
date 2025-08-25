@@ -1,13 +1,13 @@
 import numpy as np
 
 
-from pylmcf.spectrum import Spectrum
+from pylmcf.spectrum import Distribution
 from pylmcf.solver import Solver
 
 
 def test_flows():
-    S1 = Spectrum(np.array([[1, 2, 30]]), np.array([1, 4, 3]))
-    S2 = Spectrum(np.array([[1, 4, 30, 31]]), np.array([5, 1, 1, 1]))
+    S1 = Distribution(np.array([[1, 2, 30]]), np.array([1, 4, 3]))
+    S2 = Distribution(np.array([[1, 4, 30, 31]]), np.array([5, 1, 1, 1]))
 
     dist_fun = lambda x, y: np.linalg.norm(x - y, axis=0)
     trash_cost = 10

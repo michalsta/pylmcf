@@ -1,6 +1,6 @@
 from pylmcf import (
     wasserstein_integer,
-    Spectrum,
+    Distribution,
     WassersteinSolver,
     SimpleTrash,
     wasserstein_integer_compat,
@@ -33,9 +33,9 @@ def plot_convex():
     params = np.arange(0.0, 1.0, 0.01)
     outs = []
     new_outs = []
-    Sp1 = Spectrum(np.array([X1, Y1]), orig_intensities1)
-    Sp2 = Spectrum(np.array([X2, Y2]), orig_intensities2)
-    Sp3 = Spectrum(np.array([X3, Y3]), orig_intensities3)
+    Sp1 = Distribution(np.array([X1, Y1]), orig_intensities1)
+    Sp2 = Distribution(np.array([X2, Y2]), orig_intensities2)
+    Sp3 = Distribution(np.array([X3, Y3]), orig_intensities3)
     solver = WassersteinSolver(
         Sp1,
         [Sp2, Sp3],
@@ -96,10 +96,10 @@ def plot_3d_convex():
     intensities4 = np.random.randint(1, RANGE, SIZE) * 3
     trash_cost = np.uint64(10)
 
-    Sp1 = Spectrum(np.array([X1, Y1]), intensities1)
-    Sp2 = Spectrum(np.array([X2, Y2]), intensities2)
-    Sp3 = Spectrum(np.array([X3, Y3]), intensities3)
-    Sp4 = Spectrum(np.array([X4, Y4]), intensities4)
+    Sp1 = Distribution(np.array([X1, Y1]), intensities1)
+    Sp2 = Distribution(np.array([X2, Y2]), intensities2)
+    Sp3 = Distribution(np.array([X3, Y3]), intensities3)
+    Sp4 = Distribution(np.array([X4, Y4]), intensities4)
     solver = WassersteinSolver(
         Sp1,
         [Sp2, Sp3, Sp4],
@@ -181,10 +181,10 @@ def plot_3d_convex():
     intensities4 = np.random.randint(1, RANGE, SIZE) * 3
     trash_cost = np.uint64(10)
 
-    Sp1 = Spectrum(np.array([X1, Y1]), intensities1)
-    Sp2 = Spectrum(np.array([X2, Y2]), intensities2)
-    Sp3 = Spectrum(np.array([X3, Y3]), intensities3)
-    Sp4 = Spectrum(np.array([X4, Y4]), intensities4)
+    Sp1 = Distribution(np.array([X1, Y1]), intensities1)
+    Sp2 = Distribution(np.array([X2, Y2]), intensities2)
+    Sp3 = Distribution(np.array([X3, Y3]), intensities3)
+    Sp4 = Distribution(np.array([X4, Y4]), intensities4)
     solver = WassersteinSolver(
         Sp4,
         [Sp1, Sp2, Sp3],
@@ -263,9 +263,9 @@ def plot_nonscaled():
     intensities4 = np.random.randint(1, RANGE, SIZE) * 3
     trash_cost = np.uint64(10)
 
-    Sp1 = Spectrum(np.array([X1, Y1]), intensities1)
-    Sp2 = Spectrum(np.array([X2, Y2]), intensities2)
-    Sp4 = Spectrum(np.array([X4, Y4]), intensities4)
+    Sp1 = Distribution(np.array([X1, Y1]), intensities1)
+    Sp2 = Distribution(np.array([X2, Y2]), intensities2)
+    Sp4 = Distribution(np.array([X4, Y4]), intensities4)
     solver = WassersteinSolver(
         Sp4,
         [Sp1, Sp2],

@@ -1,5 +1,5 @@
 from pylmcf import (
-    Spectrum,
+    Distribution,
     DecompositableFlowGraph,
     TrashFactorySimple,
 )
@@ -31,25 +31,25 @@ def compare(E, T, trash_cost, fractions=None):
     return val4
 
 def test_compare_1():
-    S1 = Spectrum(np.array([[0], [0]]), np.array([1]))
-    S2 = Spectrum(np.array([[1], [0]]), np.array([1]))
+    S1 = Distribution(np.array([[0], [0]]), np.array([1]))
+    S2 = Distribution(np.array([[1], [0]]), np.array([1]))
 
     print(compare(S1, [S2], 10))
 
 
 def test_compare_2():
-    S1 = Spectrum(np.array([[0], [0]]), np.array([1]))
-    S2 = Spectrum(np.array([[1], [0]]), np.array([1]))
-    S3 = Spectrum(np.array([[2], [0]]), np.array([1]))
+    S1 = Distribution(np.array([[0], [0]]), np.array([1]))
+    S2 = Distribution(np.array([[1], [0]]), np.array([1]))
+    S3 = Distribution(np.array([[2], [0]]), np.array([1]))
 
     print(compare(S1, [S2, S3], 10))
 
 
 def test_compare_3():
-    S1 = Spectrum(np.array([[0], [0]]), np.array([1]))
-    S2 = Spectrum(np.array([[1], [0]]), np.array([1]))
-    S3 = Spectrum(np.array([[2], [0]]), np.array([1]))
-    S4 = Spectrum(np.array([[3], [0]]), np.array([1]))
+    S1 = Distribution(np.array([[0], [0]]), np.array([1]))
+    S2 = Distribution(np.array([[1], [0]]), np.array([1]))
+    S3 = Distribution(np.array([[2], [0]]), np.array([1]))
+    S4 = Distribution(np.array([[3], [0]]), np.array([1]))
 
     print(compare(S1, [S2, S3, S4], 10))
 

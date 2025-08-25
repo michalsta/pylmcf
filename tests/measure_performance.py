@@ -1,15 +1,15 @@
 import numpy as np
-from pylmcf import Spectrum
+from pylmcf import Distribution
 from pylmcf import WassersteinSolver
 import cProfile
 
 np.random.seed(23456)
-S1 = Spectrum(np.random.rand(2, 1000) * 100, np.random.rand(1000))
-S2 = Spectrum(np.random.rand(2, 1000) * 100, np.random.rand(1000))
-S3 = Spectrum(np.random.rand(2, 1000) * 100, np.random.rand(1000))
-S4 = Spectrum(np.random.rand(2, 1000) * 100, np.random.rand(1000))
-S5 = Spectrum(np.random.rand(2, 1000) * 100, np.random.rand(1000))
-S6 = Spectrum(np.random.rand(2, 1000) * 100, np.random.rand(1000))
+S1 = Distribution(np.random.rand(2, 1000) * 100, np.random.rand(1000))
+S2 = Distribution(np.random.rand(2, 1000) * 100, np.random.rand(1000))
+S3 = Distribution(np.random.rand(2, 1000) * 100, np.random.rand(1000))
+S4 = Distribution(np.random.rand(2, 1000) * 100, np.random.rand(1000))
+S5 = Distribution(np.random.rand(2, 1000) * 100, np.random.rand(1000))
+S6 = Distribution(np.random.rand(2, 1000) * 100, np.random.rand(1000))
 
 
 solver = WassersteinSolver(

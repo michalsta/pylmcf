@@ -1,4 +1,4 @@
-from pylmcf import Spectrum_1D, WassersteinSolver, Spectrum
+from pylmcf import Spectrum_1D, WassersteinSolver, Distribution
 import pylmcf
 import numpy as np
 from tqdm import tqdm
@@ -41,8 +41,8 @@ def plot(E, T1, T2):
 
 # plot(convolved, spectra[0], spectra[1])
 
-S1 = Spectrum(np.random.rand(2, 1000) * 100, np.random.rand(1000))
-S2 = Spectrum(np.random.rand(2, 1000) * 100, np.random.rand(1000))
-S3 = Spectrum(np.random.rand(2, 1000) * 100, np.random.rand(1000))
+S1 = Distribution(np.random.rand(2, 1000) * 100, np.random.rand(1000))
+S2 = Distribution(np.random.rand(2, 1000) * 100, np.random.rand(1000))
+S3 = Distribution(np.random.rand(2, 1000) * 100, np.random.rand(1000))
 
 plot(S1, S2, S3)

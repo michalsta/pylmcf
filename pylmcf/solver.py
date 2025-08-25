@@ -5,7 +5,7 @@ from pylmcf.trashes import (
     TrashFactoryEmpirical,
     TrashFactoryTheory,
 )
-from pylmcf.spectrum import Spectrum
+from pylmcf.spectrum import Distribution
 import pylmcf_cpp
 from tqdm import tqdm
 from scipy.optimize import minimize
@@ -68,9 +68,9 @@ class Solver:
         trash_cost,
         scale_factor=None,
     ):
-        assert isinstance(empirical_spectrum, Spectrum)
+        assert isinstance(empirical_spectrum, Distribution)
         assert isinstance(theoretical_spectra, list)
-        assert all(isinstance(t, Spectrum) for t in theoretical_spectra)
+        assert all(isinstance(t, Distribution) for t in theoretical_spectra)
         assert callable(distance_function)
         assert isinstance(max_distance, (int, float))
         assert isinstance(trash_cost, (int, float))

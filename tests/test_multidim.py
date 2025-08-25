@@ -1,4 +1,4 @@
-from pylmcf.spectrum import Spectrum, Spectrum_1D
+from pylmcf.spectrum import Distribution, Spectrum_1D
 from pylmcf.trashes import TrashFactorySimple
 from pylmcf.graph import DecompositableFlowGraph
 from pylmcf.solver import Solver, DeconvolutionSolver
@@ -17,10 +17,10 @@ def test_1d():
 def test_2d():
     s1_pos = np.array([[0, 1, 0], [0, 0, 1]])
     s1_int = np.array([1, 1, 1])
-    s1 = Spectrum(s1_pos, s1_int)
+    s1 = Distribution(s1_pos, s1_int)
     s2_pos = np.array([[1, 1, 0], [1, 0, 1]])
     s2_int = np.array([1, 1, 1])
-    s2 = Spectrum(s2_pos, s2_int)
+    s2 = Distribution(s2_pos, s2_int)
     solver = Solver(s1, [s2], lambda x, y: np.linalg.norm(x - y, axis=0), 1000000, 1000000, 1000)
     solver.set_point([1])
     # print(solver.run())

@@ -3,7 +3,7 @@ from pylmcf import pylmcf_cpp
 from functools import cached_property
 
 
-class CSpectrumWrapper:
+class CDistributionWrapper:
     def __init__(self, positions, intensities):
         if not isinstance(positions, np.ndarray):
             raise ValueError("positions must be a numpy array")
@@ -53,7 +53,7 @@ class CSpectrumWrapper:
         return f"CSpectrum(positions={self.positions}, intensities={self.intensities})"
 
 
-class Spectrum:
+class Distribution:
     def __init__(self, positions, intensities, label=None):
         if not isinstance(positions, np.ndarray):
             raise ValueError("positions must be a numpy array")
@@ -79,19 +79,19 @@ class Spectrum:
 
     @staticmethod
     def Concatenate(spectra):
-        assert all([isinstance(s, Spectrum) for s in spectra])
+        assert all([isinstance(s, Distribution) for s in spectra])
         assert all(
             [s.positions.shape[0] == spectra[0].positions.shape[0] for s in spectra]
         )
         positions = np.concatenate([s.positions for s in spectra], axis=1)
         intensities = np.concatenate([s.intensities for s in spectra])
-        return Spectrum(positions, intensities)
+        return Distribution(positions, intensities)
 
     def __len__(self):
         return len(self.intensities)
 
     def scaled(self, factor):
-        return Spectrum(self.positions.copy(), self.intensities * factor, label=self.label)
+        return Distribution(self.positions.copy(), self.intensities * factor, label=self.label)
 
     @cached_property
     def sum_intensities(self):
@@ -103,7 +103,7 @@ class Spectrum:
         """
         if self.sum_intensities == 0:
             raise ValueError("Cannot normalize a spectrum with zero intensity")
-        return Spectrum(
+        return Distribution(
             self.positions.copy(),
             self.intensities * (to_total_intensity / self.sum_intensities),
             label=self.label
@@ -127,13 +127,13 @@ class Spectrum:
 
     @cached_property
     def cspectrum_wrapper(self):
-        return CSpectrumWrapper(self.positions, self.intensities)
+        return CDistributionWrapper(self.positions, self.intensities)
 
     def __str__(self):
         return f"Spectrum(positions={self.positions}, intensities={self.intensities})"
 
 
-class Spectrum_1D(Spectrum):
+class Spectrum_1D(Distribution):
     def __init__(self, positions, intensities):
         if not isinstance(positions, np.ndarray):
             positions = np.array(positions)

@@ -4,7 +4,7 @@ from functools import cached_property
 from enum import Enum
 from pylmcf.graph_wrapper import GraphWrapper
 from pylmcf.graph_elements import *
-from pylmcf.spectrum import Spectrum
+from pylmcf.spectrum import Distribution
 from pylmcf.trashes import TrashFactorySimple
 from dataclasses import dataclass
 from typing import Union
@@ -32,10 +32,10 @@ def compare_subgraphs(subgraph1, subgraph2):
 
 class DecompositableFlowGraph:
     def __init__(self, empirical_spectrum, theoretical_spectra, dist_fun, max_dist):
-        assert isinstance(empirical_spectrum, Spectrum)
+        assert isinstance(empirical_spectrum, Distribution)
         if not isinstance(theoretical_spectra, list):
             theoretical_spectra = list(theoretical_spectra)
-        assert all(isinstance(ts, Spectrum) for ts in theoretical_spectra)
+        assert all(isinstance(ts, Distribution) for ts in theoretical_spectra)
         assert isinstance(dist_fun, types.FunctionType)
         assert isinstance(max_dist, int)
 
