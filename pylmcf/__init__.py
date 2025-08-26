@@ -1,5 +1,4 @@
 import pylmcf_cpp
-from .graph import *
 
 import os
 
