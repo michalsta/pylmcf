@@ -1,6 +1,5 @@
 #ifndef PYLMCF_SPECTRUM_HPP
 #define PYLMCF_SPECTRUM_HPP
-
 #include <array>
 
 #include "basics.hpp"
