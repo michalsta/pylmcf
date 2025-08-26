@@ -10,7 +10,6 @@
 
 #include "lmcf.cpp" // Yes, ugly. But it works.
 #include "graph.cpp"
-#include "spectrum.hpp"
 
 
 template <typename T>
@@ -58,14 +57,6 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
         .def("result", &Graph<int64_t>::extract_result_py)
         .def("__str__", &Graph<int64_t>::to_string);
 
-    py::class_<Spectrum>(m, "CSpectrum")
-        .def(py::init<py::array, py::array_t<LEMON_INT>>())
-        .def("size", &Spectrum::size)
-        .def("intensities", &Spectrum::py_get_intensities)
-        .def("positions", &Spectrum::py_get_positions)
-        .def("get_point", &Spectrum::get_point)
-        .def("closer_than", &Spectrum::closer_than);
-
     py::class_<lemon::StaticDigraph>(m, "LemonStaticGraph")
         .def("no_nodes", &lemon::StaticDigraph::nodeNum)
         .def("no_edges", &lemon::StaticDigraph::arcNum);
@@ -80,7 +71,5 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
         .def("total_cost", &lemon::NetworkSimplex<lemon::StaticDigraph, int64_t, int64_t>::totalCost)
         .def("flow", &lemon::NetworkSimplex<lemon::StaticDigraph, int64_t, int64_t>::flow);
     */
-    m.def("check_spectrum", [](const Spectrum& spectrum) {});
-    m.def("check_vspectrum", [](const std::vector<Spectrum*>& spectra) {});
 
 }
