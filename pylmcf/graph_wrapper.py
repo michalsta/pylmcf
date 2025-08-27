@@ -4,66 +4,6 @@ from functools import cached_property
 import numpy as np
 
 
-class DecompositableGraphWrapper:
-    def __init__(self, cgraph):
-        self.cgraph = cgraph
-
-    def no_nodes(self):
-        return self.cgraph.no_nodes()
-
-    def no_edges(self):
-        return self.cgraph.no_edges()
-
-    def get_subgraphs(self):
-        for idx in range(self.cgraph.no_subgraphs()):
-            yield FlowSubgraphWrapper(self.cgraph.get_subgraph(idx))
-
-
-class FlowSubgraphWrapper:
-    def __init__(self, subgraph):
-        self.subgraph = subgraph
-
-    def no_empirical_nodes(self):
-        return self.subgraph.count_empirical_nodes()
-
-    def no_theoretical_nodes(self):
-        return self.subgraph.count_theoretical_nodes()
-
-    def matching_density(self):
-        return self.subgraph.matching_density()
-
-    def total_cost(self):
-        return self.subgraph.total_cost()
-
-    def flows_for_spectrum(self, idx):
-        empirical_peak_idx, theoretical_peak_idx, flow = (
-            self.subgraph.flows_for_spectrum(idx)
-        )
-        return empirical_peak_idx, theoretical_peak_idx, flow
-
-    def as_nx_graph(self):
-        nx_graph = nx.DiGraph()
-        cnodes = self.subgraph.nodes()
-        cedges = self.subgraph.edges()
-        for node in cnodes:
-            nx_graph.add_node(node.id(), layer=node.layer(), type=node.type_str(), str=str(node))
-        for edge in cedges:
-            nx_graph.add_edge(
-                edge.start_node_id(), edge.end_node_id(), str=str(edge),
-            )
-        return nx_graph
-
-    def show(self):
-        from matplotlib import pyplot as plt
-        nx_graph = self.as_nx_graph()
-        print()
-        print()
-        print(nx_graph.nodes(data=True))
-        pos = nx.multipartite_layout(nx_graph, subset_key="layer")
-        edge_labels = nx.get_edge_attributes(nx_graph, "label")
-        nx.draw(nx_graph, with_labels=True, pos=pos)
-        nx.draw_networkx_edge_labels(nx_graph, pos=pos, edge_labels=edge_labels)
-        plt.show()
 
 class GraphWrapper:
     def __init__(self, no_nodes, edge_starts, edge_ends, edge_costs):
