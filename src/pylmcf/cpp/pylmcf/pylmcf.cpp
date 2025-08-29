@@ -1,10 +1,12 @@
-#include <pybind11/pybind11.h>
-#include <pybind11/numpy.h>
-#include <pybind11/stl.h>
 #include <span>
 #include <iostream>
 #include <fstream>
 #include <type_traits>
+
+#include <nanobind/nanobind.h>
+#include <nanobind/ndarray.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
 
 #include "py_support.h"
 
@@ -12,28 +14,31 @@
 #include "graph.cpp"
 
 
-template <typename T>
-py::array_t<T> py_lmcf(
-    py::array_t<T> node_supply,
-    py::array_t<T> edges_starts,
-    py::array_t<T> edges_ends,
-    py::array_t<T> capacities,
-    py::array_t<T> costs
-    ) {
-    auto node_supply_span = numpy_to_span(node_supply);
-    auto edges_starts_span = numpy_to_span(edges_starts);
-    auto edges_ends_span = numpy_to_span(edges_ends);
-    auto capacities_span = numpy_to_span(capacities);
-    auto costs_span = numpy_to_span(costs);
+namespace nb = nanobind;
 
-    py::array_t<T> result(edges_starts_span.size());
-    lmcf(node_supply_span, edges_starts_span, edges_ends_span, capacities_span, costs_span, numpy_to_span(result));
+
+template <typename T>
+nb::ndarray<T, nb::numpy, nb::shape<-1>> py_lmcf(
+    nb::ndarray<T, nb::shape<-1>> node_supply,
+    nb::ndarray<T, nb::shape<-1>> edges_starts,
+    nb::ndarray<T, nb::shape<-1>> edges_ends,
+    nb::ndarray<T, nb::shape<-1>> capacities,
+    nb::ndarray<T, nb::shape<-1>> costs
+    ) {
+    auto node_supply_span = numpy_to_span<T>(node_supply);
+    auto edges_starts_span = numpy_to_span<T>(edges_starts);
+    auto edges_ends_span = numpy_to_span<T>(edges_ends);
+    auto capacities_span = numpy_to_span<T>(capacities);
+    auto costs_span = numpy_to_span<T>(costs);
+
+    nb::ndarray<T, nb::numpy, nb::shape<-1>> result = create_empty_numpy_array<T>(edges_starts_span.size());
+    std::span<T> result_span(static_cast<T*>(result.data()), result.shape(0));
+    lmcf(node_supply_span, edges_starts_span, edges_ends_span, capacities_span, costs_span, result_span);
 
     return result;
 }
 
-
-PYBIND11_MODULE(pylmcf_cpp, m) {
+NB_MODULE(pylmcf_cpp, m) {
     m.doc() = "Python binding for the lmcf algorithm implemented in C++";
 /*    m.def("lmcf", &py_lmcf<int8_t>, "Compute the lmcf for a given graph");
     m.def("lmcf", &py_lmcf<int16_t>, "Compute the lmcf for a given graph");
@@ -46,8 +51,8 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
  /*   m.def("lmcf", &py_lmcf<float>, "Compute the lmcf for a given graph");
     m.def("lmcf", &py_lmcf<double>, "Compute the lmcf for a given graph");
 */
-    py::class_<Graph<int64_t>>(m, "LemonGraph")
-        .def(py::init<size_t, const py::array_t<int64_t> &, const py::array_t<int64_t> &, const py::array_t<uint64_t> &>())
+    nb::class_<Graph<int64_t>>(m, "LemonGraph")
+        .def(nb::init<size_t, const nb::ndarray<int64_t, nb::shape<-1>> &, const nb::ndarray<int64_t, nb::shape<-1>> &, const nb::ndarray<int64_t, nb::shape<-1>> &>())
         .def("no_nodes", &Graph<int64_t>::no_nodes)
         .def("no_edges", &Graph<int64_t>::no_edges)
         .def("set_node_supply", &Graph<int64_t>::set_node_supply_py)
@@ -57,7 +62,7 @@ PYBIND11_MODULE(pylmcf_cpp, m) {
         .def("result", &Graph<int64_t>::extract_result_py)
         .def("__str__", &Graph<int64_t>::to_string);
 
-    py::class_<lemon::StaticDigraph>(m, "LemonStaticGraph")
+    nb::class_<lemon::StaticDigraph>(m, "LemonStaticGraph")
         .def("no_nodes", &lemon::StaticDigraph::nodeNum)
         .def("no_edges", &lemon::StaticDigraph::arcNum);
 

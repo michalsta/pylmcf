@@ -1,4 +1,4 @@
-from pylmcf_cpp import LemonGraph
+from pylmcf.pylmcf_cpp import LemonGraph
 import numpy as np
 
 

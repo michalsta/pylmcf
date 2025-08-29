@@ -1,4 +1,4 @@
-import pylmcf_cpp
+import pylmcf.pylmcf_cpp
 
 import os
 

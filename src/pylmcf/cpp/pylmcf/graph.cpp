@@ -164,22 +164,21 @@ public:
         return out;
     }
 
-    #ifdef PYBIND11_VERSION_MAJOR
-    Graph(size_t no_nodes, const py::array_t<int64_t> &edge_starts,
-        const py::array_t<int64_t> &edge_ends, const py::array_t<T> &costs):
-        Graph(no_nodes, numpy_to_span(edge_starts), numpy_to_span(edge_ends), numpy_to_span(costs)) {};
+    Graph(size_t no_nodes, const nb::ndarray<int64_t, nb::shape<-1>> &edge_starts,
+        const nb::ndarray<int64_t, nb::shape<-1>> &edge_ends, const nb::ndarray<T, nb::shape<-1>> &costs):
+        Graph(no_nodes, numpy_to_span(edge_starts), numpy_to_span<int64_t>(edge_ends), numpy_to_span(costs)) {};
 
-    void set_node_supply_py(const py::array_t<T> &node_supply) {
+    void set_node_supply_py(const nb::ndarray<T, nb::shape<-1>> &node_supply) {
         set_node_supply(numpy_to_span(node_supply));
     }
 
-    void set_edge_capacities_py(const py::array_t<T> &capacities) {
+    void set_edge_capacities_py(const nb::ndarray<T, nb::shape<-1>> &capacities) {
         set_edge_capacities(numpy_to_span(capacities));
     }
 
-    py::array_t<T> extract_result_py() const {
-        return mallocd_span_to_owning_numpy(extract_result());
+    nb::ndarray<T, nb::numpy, nb::shape<-1>> extract_result_py() const {
+        return steal_mallocd_span_to_np_array(extract_result());
     }
-    #endif
+
 
 };

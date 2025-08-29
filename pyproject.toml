@@ -1,12 +1,11 @@
 [build-system]
-requires = ["setuptools", "wheel", "pybind11"]
-build-backend = "setuptools.build_meta"
+requires = ["scikit-build-core", "nanobind"]
+build-backend = "scikit_build_core.build"
 
 [project]
 name = "pylmcf"
 version = "0.0.4"
-description = "Python bindings for LEMON Min Cost Flow algorithm"
+description = "Python bindings for Network Simplex algorithm from LEMON library"
 authors = [
     { name="Michał Startek", email="michal.startek@mimuw.edu.pl" }
 ]
-dependencies = ["numpy", "pybind11", "numba", "networkx", "scipy", "matplotlib", "tqdm"]
