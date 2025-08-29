@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "pylmcf"
-version = "0.0.4"
+version = "0.1.0"
 description = "Python bindings for Network Simplex algorithm from LEMON library"
 authors = [
     { name="Michał Startek", email="michal.startek@mimuw.edu.pl" }
