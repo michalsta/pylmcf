@@ -7,4 +7,4 @@ def include() -> Path:
     """
     Returns the include path for the C++ library
     """
-    return (Path(__file__).parent / 'include').resolve()
+    return (Path(__file__).parent / 'cpp').resolve()
