@@ -8,7 +8,7 @@ find_package(nanobind REQUIRED CONFIG)
 set(CMAKE_CXX_STANDARD 20)
 
 nanobind_add_module(pylmcf_cpp
-    NB_STATIC
+    NB_STATIC NOMINSIZE
     src/pylmcf/cpp/pylmcf/pylmcf.cpp)
 
 target_include_directories(pylmcf_cpp PRIVATE src/pylmcf/cpp)
