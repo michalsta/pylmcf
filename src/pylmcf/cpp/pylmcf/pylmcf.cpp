@@ -66,6 +66,16 @@ NB_MODULE(pylmcf_cpp, m) {
         .def("no_nodes", &lemon::StaticDigraph::nodeNum)
         .def("no_edges", &lemon::StaticDigraph::arcNum);
 
+    nb::class_<Graph<int64_t>>(m, "Graph")
+        .def(nb::init<size_t, const nb::ndarray<int64_t, nb::shape<-1>> &, const nb::ndarray<int64_t, nb::shape<-1>> &, const nb::ndarray<int64_t, nb::shape<-1>> &>())
+        .def("no_nodes", &Graph<int64_t>::no_nodes)
+        .def("no_edges", &Graph<int64_t>::no_edges)
+        .def("set_node_supply", &Graph<int64_t>::set_node_supply_py)
+        .def("set_edge_capacities", &Graph<int64_t>::set_edge_capacities_py)
+        .def("solve", &Graph<int64_t>::solve)
+        .def("total_cost", &Graph<int64_t>::total_cost)
+        .def("result", &Graph<int64_t>::extract_result_py)
+        .def("__str__", &Graph<int64_t>::to_string);
 
     /* py::class_<lemon::NetworkSimplex<lemon::StaticDigraph, int64_t, int64_t>>(m, "LemonNetworkSimplex")
         .def(py::init<lemon::StaticDigraph&>())
