@@ -55,7 +55,8 @@ assert G.total_cost() == 12
 
 ### Licence
 
-(TBA). LEMON (which resides in src/pylmcf/cpp/lemon subdirectory) is covered by Boost licence.
+pylmcf is published under Boost licence.
+LEMON (which resides in src/pylmcf/cpp/lemon subdirectory) is also covered by Boost licence.
 
 ### References
 
