@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <span>
 #include <vector>
+#include <cstring>
 
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
