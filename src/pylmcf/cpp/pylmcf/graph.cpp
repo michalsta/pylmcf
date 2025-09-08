@@ -4,11 +4,11 @@
 #include <lemon/static_graph.h>
 #include <lemon/network_simplex.h>
 
-#ifdef PYBIND11_VERSION_MAJOR
-#include <pybind11/pybind11.h>
-#include <pybind11/numpy.h>
-#include <pybind11/stl.h>
-
+#ifdef INCLUDE_NANOBIND_STUFF
+#include <nanobind/nanobind.h>
+#include <nanobind/ndarray.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
 #include "py_support.h"
 #endif
 
