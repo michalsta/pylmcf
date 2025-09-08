@@ -9,3 +9,4 @@ description = "Python bindings for Network Simplex algorithm from LEMON library"
 authors = [
     { name="Michał Startek", email="michal.startek@mimuw.edu.pl" }
 ]
+license = "BSL-1.0"

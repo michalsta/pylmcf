@@ -12,6 +12,7 @@ nanobind_add_module(pylmcf_cpp
     src/pylmcf/cpp/pylmcf/pylmcf.cpp)
 
 target_include_directories(pylmcf_cpp PRIVATE src/pylmcf/cpp)
+target_compile_definitions(pylmcf_cpp PRIVATE INCLUDE_NANOBIND_STUFF)
 
 install(TARGETS pylmcf_cpp LIBRARY DESTINATION pylmcf)
 

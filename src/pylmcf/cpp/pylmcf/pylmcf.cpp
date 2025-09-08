@@ -39,7 +39,7 @@ nb::ndarray<T, nb::numpy, nb::shape<-1>> py_lmcf(
 }
 
 NB_MODULE(pylmcf_cpp, m) {
-    m.doc() = "Python binding for the lmcf algorithm implemented in C++";
+    m.doc() = "Python binding for the LEMON min cost flow solver";
 /*    m.def("lmcf", &py_lmcf<int8_t>, "Compute the lmcf for a given graph");
     m.def("lmcf", &py_lmcf<int16_t>, "Compute the lmcf for a given graph");
     m.def("lmcf", &py_lmcf<int32_t>, "Compute the lmcf for a given graph");
@@ -51,30 +51,23 @@ NB_MODULE(pylmcf_cpp, m) {
  /*   m.def("lmcf", &py_lmcf<float>, "Compute the lmcf for a given graph");
     m.def("lmcf", &py_lmcf<double>, "Compute the lmcf for a given graph");
 */
-    nb::class_<Graph<int64_t>>(m, "LemonGraph")
-        .def(nb::init<size_t, const nb::ndarray<int64_t, nb::shape<-1>> &, const nb::ndarray<int64_t, nb::shape<-1>> &, const nb::ndarray<int64_t, nb::shape<-1>> &>())
-        .def("no_nodes", &Graph<int64_t>::no_nodes)
-        .def("no_edges", &Graph<int64_t>::no_edges)
-        .def("set_node_supply", &Graph<int64_t>::set_node_supply_py)
-        .def("set_edge_capacities", &Graph<int64_t>::set_edge_capacities_py)
-        .def("solve", &Graph<int64_t>::solve)
-        .def("total_cost", &Graph<int64_t>::total_cost)
-        .def("result", &Graph<int64_t>::extract_result_py)
-        .def("__str__", &Graph<int64_t>::to_string);
 
     nb::class_<lemon::StaticDigraph>(m, "LemonStaticGraph")
         .def("no_nodes", &lemon::StaticDigraph::nodeNum)
         .def("no_edges", &lemon::StaticDigraph::arcNum);
 
-
-    /* py::class_<lemon::NetworkSimplex<lemon::StaticDigraph, int64_t, int64_t>>(m, "LemonNetworkSimplex")
-        .def(py::init<lemon::StaticDigraph&>())
-        .def("supply_map", &lemon::NetworkSimplex<lemon::StaticDigraph, int64_t, int64_t>::supplyMap)
-        .def("cost_map", &lemon::NetworkSimplex<lemon::StaticDigraph, int64_t, int64_t>::costMap)
-        .def("upper_map", &lemon::NetworkSimplex<lemon::StaticDigraph, int64_t, int64_t>::upperMap)
-        .def("run", &lemon::NetworkSimplex<lemon::StaticDigraph, int64_t, int64_t>::run)
-        .def("total_cost", &lemon::NetworkSimplex<lemon::StaticDigraph, int64_t, int64_t>::totalCost)
-        .def("flow", &lemon::NetworkSimplex<lemon::StaticDigraph, int64_t, int64_t>::flow);
-    */
+    nb::class_<Graph<int64_t>>(m, "CGraph")
+        .def(nb::init<size_t, const nb::ndarray<int64_t, nb::shape<-1>> &, const nb::ndarray<int64_t, nb::shape<-1>> &>())
+        .def("no_nodes", &Graph<int64_t>::no_nodes)
+        .def("no_edges", &Graph<int64_t>::no_edges)
+        .def("edge_starts", &Graph<int64_t>::edge_starts)
+        .def("edge_ends", &Graph<int64_t>::edge_ends)
+        .def("set_node_supply", &Graph<int64_t>::set_node_supply_py)
+        .def("set_edge_capacities", &Graph<int64_t>::set_edge_capacities_py)
+        .def("set_edge_costs", &Graph<int64_t>::set_edge_costs_py)
+        .def("solve", &Graph<int64_t>::solve)
+        .def("total_cost", &Graph<int64_t>::total_cost)
+        .def("result", &Graph<int64_t>::extract_result_py)
+        .def("__str__", &Graph<int64_t>::to_string);
 
 }
