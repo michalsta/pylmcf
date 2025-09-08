@@ -10,3 +10,7 @@ authors = [
     { name="Michał Startek", email="michal.startek@mimuw.edu.pl" }
 ]
 license = "BSL-1.0"
+
+[tool.cibuildwheel]
+#build = "cp312-*"
+before-all = "dnf install -y python3-devel || yum install python3-devel || apk add python3-dev || true"
