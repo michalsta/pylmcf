@@ -49,7 +49,6 @@ private:
     const size_t _no_nodes;
     const std::vector<int64_t> edges_starts;
     const std::vector<int64_t> edges_ends;
-    const std::vector<int64_t> costs;
 
     const lemon::StaticDigraph lemon_graph;
     lemon::StaticDigraph::NodeMap<T> node_supply_map;
@@ -65,7 +64,6 @@ public:
         _no_nodes(no_nodes),
         edges_starts(edge_starts.begin(), edge_starts.end()),
         edges_ends(edge_ends.begin(), edge_ends.end()),
-        costs(costs.begin(), costs.end()),
         lemon_graph(make_lemon_graph(no_nodes, edge_starts, edge_ends)),
         node_supply_map(lemon_graph),
         capacities_map(lemon_graph),
