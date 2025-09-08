@@ -47,8 +47,8 @@ lemon::StaticDigraph make_lemon_graph(size_t no_nodes, const std::span<int64_t> 
 template <typename T> class Graph {
 private:
     const size_t _no_nodes;
-    const std::vector<int64_t> edges_starts;
-    const std::vector<int64_t> edges_ends;
+    const std::vector<int64_t> _edge_starts;
+    const std::vector<int64_t> _edge_ends;
 
     const lemon::StaticDigraph lemon_graph;
     lemon::StaticDigraph::NodeMap<T> node_supply_map;
@@ -59,39 +59,38 @@ private:
 
 public:
     Graph(size_t no_nodes, const std::span<int64_t> &edge_starts,
-        const std::span<int64_t> &edge_ends, const std::span<T> &costs):
+        const std::span<int64_t> &edge_ends):
 
         _no_nodes(no_nodes),
-        edges_starts(edge_starts.begin(), edge_starts.end()),
-        edges_ends(edge_ends.begin(), edge_ends.end()),
+        _edge_starts(edge_starts.begin(), edge_starts.end()),
+        _edge_ends(edge_ends.begin(), edge_ends.end()),
         lemon_graph(make_lemon_graph(no_nodes, edge_starts, edge_ends)),
         node_supply_map(lemon_graph),
         capacities_map(lemon_graph),
         costs_map(lemon_graph),
         solver(lemon_graph)
         {
-            const size_t no_edges = edges_starts.size();
+            const size_t no_edges = _edge_starts.size();
 
             // Make sure all edge arrays and result are the same size
-            if (edges_starts.size() != edges_ends.size() || edges_starts.size() != costs.size()) {
-                throw std::invalid_argument("All edge arrays and result must be the same size");
+            if (_edge_starts.size() != _edge_ends.size()) {
+                throw std::invalid_argument("edge_starts and edge_ends must be the same size");
             }
 
             // Make sure all arcs are valid, capacities are positive, and costs are non-negative
             for (size_t ii = 0; ii < no_edges; ii++) {
-                if (static_cast<size_t>(edges_starts[ii]) >= no_nodes || static_cast<size_t>(edges_ends[ii]) >= no_nodes) {
-                    throw std::invalid_argument("Edge start or end index out of bounds: start=" + std::to_string(edges_starts[ii]) + ", end=" + std::to_string(edges_ends[ii]));
+                if (static_cast<size_t>(_edge_starts[ii]) >= no_nodes || static_cast<size_t>(_edge_ends[ii]) >= no_nodes) {
+                    throw std::invalid_argument("Edge start or end index out of bounds: start=" + std::to_string(_edge_starts[ii]) + ", end=" + std::to_string(_edge_ends[ii]));
                 }
-                if (costs[ii] < 0) {
-                    throw std::invalid_argument("Costs must be non-negative");
-                }
-            }
-
-            // Add costs to the arcs
-            for (size_t ii = 0; ii < no_edges; ii++) {
-                costs_map[lemon_graph.arcFromId(ii)] = costs[ii];
             }
         };
+/*
+    Graph(size_t no_nodes, const std::span<int64_t> &edge_starts,
+        const std::span<int64_t> &edge_ends, const std::span<T> &costs) :
+        Graph(no_nodes, edge_starts, edge_ends) {
+            set_edge_costs(costs);
+        };
+*/
 
 
     Graph() = delete;
@@ -105,7 +104,15 @@ public:
     }
 
     inline size_t no_edges() const {
-        return edges_starts.size();
+        return _edge_starts.size();
+    }
+
+    inline const std::vector<int64_t>& edge_starts() const {
+        return _edge_starts;
+    }
+
+    inline const std::vector<int64_t>& edge_ends() const {
+        return _edge_ends;
     }
 
     void set_node_supply(const std::span<T> &node_supply) {
@@ -128,6 +135,20 @@ public:
         }
 
         solver.upperMap(capacities_map);
+    }
+
+    void set_edge_costs(const std::span<T> &costs) {
+        if (costs.size() != no_edges())
+            throw std::invalid_argument("Costs must have the same size as the number of edges");
+
+        for (size_t ii = 0; ii < no_edges(); ii++)
+        {
+            if (costs[ii] < 0)
+                throw std::invalid_argument("Costs must be non-negative");
+            costs_map[lemon_graph.arcFromId(ii)] = costs[ii];
+        }
+
+        solver.costMap(costs_map);
     }
 
     void solve(){
@@ -164,8 +185,8 @@ public:
 
 #ifdef INCLUDE_NANOBIND_STUFF
     Graph(size_t no_nodes, const nb::ndarray<int64_t, nb::shape<-1>> &edge_starts,
-        const nb::ndarray<int64_t, nb::shape<-1>> &edge_ends, const nb::ndarray<T, nb::shape<-1>> &costs):
-        Graph(no_nodes, numpy_to_span(edge_starts), numpy_to_span<int64_t>(edge_ends), numpy_to_span(costs)) {};
+        const nb::ndarray<int64_t, nb::shape<-1>> &edge_ends):
+        Graph(no_nodes, numpy_to_span(edge_starts), numpy_to_span<int64_t>(edge_ends)) {};
 
     void set_node_supply_py(const nb::ndarray<T, nb::shape<-1>> &node_supply) {
         set_node_supply(numpy_to_span(node_supply));
@@ -173,6 +194,10 @@ public:
 
     void set_edge_capacities_py(const nb::ndarray<T, nb::shape<-1>> &capacities) {
         set_edge_capacities(numpy_to_span(capacities));
+    }
+
+    void set_edge_costs_py(const nb::ndarray<T, nb::shape<-1>> &costs) {
+        set_edge_costs(numpy_to_span(costs));
     }
 
     nb::ndarray<T, nb::numpy, nb::shape<-1>> extract_result_py() const {
