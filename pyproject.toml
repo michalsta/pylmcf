@@ -4,13 +4,9 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "pylmcf"
-version = "0.1.0"
+version = "0.9.0"
 description = "Python bindings for Network Simplex algorithm from LEMON library"
 authors = [
     { name="Michał Startek", email="michal.startek@mimuw.edu.pl" }
 ]
 license = "BSL-1.0"
-
-[tool.cibuildwheel]
-#build = "cp312-*"
-#before-all = "dnf install -y python3.$(python -c \"import sys; print(sys.version_info.minor)\")-devel || yum install python3-devel || apk add python3-dev || true"
