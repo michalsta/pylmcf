@@ -8,7 +8,7 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 
-#include "py_support.h"
+#include "py_support.hpp"
 
 #include "lmcf.hpp"
 #include "graph.hpp"

@@ -14,7 +14,7 @@
 #include <nanobind/ndarray.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
-#include "py_support.h"
+#include "py_support.hpp"
 #endif
 
 inline lemon::StaticDigraph make_lemon_graph(LEMON_INDEX no_nodes, const std::span<LEMON_INDEX> &edge_starts,
