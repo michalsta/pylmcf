@@ -13,4 +13,4 @@ license = "BSL-1.0"
 
 [tool.cibuildwheel]
 #build = "cp312-*"
-before-all = "dnf install -y python3.$(python -c \"import sys; print(sys.version_info.minor)\")-devel || yum install python3-devel || apk add python3-dev || true"
+#before-all = "dnf install -y python3.$(python -c \"import sys; print(sys.version_info.minor)\")-devel || yum install python3-devel || apk add python3-dev || true"

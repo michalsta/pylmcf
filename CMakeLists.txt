@@ -1,8 +1,11 @@
 cmake_minimum_required(VERSION 3.15)
 
 
-project(pylmcf)
-find_package(Python COMPONENTS Interpreter Development REQUIRED)
+project(pylmcf LANGUAGES CXX)
+
+find_package(Python 3.8
+  REQUIRED COMPONENTS Interpreter Development.Module
+  OPTIONAL_COMPONENTS Development.SABIModule)
 find_package(nanobind REQUIRED CONFIG)
 
 set(CMAKE_CXX_STANDARD 20)
