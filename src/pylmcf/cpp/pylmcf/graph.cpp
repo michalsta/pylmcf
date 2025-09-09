@@ -4,6 +4,8 @@
 #include <lemon/static_graph.h>
 #include <lemon/network_simplex.h>
 
+#include "basics.hpp"
+
 #ifdef INCLUDE_NANOBIND_STUFF
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
@@ -12,8 +14,8 @@
 #include "py_support.h"
 #endif
 
-lemon::StaticDigraph make_lemon_graph(size_t no_nodes, const std::span<int64_t> &edge_starts,
-    const std::span<int64_t> &edge_ends) {
+lemon::StaticDigraph make_lemon_graph(LEMON_INDEX no_nodes, const std::span<LEMON_INDEX> &edge_starts,
+    const std::span<LEMON_INDEX> &edge_ends) {
     const size_t no_edges = edge_starts.size();
 
     // Make sure all edge arrays and result are the same size
@@ -22,15 +24,15 @@ lemon::StaticDigraph make_lemon_graph(size_t no_nodes, const std::span<int64_t> 
     }
 
     // Make sure all arcs are valid
-    for (size_t ii = 0; ii < no_edges; ii++) {
-        if (static_cast<size_t>(edge_starts[ii]) >= no_nodes || static_cast<size_t>(edge_ends[ii]) >= no_nodes) {
+    for (LEMON_INDEX ii = 0; ii < no_edges; ii++) {
+        if (edge_starts[ii] >= no_nodes || edge_ends[ii] >= no_nodes) {
             throw std::invalid_argument("Edge start or end index out of bounds: start=" + std::to_string(edge_starts[ii]) + ", end=" + std::to_string(edge_ends[ii]));
         }
     }
 
     lemon::StaticDigraph lemon_graph;
 
-    std::vector<std::pair<int, int>> arcs;
+    std::vector<std::pair<LEMON_INDEX, LEMON_INDEX>> arcs;
     arcs.reserve(no_edges);
     for (size_t ii = 0; ii < no_edges; ii++)
         arcs.emplace_back(edge_starts[ii], edge_ends[ii]);
@@ -46,9 +48,9 @@ lemon::StaticDigraph make_lemon_graph(size_t no_nodes, const std::span<int64_t> 
 
 template <typename T> class Graph {
 private:
-    const size_t _no_nodes;
-    const std::vector<int64_t> _edge_starts;
-    const std::vector<int64_t> _edge_ends;
+    const LEMON_INDEX _no_nodes;
+    const std::vector<LEMON_INDEX> _edge_starts;
+    const std::vector<LEMON_INDEX> _edge_ends;
 
     const lemon::StaticDigraph lemon_graph;
     lemon::StaticDigraph::NodeMap<T> node_supply_map;
@@ -58,8 +60,8 @@ private:
     lemon::NetworkSimplex<lemon::StaticDigraph, T, T> solver;
 
 public:
-    Graph(size_t no_nodes, const std::span<int64_t> &edge_starts,
-        const std::span<int64_t> &edge_ends):
+    Graph(LEMON_INDEX no_nodes, const std::span<LEMON_INDEX> &edge_starts,
+        const std::span<LEMON_INDEX> &edge_ends):
 
         _no_nodes(no_nodes),
         _edge_starts(edge_starts.begin(), edge_starts.end()),
@@ -77,20 +79,12 @@ public:
                 throw std::invalid_argument("edge_starts and edge_ends must be the same size");
             }
 
-            // Make sure all arcs are valid, capacities are positive, and costs are non-negative
             for (size_t ii = 0; ii < no_edges; ii++) {
-                if (static_cast<size_t>(_edge_starts[ii]) >= no_nodes || static_cast<size_t>(_edge_ends[ii]) >= no_nodes) {
+                if (_edge_starts[ii] >= no_nodes || _edge_ends[ii] >= no_nodes) {
                     throw std::invalid_argument("Edge start or end index out of bounds: start=" + std::to_string(_edge_starts[ii]) + ", end=" + std::to_string(_edge_ends[ii]));
                 }
             }
         };
-/*
-    Graph(size_t no_nodes, const std::span<int64_t> &edge_starts,
-        const std::span<int64_t> &edge_ends, const std::span<T> &costs) :
-        Graph(no_nodes, edge_starts, edge_ends) {
-            set_edge_costs(costs);
-        };
-*/
 
 
     Graph() = delete;
@@ -99,19 +93,19 @@ public:
     Graph& operator=(const Graph&) = delete;
 
 
-    inline size_t no_nodes() const {
+    inline LEMON_INDEX no_nodes() const {
         return _no_nodes;
     }
 
-    inline size_t no_edges() const {
+    inline LEMON_INDEX no_edges() const {
         return _edge_starts.size();
     }
 
-    inline const std::vector<int64_t>& edge_starts() const {
+    inline const std::vector<LEMON_INDEX>& edge_starts() const {
         return _edge_starts;
     }
 
-    inline const std::vector<int64_t>& edge_ends() const {
+    inline const std::vector<LEMON_INDEX>& edge_ends() const {
         return _edge_ends;
     }
 
@@ -184,9 +178,9 @@ public:
     }
 
 #ifdef INCLUDE_NANOBIND_STUFF
-    Graph(size_t no_nodes, const nb::ndarray<int64_t, nb::shape<-1>> &edge_starts,
-        const nb::ndarray<int64_t, nb::shape<-1>> &edge_ends):
-        Graph(no_nodes, numpy_to_span(edge_starts), numpy_to_span<int64_t>(edge_ends)) {};
+    Graph(LEMON_INDEX no_nodes, const nb::ndarray<LEMON_INDEX, nb::shape<-1>> &edge_starts,
+        const nb::ndarray<LEMON_INDEX, nb::shape<-1>> &edge_ends):
+        Graph(no_nodes, numpy_to_span(edge_starts), numpy_to_span<LEMON_INDEX>(edge_ends)) {};
 
     void set_node_supply_py(const nb::ndarray<T, nb::shape<-1>> &node_supply) {
         set_node_supply(numpy_to_span(node_supply));
