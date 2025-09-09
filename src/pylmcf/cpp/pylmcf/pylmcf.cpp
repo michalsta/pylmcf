@@ -10,8 +10,8 @@
 
 #include "py_support.h"
 
-#include "lmcf.cpp" // Yes, ugly. But it works.
-#include "graph.cpp"
+#include "lmcf.hpp"
+#include "graph.hpp"
 
 
 namespace nb = nanobind;
@@ -40,21 +40,11 @@ nb::ndarray<T, nb::numpy, nb::shape<-1>> py_lmcf(
 
 NB_MODULE(pylmcf_cpp, m) {
     m.doc() = "Python binding for the LEMON min cost flow solver";
-/*    m.def("lmcf", &py_lmcf<int8_t>, "Compute the lmcf for a given graph");
+    m.def("lmcf", &py_lmcf<int8_t>, "Compute the lmcf for a given graph");
     m.def("lmcf", &py_lmcf<int16_t>, "Compute the lmcf for a given graph");
     m.def("lmcf", &py_lmcf<int32_t>, "Compute the lmcf for a given graph");
     m.def("lmcf", &py_lmcf<int64_t>, "Compute the lmcf for a given graph");
- */   m.def("lmcf", &py_lmcf<int8_t>, "Compute the lmcf for a given graph");
-    m.def("lmcf", &py_lmcf<int16_t>, "Compute the lmcf for a given graph");
-    m.def("lmcf", &py_lmcf<int32_t>, "Compute the lmcf for a given graph");
-    m.def("lmcf", &py_lmcf<int64_t>, "Compute the lmcf for a given graph");
- /*   m.def("lmcf", &py_lmcf<float>, "Compute the lmcf for a given graph");
-    m.def("lmcf", &py_lmcf<double>, "Compute the lmcf for a given graph");
-*/
 
-    nb::class_<lemon::StaticDigraph>(m, "LemonStaticGraph")
-        .def("no_nodes", &lemon::StaticDigraph::nodeNum)
-        .def("no_edges", &lemon::StaticDigraph::arcNum);
 
     nb::class_<Graph<int64_t>>(m, "CGraph")
         .def(nb::init<LEMON_INDEX, const nb::ndarray<LEMON_INDEX, nb::shape<-1>> &, const nb::ndarray<LEMON_INDEX, nb::shape<-1>> &>())
