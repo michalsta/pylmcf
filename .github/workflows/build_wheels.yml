@@ -23,6 +23,7 @@ jobs:
         uses: pypa/cibuildwheel@v3.1.4
         env:
           VERBOSE: 1
+          MACOSX_DEPLOYMENT_TARGET: "10.13"
         #   ...
         # with:
         #   package-dir: .
