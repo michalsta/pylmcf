@@ -6,7 +6,24 @@ build-backend = "scikit_build_core.build"
 name = "pylmcf"
 version = "0.9.0"
 description = "Python bindings for Network Simplex algorithm from LEMON library"
-authors = [
-    { name="Michał Startek", email="michal.startek@mimuw.edu.pl" }
-]
+authors = [{ name="Michał Startek", email="michal.startek@mimuw.edu.pl" }]
+maintainers = [{ name="Michał Startek", email="michal.startek@mimuw.edu.pl" }]
 license = "BSL-1.0"
+license-files = ["LICENCE"]
+dependencies = ["numpy"]
+readme = "README.md"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Mathematics",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Development Status :: 4 - Beta",
+]
+keywords = ["network simplex", "minimum cost flow", "lemon", "graph algorithms"]
+
+[project.urls]
+"Homepage" = "https://github.com/michalsta/pylmcf"
+"Repository" = "https://github.com/michalsta/pylmcf.git"
+
+[project.optional-dependencies]
+extras = ["networkx", "matplotlib"]
