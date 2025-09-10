@@ -10,7 +10,6 @@
 
 #define LEMON_INT int64_t
 #define LEMON_INDEX int
-#define INTENSITY_TYPE double
 
 template <typename T>
 inline std::vector<T> sorted_copy(const std::vector<T>& vec, auto compare) {
