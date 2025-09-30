@@ -4,6 +4,29 @@ from pylmcf.pylmcf_cpp import CGraph
 
 
 class Graph(CGraph):
+    '''
+    Graph is a wrapper around the C++ class CGraph, providing additional functionality
+    for working with directed graphs, including methods to convert to NetworkX format
+    and to visualize the graph.
+
+    The primary purpose of this class is to represent a directed graph with nodes and edges,
+    where each edge can have associated costs and capacities, and nodes can have supply or demand values,
+    making it suitable for solving network flow problems.
+
+    Args:
+        no_nodes (int): Number of nodes in the graph.
+        edge_starts (np.ndarray): Array of starting node indices for each edge.
+        edge_ends (np.ndarray): Array of ending node indices for each edge.
+
+    Methods:
+        as_nx() -> nx.DiGraph:
+            Converts the internal C++ subgraph representation to a NetworkX directed graph,
+            including node and edge attributes such as capacity, cost, and flow.
+
+        show() -> None:
+            Visualizes the graph using matplotlib and NetworkX, displaying nodes and edges
+            with labels indicating flow, capacity, and cost.
+    '''
     def __init__(
         self, no_nodes: int, edge_starts: np.ndarray, edge_ends: np.ndarray
     ) -> None:
@@ -11,7 +34,7 @@ class Graph(CGraph):
 
     def as_nx(self) -> "nx.DiGraph":
         """
-        Convert the C++ subgraph to a NetworkX graph.
+        Convert the C++ graph to a NetworkX graph.
         """
         import networkx as nx
 
