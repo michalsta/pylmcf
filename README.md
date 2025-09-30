@@ -2,7 +2,8 @@
 
 ### Overview
 
-`pylmcf` provides Python bindings for the Min Cost Flow algorithm implemented in the [LEMON graph library](https://lemon.cs.elte.hu/trac/lemon). It enables efficient network flow optimization in Python applications.
+`pylmcf` provides Python bindings for the Min Cost Flow algorithm implemented in the [LEMON graph library](https://lemon.cs.elte.hu/trac/lemon). It enables efficient network flow optimization in Python applications. It is used by [wnet](https://github.com/michalsta/wnet) (a Python package enabling the efficient computation of Wasserstein and Truncated Wassersten distance between multidimensional distributions) and [wnetalign](https://github.com/michalsta/wnetalign) (A Python package enabling efficient alignment of MS or NMR spectra)
+
 
 ### Features
 
@@ -13,7 +14,7 @@
 ### Installation
 
 ```bash
-pip install git+https://github.com/michalsta/pylmcf.git
+pip install pylmcf
 ```
 
 ### Usage
@@ -42,10 +43,12 @@ G.show()
 G.solve()
 
 # Retrieve the flow values
-assert all(G.result() == np.array([1, 2, 1]))
+G.result()
+# returns: np.array([1, 2, 1]))
 
 # Retrieve the total cost of the flow
-assert G.total_cost() == 12
+G.total_cost()
+# == 12
 
 ```
 
@@ -61,4 +64,6 @@ LEMON (which resides in src/pylmcf/cpp/lemon subdirectory) is also covered by Bo
 ### References
 
 - [LEMON Graph Library](https://lemon.cs.elte.hu/trac/lemon)
+- [wnet package](https://github.com/michalsta/wnet)
+- [wnetalign package](https://github.com/michalsta/wnetalign)
 - [Min Cost Flow Problem](https://en.wikipedia.org/wiki/Minimum-cost_flow_problem)
