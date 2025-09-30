@@ -27,3 +27,18 @@ keywords = ["network simplex", "minimum cost flow", "lemon", "graph algorithms"]
 
 [project.optional-dependencies]
 extras = ["networkx", "matplotlib"]
+
+[tool.scikit-build.sdist]
+exclude = ["**/*"]
+include = [
+    "/src/**/*.py",
+    "/src/**/*.c",
+    "/src/**/*.hpp",
+    "/src/**/*.h",
+    "/src/**/*.cpp",
+    "/src/**/*.cc",
+    "/LICENCE",
+    "/README.md",
+    "/pyproject.toml",
+    "/CMakeLists.txt"
+]
