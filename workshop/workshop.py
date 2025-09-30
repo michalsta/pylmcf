@@ -17,17 +17,19 @@ detection_threshold = 0.002
 lib = "Workshop data/data/BMRB/BMRBlib.csv"
 target = "Workshop data/data/MetaboMiner/csv/N925(2x4).csv"
 # Moderate
-#lib = "Workshop data/data/MetaboMiner/csv/MetaboMiner - Biofluid ( all ).csv"
-#target = "Workshop data/data/MetaboMiner/csv/N925(2x4).csv"
+# lib = "Workshop data/data/MetaboMiner/csv/MetaboMiner - Biofluid ( all ).csv"
+# target = "Workshop data/data/MetaboMiner/csv/N925(2x4).csv"
 
 lib = pd.read_csv(lib)
 target = pd.read_csv(target)
 
+
 def to_spectrum(df):
-    A = np.array([df['1H'], df['13C'] / 10.0])
+    A = np.array([df["1H"], df["13C"] / 10.0])
     W = np.array(df["weight"])
     W = np.maximum(W, 0)
     return Distribution(A, W)
+
 
 lib = [(name, to_spectrum(group)) for name, group in lib.groupby("name")]
 target = to_spectrum(target)
@@ -62,6 +64,12 @@ except ValueError:
     print("No spectra passed the prefiltering step. Terminating.")
     sys.exit(1)
 
-solver = DeconvolutionSolver(target, lib_spectra, distance_function, distance_threshold, trash_cost=10.0, scale_factor=100.0)
+solver = DeconvolutionSolver(
+    target,
+    lib_spectra,
+    distance_function,
+    distance_threshold,
+    trash_cost=10.0,
+    scale_factor=100.0,
+)
 print(solver.solve(start_point=min_ints))
-
