@@ -18,11 +18,25 @@ class Graph(CGraph):
         nx_graph = nx.DiGraph()
         for node_id in range(self.no_nodes()):
             nx_graph.add_node(node_id)
-        for edge_start, edge_end in zip(self.edge_starts(), self.edge_ends()):
+        capacities = self.get_edge_capacities()
+        costs = self.get_edge_costs()
+        flows = self.result()
+        for edge_start, edge_end, capacity, cost, flow in zip(
+            self.edge_starts(), self.edge_ends(), capacities, costs, flows
+        ):
             nx_graph.add_edge(
                 edge_start,
                 edge_end,
+                capacity=capacity,
+                cost=cost,
+                flow=flow,
+                label=f"fl: {flow} / cap: {capacity} @ cost: {cost}",
             )
+        # for edge_start, edge_end in zip(self.edge_starts(), self.edge_ends()):
+        #    nx_graph.add_edge(
+        #        edge_start,
+        #        edge_end,
+        #    )
         return nx_graph
 
     def show(self) -> None:
@@ -34,5 +48,8 @@ class Graph(CGraph):
 
         nx_graph = self.as_nx()
         plt.figure(figsize=(8, 6))
-        nx.draw(nx_graph, with_labels=True)
+        pos = nx.spring_layout(nx_graph)
+        nx.draw(nx_graph, pos, with_labels=True, node_color="lightblue", node_size=500)
+        edge_labels = nx.get_edge_attributes(nx_graph, "label")
+        nx.draw_networkx_edge_labels(nx_graph, pos, edge_labels=edge_labels)
         plt.show()

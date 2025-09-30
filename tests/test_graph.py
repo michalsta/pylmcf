@@ -7,7 +7,11 @@ def test_graph_simple():
     G.set_edge_costs(np.array([1, 3, 5]))
     G.set_edge_capacities(np.array([1, 2, 3]))
     G.set_node_supply(np.array([5, 0, -5]))
-    G.solve()
     # G.show()
+    G.solve()
     assert all(G.result() == np.array([1, 2, 1]))
     assert G.total_cost() == 12
+
+
+if __name__ == "__main__":
+    test_graph_simple()

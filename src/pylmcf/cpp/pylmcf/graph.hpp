@@ -121,6 +121,15 @@ public:
         solver.upperMap(capacities_map);
     }
 
+    std::span<T> get_edge_capacities() const {
+        T* data = static_cast<T*>(malloc(sizeof(T) * no_edges()));
+        for (size_t ii = 0; ii < no_edges(); ii++)
+        {
+            data[ii] = capacities_map[lemon_graph.arcFromId(ii)];
+        }
+        return std::span<T>(data, no_edges());
+    }
+
     void set_edge_costs(const std::span<T> &costs) {
         if (costs.size() != no_edges())
             throw std::invalid_argument("Costs must have the same size as the number of edges");
@@ -135,6 +144,15 @@ public:
         solver.costMap(costs_map);
     }
 
+    std::span<T> get_edge_costs() const {
+        T* data = static_cast<T*>(malloc(sizeof(T) * no_edges()));
+        for (size_t ii = 0; ii < no_edges(); ii++)
+        {
+            data[ii] = costs_map[lemon_graph.arcFromId(ii)];
+        }
+        return std::span<T>(data, no_edges());
+    }
+
     void solve(){
         solver.supplyMap(node_supply_map);
         solver.costMap(costs_map);
@@ -145,7 +163,7 @@ public:
         return solver.totalCost();
     }
 
-    std::span<T> extract_result() const {
+    std::span<T> get_edge_flows() const {
         T* data = static_cast<T*>(malloc(sizeof(T) * no_edges()));
         for (size_t ii = 0; ii < no_edges(); ii++)
         {
@@ -184,8 +202,16 @@ public:
         set_edge_costs(numpy_to_span(costs));
     }
 
+    nb::ndarray<T, nb::numpy, nb::shape<-1>> get_edge_capacities_py() const {
+        return steal_mallocd_span_to_np_array(get_edge_capacities());
+    }
+
+    nb::ndarray<T, nb::numpy, nb::shape<-1>> get_edge_costs_py() const {
+        return steal_mallocd_span_to_np_array(get_edge_costs());
+    }
+
     nb::ndarray<T, nb::numpy, nb::shape<-1>> extract_result_py() const {
-        return steal_mallocd_span_to_np_array(extract_result());
+        return steal_mallocd_span_to_np_array(get_edge_flows());
     }
 #endif
 
