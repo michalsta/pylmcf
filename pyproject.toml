@@ -27,6 +27,7 @@ keywords = ["network simplex", "minimum cost flow", "lemon", "graph algorithms"]
 
 [project.optional-dependencies]
 extras = ["networkx", "matplotlib"]
+pytest = ["pytest"]
 
 [tool.scikit-build.sdist]
 exclude = ["**/*"]
