@@ -78,13 +78,27 @@ class Graph(CGraph):
 
         # draw nodes and labels separately so edges can be drawn with custom styles
         nx.draw_networkx_nodes(nx_graph, pos, node_color="lightblue", node_size=500)
-        node_labels = {node: f"{node}: {data['demand']}" for node, data in nx_graph.nodes(data=True)}
+        node_labels = {
+            node: f"{node}: {data['demand']}"
+            for node, data in nx_graph.nodes(data=True)
+        }
         nx.draw_networkx_labels(nx_graph, pos, labels=node_labels, font_size=10)
-        #nx.draw_networkx_labels(nx_graph, pos)
-        nx.draw_networkx_edges(nx_graph, pos, arrowstyle="->", arrowsize=10, connectionstyle="arc3, rad=0.15",)
+        # nx.draw_networkx_labels(nx_graph, pos)
+        nx.draw_networkx_edges(
+            nx_graph,
+            pos,
+            arrowstyle="->",
+            arrowsize=10,
+            connectionstyle="arc3, rad=0.15",
+        )
 
         edge_labels = nx.get_edge_attributes(nx_graph, "label")
-        nx.draw_networkx_edge_labels(nx_graph, pos, edge_labels=edge_labels, connectionstyle="arc3, rad=0.15",)
+        nx.draw_networkx_edge_labels(
+            nx_graph,
+            pos,
+            edge_labels=edge_labels,
+            connectionstyle="arc3, rad=0.15",
+        )
         plt.axis("off")
         plt.show()
 
@@ -127,7 +141,7 @@ class Graph(CGraph):
         if demand is not None:
             supply = np.zeros(no_nodes, dtype=np.int64)
             for node_id in nx_graph.nodes():
-                supply[node_id] = -nx_graph.nodes[node_id]['demand']
+                supply[node_id] = -nx_graph.nodes[node_id]["demand"]
             G.set_node_supply(supply)
 
         # Set edge capacities
