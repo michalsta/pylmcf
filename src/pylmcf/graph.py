@@ -1,3 +1,5 @@
+from typing import Optional
+
 import numpy as np
 
 from pylmcf.pylmcf_cpp import CGraph
@@ -73,7 +75,71 @@ class Graph(CGraph):
         nx_graph = self.as_nx()
         plt.figure(figsize=(8, 6))
         pos = nx.spring_layout(nx_graph)
-        nx.draw(nx_graph, pos, with_labels=True, node_color="lightblue", node_size=500)
+
+        # draw nodes and labels separately so edges can be drawn with custom styles
+        nx.draw_networkx_nodes(nx_graph, pos, node_color="lightblue", node_size=500)
+        nx.draw_networkx_labels(nx_graph, pos)
+        nx.draw_networkx_edges(nx_graph, pos, arrowstyle="->", arrowsize=10, connectionstyle="arc3, rad=0.15",)
+
         edge_labels = nx.get_edge_attributes(nx_graph, "label")
-        nx.draw_networkx_edge_labels(nx_graph, pos, edge_labels=edge_labels)
+        nx.draw_networkx_edge_labels(nx_graph, pos, edge_labels=edge_labels, connectionstyle="arc3, rad=0.15",)
+        plt.axis("off")
         plt.show()
+
+    @staticmethod
+    def FromNX(
+        nx_graph: "nx.DiGraph",
+        demand: Optional[str] = "demand",
+        capacity: Optional[str] = "capacity",
+        weight: Optional[str] = "weight",
+    ) -> "Graph":
+        """
+        Create a Graph from a NetworkX graph.
+
+        Args:
+            nx_graph (nx.DiGraph): The input NetworkX directed graph.
+            demand (str, optional):
+                The node attribute name for supply/demand values. Defaults to "demand".
+                If not present, the supply must be set later using set_node_supply().
+            capacity (str, optional):
+                The edge attribute name for capacities. Defaults to "capacity".
+                If not present, capacities must be set later using set_edge_capacities().
+            weight (str, optional):
+                The edge attribute name for costs. Defaults to "weight".
+                If not present, costs must be set later using set_edge_costs().
+        Returns:
+            Graph: The created Graph instance.
+        """
+        no_nodes = nx_graph.number_of_nodes()
+        edge_starts = []
+        edge_ends = []
+
+        sorted_edges = sorted(nx_graph.edges(), key=lambda edge: (edge[0], edge[1]))
+
+        for u, v in sorted_edges:
+            edge_starts.append(u)
+            edge_ends.append(v)
+        G = Graph(no_nodes, np.array(edge_starts), np.array(edge_ends))
+
+        # Set node supply/demand
+        if demand is not None:
+            supply = np.zeros(no_nodes, dtype=np.int64)
+            for node_id in nx_graph.nodes():
+                supply[node_id] = nx_graph.nodes[node_id]['demand']
+            G.set_node_supply(supply)
+
+        # Set edge capacities
+        if capacity is not None:
+            capacities = np.zeros(G.no_edges(), dtype=np.int64)
+            for i, (u, v) in enumerate(sorted_edges):
+                capacities[i] = nx_graph[u][v].get(capacity, 0)
+            G.set_edge_capacities(capacities)
+
+        # Set edge costs
+        if weight is not None:
+            costs = np.zeros(G.no_edges(), dtype=np.int64)
+            for i, (u, v) in enumerate(sorted_edges):
+                costs[i] = nx_graph[u][v].get(weight, 0)
+            G.set_edge_costs(costs)
+
+        return G
