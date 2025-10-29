@@ -27,7 +27,7 @@ inline lemon::StaticDigraph make_lemon_graph(LEMON_INDEX no_nodes, const std::sp
     }
 
     // Make sure all arcs are valid
-    for (LEMON_INDEX ii = 0; ii < no_edges; ii++) {
+    for (size_t ii = 0; ii < no_edges; ii++) {
         if (edge_starts[ii] >= no_nodes || edge_ends[ii] >= no_nodes) {
             throw std::invalid_argument("Edge start or end index out of bounds: start=" + std::to_string(edge_starts[ii]) + ", end=" + std::to_string(edge_ends[ii]));
         }
@@ -100,19 +100,19 @@ public:
     }
 
     void set_node_supply(const std::span<T> &node_supply) {
-        if (node_supply.size() != no_nodes())
+        if (node_supply.size() != static_cast<size_t>(no_nodes()))
             throw std::invalid_argument("Node supply must have the same size as the number of nodes");
 
-        for (size_t ii = 0; ii < no_nodes(); ii++)
+        for (LEMON_INT ii = 0; ii < no_nodes(); ii++)
             node_supply_map[lemon_graph.nodeFromId(ii)] = node_supply[ii];
 
     }
 
     void set_edge_capacities(const std::span<T> &capacities) {
-        if (capacities.size() != no_edges())
+        if (capacities.size() != static_cast<size_t>(no_edges()))
             throw std::invalid_argument("Capacities must have the same size as the number of edges");
 
-        for (size_t ii = 0; ii < no_edges(); ii++)
+        for (LEMON_INT ii = 0; ii < no_edges(); ii++)
         {
             // std::cerr << "Setting capacity " << capacities[ii] << " for edge " << ii << std::endl;
             capacities_map[lemon_graph.arcFromId(ii)] = capacities[ii];
@@ -123,7 +123,7 @@ public:
 
     std::span<T> get_edge_capacities() const {
         T* data = static_cast<T*>(malloc(sizeof(T) * no_edges()));
-        for (size_t ii = 0; ii < no_edges(); ii++)
+        for (LEMON_INT ii = 0; ii < no_edges(); ii++)
         {
             data[ii] = capacities_map[lemon_graph.arcFromId(ii)];
         }
@@ -131,10 +131,10 @@ public:
     }
 
     void set_edge_costs(const std::span<T> &costs) {
-        if (costs.size() != no_edges())
+        if (costs.size() != static_cast<size_t>(no_edges()))
             throw std::invalid_argument("Costs must have the same size as the number of edges");
 
-        for (size_t ii = 0; ii < no_edges(); ii++)
+        for (LEMON_INT ii = 0; ii < no_edges(); ii++)
         {
             if (costs[ii] < 0)
                 throw std::invalid_argument("Costs must be non-negative");
@@ -146,7 +146,7 @@ public:
 
     std::span<T> get_edge_costs() const {
         T* data = static_cast<T*>(malloc(sizeof(T) * no_edges()));
-        for (size_t ii = 0; ii < no_edges(); ii++)
+        for (LEMON_INT ii = 0; ii < no_edges(); ii++)
         {
             data[ii] = costs_map[lemon_graph.arcFromId(ii)];
         }
@@ -165,7 +165,7 @@ public:
 
     std::span<T> get_edge_flows() const {
         T* data = static_cast<T*>(malloc(sizeof(T) * no_edges()));
-        for (size_t ii = 0; ii < no_edges(); ii++)
+        for (LEMON_INT ii = 0; ii < no_edges(); ii++)
         {
             data[ii] = solver.flow(lemon_graph.arcFromId(ii));
             // std::cerr << "Flow for edge " << ii << " is " << data[ii] << std::endl;
@@ -176,7 +176,7 @@ public:
     std::string to_string() const {
         std::string out = "Graph with " + std::to_string(no_nodes()) + " nodes and " + std::to_string(no_edges()) + " edges\n";
         out += "Edges:\n";
-        for (size_t ii = 0; ii < no_edges(); ii++) {
+        for (LEMON_INT ii = 0; ii < no_edges(); ii++) {
             out += "  " + std::to_string(lemon_graph.id(lemon_graph.source(lemon_graph.arcFromId(ii)))) + " -> " + std::to_string(lemon_graph.id(lemon_graph.target(lemon_graph.arcFromId(ii)))) + " with cost " + std::to_string(costs_map[lemon_graph.arcFromId(ii)]) + " and capacity " + std::to_string(capacities_map[lemon_graph.arcFromId(ii)]) + "\n";
         }
         // for (size_t ii = 0; ii < no_edges(); ii++) {
