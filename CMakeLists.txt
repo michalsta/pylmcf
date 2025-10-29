@@ -26,6 +26,10 @@ else()
     target_compile_definitions(pylmcf_cpp PRIVATE LEMON_USE_POSIX_THREADS)
 endif()
 
+# Add -Wall -Wextra for Unix-style compilers (GCC/Clang)
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+    target_compile_options(pylmcf_cpp PRIVATE -Wall -Wextra)
+endif()
 
 install(TARGETS pylmcf_cpp LIBRARY DESTINATION pylmcf)
 
