@@ -28,7 +28,7 @@ requires-python = ">=3.8"
 
 [project.optional-dependencies]
 extras = ["networkx", "matplotlib"]
-pytest = ["pytest"]
+pytest = ["pytest", "networkx"]
 
 [tool.scikit-build.sdist]
 exclude = ["**/*"]
