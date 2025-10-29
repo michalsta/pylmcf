@@ -4,7 +4,7 @@ from pylmcf.pylmcf_cpp import CGraph
 
 
 class Graph(CGraph):
-    '''
+    """
     Graph is a wrapper around the C++ class CGraph, providing additional functionality
     for working with directed graphs, including methods to convert to NetworkX format
     and to visualize the graph.
@@ -26,7 +26,8 @@ class Graph(CGraph):
         show() -> None:
             Visualizes the graph using matplotlib and NetworkX, displaying nodes and edges
             with labels indicating flow, capacity, and cost.
-    '''
+    """
+
     def __init__(
         self, no_nodes: int, edge_starts: np.ndarray, edge_ends: np.ndarray
     ) -> None:
