@@ -53,6 +53,7 @@ NB_MODULE(pylmcf_cpp, m) {
         .def("edge_starts", &Graph<int64_t>::edge_starts)
         .def("edge_ends", &Graph<int64_t>::edge_ends)
         .def("set_node_supply", &Graph<int64_t>::set_node_supply_py)
+        .def("get_node_supply", &Graph<int64_t>::get_node_supply_py)
         .def("set_edge_capacities", &Graph<int64_t>::set_edge_capacities_py)
         .def("get_edge_capacities", &Graph<int64_t>::get_edge_capacities_py)
         .def("set_edge_costs", &Graph<int64_t>::set_edge_costs_py)

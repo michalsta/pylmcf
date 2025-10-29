@@ -108,6 +108,15 @@ public:
 
     }
 
+    std::span<T> get_node_supply() const {
+        T* data = static_cast<T*>(malloc(sizeof(T) * no_nodes()));
+        for (LEMON_INT ii = 0; ii < no_nodes(); ii++)
+        {
+            data[ii] = node_supply_map[lemon_graph.nodeFromId(ii)];
+        }
+        return std::span<T>(data, no_nodes());
+    }
+
     void set_edge_capacities(const std::span<T> &capacities) {
         if (capacities.size() != static_cast<size_t>(no_edges()))
             throw std::invalid_argument("Capacities must have the same size as the number of edges");
@@ -200,6 +209,10 @@ public:
 
     void set_edge_costs_py(const nb::ndarray<T, nb::shape<-1>> &costs) {
         set_edge_costs(numpy_to_span(costs));
+    }
+
+    nb::ndarray<T, nb::numpy, nb::shape<-1>> get_node_supply_py() const {
+        return steal_mallocd_span_to_np_array(get_node_supply());
     }
 
     nb::ndarray<T, nb::numpy, nb::shape<-1>> get_edge_capacities_py() const {
