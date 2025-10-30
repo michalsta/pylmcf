@@ -65,42 +65,15 @@ class Graph(CGraph):
         #    )
         return nx_graph
 
-    def show(self) -> None:
+    def show(self, filename: Optional[str]) -> None:
         """
         Show the C++ subgraph as a NetworkX graph.
+
+        Args:
+            filename (Optional[str]): If provided, the graph visualization will be saved to this file.
+                                      If None, the graph will be displayed on screen.
         """
-        import networkx as nx
-        from matplotlib import pyplot as plt
-
-        nx_graph = self.as_nx()
-        plt.figure(figsize=(8, 6))
-        pos = nx.spring_layout(nx_graph)
-
-        # draw nodes and labels separately so edges can be drawn with custom styles
-        nx.draw_networkx_nodes(nx_graph, pos, node_color="lightblue", node_size=500)
-        node_labels = {
-            node: f"{node}: {data['demand']}"
-            for node, data in nx_graph.nodes(data=True)
-        }
-        nx.draw_networkx_labels(nx_graph, pos, labels=node_labels, font_size=10)
-        # nx.draw_networkx_labels(nx_graph, pos)
-        nx.draw_networkx_edges(
-            nx_graph,
-            pos,
-            arrowstyle="->",
-            arrowsize=10,
-            connectionstyle="arc3, rad=0.15",
-        )
-
-        edge_labels = nx.get_edge_attributes(nx_graph, "label")
-        nx.draw_networkx_edge_labels(
-            nx_graph,
-            pos,
-            edge_labels=edge_labels,
-            connectionstyle="arc3, rad=0.15",
-        )
-        plt.axis("off")
-        plt.show()
+        show_graph(self.as_nx(), filename)
 
     @staticmethod
     def FromNX(
@@ -159,3 +132,47 @@ class Graph(CGraph):
             G.set_edge_costs(costs)
 
         return G
+
+
+def show_graph(nx_graph: "nx.DiGraph", filename: Optional[str] = None) -> None:
+    """
+    Show a NetworkX graph using matplotlib.
+    Args:
+        nx_graph (nx.DiGraph): The input NetworkX directed graph.
+        filename (Optional[str]): If provided, the graph visualization will be saved to this file.
+                                  If None, the graph will be displayed on screen.
+    """
+    import networkx as nx
+    from matplotlib import pyplot as plt
+
+    nx_graph = self.as_nx()
+    plt.figure(figsize=(8, 6))
+    pos = nx.spring_layout(nx_graph)
+
+    # draw nodes and labels separately so edges can be drawn with custom styles
+    nx.draw_networkx_nodes(nx_graph, pos, node_color="lightblue", node_size=500)
+    node_labels = {
+        node: f"{node}: {data['demand']}" for node, data in nx_graph.nodes(data=True)
+    }
+    nx.draw_networkx_labels(nx_graph, pos, labels=node_labels, font_size=10)
+
+    nx.draw_networkx_edges(
+        nx_graph,
+        pos,
+        arrowstyle="->",
+        arrowsize=10,
+        connectionstyle="arc3, rad=0.15",
+    )
+
+    edge_labels = nx.get_edge_attributes(nx_graph, "label")
+    nx.draw_networkx_edge_labels(
+        nx_graph,
+        pos,
+        edge_labels=edge_labels,
+        connectionstyle="arc3, rad=0.15",
+    )
+    plt.axis("off")
+    if filename is not None:
+        plt.savefig(filename)
+    else:
+        plt.show()
