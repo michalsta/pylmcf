@@ -91,4 +91,4 @@ if __name__ == "__main__":
     test_networkx_simple()
     for seed in range(1, 1000):
         print(f"Testing large graph with seed {seed}...")
-        check_large_graph(seed, no_nodes=2, no_edges=2)
+        check_large_graph(seed, no_nodes=4, no_edges=6)

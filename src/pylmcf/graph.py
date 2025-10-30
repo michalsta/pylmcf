@@ -145,7 +145,6 @@ def show_graph(nx_graph: "nx.DiGraph", filename: Optional[str] = None) -> None:
     import networkx as nx
     from matplotlib import pyplot as plt
 
-    nx_graph = self.as_nx()
     plt.figure(figsize=(8, 6))
     pos = nx.spring_layout(nx_graph)
 
