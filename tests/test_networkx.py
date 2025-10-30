@@ -52,7 +52,6 @@ def check_large_graph(seed, no_nodes, no_edges):
         G_nx, demand="demand", capacity="capacity", weight="cost"
     )
     lmcf_cost = G.total_cost()
-    G.show()
     assert (
         nx_cost == lmcf_cost
     ), f"Costs do not match: NetworkX={nx_cost}, PyLMCF={lmcf_cost}"
