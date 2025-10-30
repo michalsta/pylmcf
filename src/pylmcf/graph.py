@@ -65,7 +65,7 @@ class Graph(CGraph):
         #    )
         return nx_graph
 
-    def show(self, filename: Optional[str]) -> None:
+    def show(self, filename: Optional[str] = None) -> None:
         """
         Show the C++ subgraph as a NetworkX graph.
 
