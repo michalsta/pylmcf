@@ -4,8 +4,7 @@ on:
   push:
     branches:
       - ci_wheels
-    tags:
-      - v*
+  workflow_call:
 
 jobs:
   build_wheels:
