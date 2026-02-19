@@ -114,7 +114,7 @@ class Graph(CGraph):
         if demand is not None:
             supply = np.zeros(no_nodes, dtype=np.int64)
             for node_id in nx_graph.nodes():
-                supply[node_id] = -nx_graph.nodes[node_id][demand]
+                supply[node_id] = -nx_graph.nodes[node_id].get(demand, 0)
             G.set_node_supply(supply)
 
         # Set edge capacities
