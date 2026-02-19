@@ -98,8 +98,17 @@ class Graph(CGraph):
                 If not present, costs must be set later using set_edge_costs().
         Returns:
             Graph: The created Graph instance.
+
+        Raises:
+            ValueError: If nodes are not contiguous integers from 0 to n-1.
         """
         no_nodes = nx_graph.number_of_nodes()
+        if set(range(no_nodes)) != set(nx_graph.nodes()):
+            raise ValueError(
+                f"Graph nodes must be contiguous integers from 0 to {no_nodes - 1}, "
+                f"got: {sorted(nx_graph.nodes())}"
+            )
+
         edge_starts = []
         edge_ends = []
 
