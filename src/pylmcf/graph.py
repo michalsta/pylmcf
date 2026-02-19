@@ -46,18 +46,21 @@ class Graph(CGraph):
             nx_graph.add_node(node_id, demand=-supply)
         capacities = self.get_edge_capacities()
         costs = self.get_edge_costs()
-        flows = self.result()
-        for edge_start, edge_end, capacity, cost, flow in zip(
-            self.edge_starts(), self.edge_ends(), capacities, costs, flows
+        try:
+            flows = self.result()
+        except RuntimeError:
+            flows = None
+        for i, (edge_start, edge_end, capacity, cost) in enumerate(
+            zip(self.edge_starts(), self.edge_ends(), capacities, costs)
         ):
-            nx_graph.add_edge(
-                edge_start,
-                edge_end,
-                capacity=capacity,
-                cost=cost,
-                flow=flow,
-                label=f"fl: {flow} / cap: {capacity} @ cost: {cost}",
-            )
+            attrs = dict(capacity=capacity, cost=cost)
+            if flows is not None:
+                flow = flows[i]
+                attrs["flow"] = flow
+                attrs["label"] = f"fl: {flow} / cap: {capacity} @ cost: {cost}"
+            else:
+                attrs["label"] = f"cap: {capacity} @ cost: {cost}"
+            nx_graph.add_edge(edge_start, edge_end, **attrs)
         # for edge_start, edge_end in zip(self.edge_starts(), self.edge_ends()):
         #    nx_graph.add_edge(
         #        edge_start,
