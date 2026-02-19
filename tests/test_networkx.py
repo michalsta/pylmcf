@@ -7,17 +7,17 @@ def test_networkx_simple():
     import numpy as np
 
     G_nx = nx.DiGraph()
-    G_nx.add_edge(0, 1, cost=1, capacity=1)
-    G_nx.add_edge(0, 2, cost=3, capacity=2)
-    G_nx.add_edge(1, 2, cost=5, capacity=3)
+    G_nx.add_edge(0, 1, cost=1, capacity=3)
+    G_nx.add_edge(0, 2, cost=3, capacity=3)
+    G_nx.add_edge(1, 2, cost=5, capacity=5)
     G_nx.nodes[0]["demand"] = -5
     G_nx.nodes[1]["demand"] = 0
     G_nx.nodes[2]["demand"] = 5
 
     G = Graph.FromNX(G_nx, demand="demand", capacity="capacity", weight="cost")
     G.solve()
-    assert all(G.result() == np.array([1, 2, 1]))
-    assert G.total_cost() == 12
+    assert all(G.result() == np.array([2, 3, 2]))
+    assert G.total_cost() == 21
 
 
 def check_large_graph(seed, no_nodes, no_edges):
