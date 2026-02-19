@@ -61,6 +61,7 @@ private:
     lemon::StaticDigraph::ArcMap<T> costs_map;
 
     lemon::NetworkSimplex<lemon::StaticDigraph, T, T> solver;
+    bool _solved = false;
 
 public:
     Graph(LEMON_INDEX no_nodes, const std::span<LEMON_INDEX> &edge_starts,
@@ -174,13 +175,18 @@ public:
             else
                 throw std::runtime_error("Solver failed with unknown status");
         }
+        _solved = true;
     }
 
     T total_cost() const {
+        if (!_solved)
+            throw std::runtime_error("solve() must be called before total_cost()");
         return solver.totalCost();
     }
 
     std::span<T> get_edge_flows() const {
+        if (!_solved)
+            throw std::runtime_error("solve() must be called before reading results");
         T* data = static_cast<T*>(malloc(sizeof(T) * no_edges()));
         for (LEMON_INT ii = 0; ii < no_edges(); ii++)
         {
