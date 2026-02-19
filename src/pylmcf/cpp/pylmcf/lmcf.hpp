@@ -82,7 +82,15 @@ T lmcf(
     solver.upperMap(capacities_map);
     solver.costMap(costs_map);
     solver.supplyMap(node_supply_map);
-    solver.run();
+    auto status = solver.run();
+    if (status != lemon::NetworkSimplex<lemon::ListDigraph, T, T>::OPTIMAL) {
+        if (status == lemon::NetworkSimplex<lemon::ListDigraph, T, T>::INFEASIBLE)
+            throw std::runtime_error("Solver failed: problem is INFEASIBLE");
+        else if (status == lemon::NetworkSimplex<lemon::ListDigraph, T, T>::UNBOUNDED)
+            throw std::runtime_error("Solver failed: problem is UNBOUNDED");
+        else
+            throw std::runtime_error("Solver failed with unknown status");
+    }
 
     // Get the result
     for (size_t i = 0; i < no_edges; i++)

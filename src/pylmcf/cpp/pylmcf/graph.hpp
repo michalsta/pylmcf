@@ -165,7 +165,15 @@ public:
     void solve(){
         solver.supplyMap(node_supply_map);
         solver.costMap(costs_map);
-        solver.run();
+        auto status = solver.run();
+        if (status != lemon::NetworkSimplex<lemon::StaticDigraph, T, T>::OPTIMAL) {
+            if (status == lemon::NetworkSimplex<lemon::StaticDigraph, T, T>::INFEASIBLE)
+                throw std::runtime_error("Solver failed: problem is INFEASIBLE");
+            else if (status == lemon::NetworkSimplex<lemon::StaticDigraph, T, T>::UNBOUNDED)
+                throw std::runtime_error("Solver failed: problem is UNBOUNDED");
+            else
+                throw std::runtime_error("Solver failed with unknown status");
+        }
     }
 
     T total_cost() const {
