@@ -1,11 +1,9 @@
 import networkx as nx
+import numpy as np
 from pylmcf.graph import Graph
 
 
 def test_networkx_simple():
-    import networkx as nx
-    import numpy as np
-
     G_nx = nx.DiGraph()
     G_nx.add_edge(0, 1, cost=1, capacity=3)
     G_nx.add_edge(0, 2, cost=3, capacity=3)
@@ -21,9 +19,6 @@ def test_networkx_simple():
 
 
 def check_large_graph(seed, no_nodes, no_edges):
-    import networkx as nx
-    import numpy as np
-
     np.random.seed(seed)
     G_nx = nx.gnm_random_graph(no_nodes, no_edges, directed=True, seed=seed)
 
@@ -84,7 +79,6 @@ try:
 
 except ImportError:
     raise
-    pass
 
 if __name__ == "__main__":
     test_networkx_simple()
