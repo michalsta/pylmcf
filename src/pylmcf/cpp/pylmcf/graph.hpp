@@ -107,8 +107,10 @@ public:
         for (LEMON_INT ii = 0; ii < no_nodes(); ii++)
             node_supply_map[lemon_graph.nodeFromId(ii)] = node_supply[ii];
 
+        _solved = false;
     }
 
+    // Caller must free() the returned span's data.
     std::span<T> get_node_supply() const {
         T* data = static_cast<T*>(malloc(sizeof(T) * no_nodes()));
         for (LEMON_INT ii = 0; ii < no_nodes(); ii++)
@@ -129,8 +131,10 @@ public:
         }
 
         solver.upperMap(capacities_map);
+        _solved = false;
     }
 
+    // Caller must free() the returned span's data.
     std::span<T> get_edge_capacities() const {
         T* data = static_cast<T*>(malloc(sizeof(T) * no_edges()));
         for (LEMON_INT ii = 0; ii < no_edges(); ii++)
@@ -152,8 +156,10 @@ public:
         }
 
         solver.costMap(costs_map);
+        _solved = false;
     }
 
+    // Caller must free() the returned span's data.
     std::span<T> get_edge_costs() const {
         T* data = static_cast<T*>(malloc(sizeof(T) * no_edges()));
         for (LEMON_INT ii = 0; ii < no_edges(); ii++)
@@ -184,6 +190,7 @@ public:
         return solver.totalCost();
     }
 
+    // Caller must free() the returned span's data.
     std::span<T> get_edge_flows() const {
         if (!_solved)
             throw std::runtime_error("solve() must be called before reading results");
