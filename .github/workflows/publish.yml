@@ -21,12 +21,10 @@ jobs:
       id-token: write
     steps:
       - name: Download artifacts from Build workflow
-        uses: dawidd6/action-download-artifact@v6
+        uses: actions/download-artifact@v4
         with:
-          workflow: build_wheels.yml
-          commit: ${{ github.sha }}
           pattern: cibw-*
           path: dist
-          merge_multiple: true
+          merge-multiple: true
 
       - uses: pypa/gh-action-pypi-publish@release/v1
