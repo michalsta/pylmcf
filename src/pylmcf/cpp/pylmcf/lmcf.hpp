@@ -36,13 +36,13 @@ T lmcf(
     const size_t no_edges = edges_starts.size();
     const size_t no_nodes = node_supply.size();
 
-    // Make sure all arcs are valid, capacities are positive, and costs are non-negative
+    // Make sure all arcs are valid, capacities are non-negative, and costs are non-negative
     for (size_t i = 0; i < no_edges; i++) {
         if (static_cast<size_t>(edges_starts[i]) >= no_nodes || static_cast<size_t>(edges_ends[i]) >= no_nodes) {
             throw std::invalid_argument("Edge start or end index out of bounds: start=" + std::to_string(edges_starts[i]) + ", end=" + std::to_string(edges_ends[i]));
         }
         if (capacities[i] < 0) {
-            throw std::invalid_argument("Capacities must be positive");
+            throw std::invalid_argument("Capacities must be non-negative");
         }
         if (costs[i] < 0) {
             throw std::invalid_argument("Costs must be non-negative");
