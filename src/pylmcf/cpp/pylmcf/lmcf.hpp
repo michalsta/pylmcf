@@ -16,7 +16,7 @@ void print_span(std::span<T> span) {
     std::cerr << std::endl;
 }
 
-// Function to compute the LCMF
+// Function to compute the LMCF
 template <typename T>
 T lmcf(
     std::span<T> node_supply,
