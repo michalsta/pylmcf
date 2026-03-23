@@ -31,16 +31,14 @@ extras = ["networkx", "matplotlib"]
 pytest = ["pytest", "networkx"]
 
 [tool.scikit-build.sdist]
-exclude = ["**/*"]
-include = [
-    "/src/**/*.py",
-    "/src/**/*.c",
-    "/src/**/*.hpp",
-    "/src/**/*.h",
-    "/src/**/*.cpp",
-    "/src/**/*.cc",
-    "/LICENCE",
-    "/README.md",
-    "/pyproject.toml",
-    "/CMakeLists.txt"
+exclude = [
+    "experiments/**",
+    "tests/**",
+    "workshop/**",
+    "wheelhouse/**",
+    "**/__pycache__/**",
+    "*.prof",
+    "reinstall.sh",
+    ".github/**",
+    ".vscode/**",
 ]
