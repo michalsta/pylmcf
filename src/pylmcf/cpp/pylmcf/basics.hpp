@@ -11,6 +11,17 @@
 #define LEMON_INT int64_t
 #define LEMON_INDEX int
 
+#include <limits>
+#include <string>
+
+inline void assert_fits_lemon_index(size_t count, const char* what) {
+    if (count > static_cast<size_t>(std::numeric_limits<LEMON_INDEX>::max()))
+        throw std::overflow_error(
+            std::string(what) + " count (" + std::to_string(count) +
+            ") exceeds LEMON_INDEX max (" +
+            std::to_string(std::numeric_limits<LEMON_INDEX>::max()) + ")");
+}
+
 template <typename T>
 inline std::vector<T> sorted_copy(const std::vector<T>& vec, auto compare) {
     /* Use when T has deleted copy assignment and you can't just std::sort it */
