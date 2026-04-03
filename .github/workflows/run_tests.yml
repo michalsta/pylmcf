@@ -9,18 +9,27 @@ on:
 
 jobs:
   run_pytest:
-    name: Run pytest on ${{ matrix.os }}
+    name: Run pytest on ${{ matrix.os }} (${{ matrix.compiler }})
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         # macos-13 is an intel runner, macos-14 is apple silicon
         os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-15-intel, macos-latest, windows-11-arm]
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        compiler: [default]
         exclude:
         - os: windows-11-arm
           python-version: "3.10"
         - os: windows-11-arm
           python-version: "3.9"
+        include:
+        # Explicit clang builds on Linux (x86-64 and arm64), latest stable Python only
+        - os: ubuntu-latest
+          python-version: "3.13"
+          compiler: clang
+        - os: ubuntu-24.04-arm
+          python-version: "3.13"
+          compiler: clang
 
 
     steps:
@@ -32,6 +41,12 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+      - name: Set up clang
+        if: matrix.compiler == 'clang'
+        run: |
+          sudo apt-get install -y clang
+          echo "CC=clang" >> $GITHUB_ENV
+          echo "CXX=clang++" >> $GITHUB_ENV
       - name: Install package
         env:
           VERBOSE: '1'
