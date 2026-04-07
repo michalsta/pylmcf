@@ -9,26 +9,27 @@ on:
 
 jobs:
   run_pytest:
-    name: Run pytest on ${{ matrix.os }} (${{ matrix.compiler }})
+    name: ${{ matrix.compiler == 'clang' && format('[clang] {0}', matrix.os) || format('{0} / py{1}', matrix.os, matrix.python-version) }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         # macos-13 is an intel runner, macos-14 is apple silicon
         os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-15-intel, macos-latest, windows-11-arm]
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
-        compiler: [default]
+        compiler: [default, clang]
         exclude:
         - os: windows-11-arm
           python-version: "3.10"
         - os: windows-11-arm
           python-version: "3.9"
-        include:
-        # Explicit clang builds on Linux (x86-64 and arm64), latest stable Python only
-        - os: ubuntu-latest
-          python-version: "3.13"
+        # clang only on Linux
+        - os: windows-latest
           compiler: clang
-        - os: ubuntu-24.04-arm
-          python-version: "3.13"
+        - os: windows-11-arm
+          compiler: clang
+        - os: macos-latest
+          compiler: clang
+        - os: macos-15-intel
           compiler: clang
 
 
@@ -41,12 +42,13 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-      - name: Set up clang
+      - name: "Non-default compiler: set up Clang"
         if: matrix.compiler == 'clang'
         run: |
           sudo apt-get install -y clang
           echo "CC=clang" >> $GITHUB_ENV
           echo "CXX=clang++" >> $GITHUB_ENV
+          echo "CMAKE_ARGS=-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++" >> $GITHUB_ENV
       - name: Install package
         env:
           VERBOSE: '1'
