@@ -23,17 +23,19 @@ nb::ndarray<T, nb::numpy, nb::shape<-1>> py_lmcf(
     nb::ndarray<T, nb::shape<-1>> edges_starts,
     nb::ndarray<T, nb::shape<-1>> edges_ends,
     nb::ndarray<T, nb::shape<-1>> capacities,
+    nb::ndarray<T, nb::shape<-1>> minimums,
     nb::ndarray<T, nb::shape<-1>> costs
     ) {
     auto node_supply_span = numpy_to_span<T>(node_supply);
     auto edges_starts_span = numpy_to_span<T>(edges_starts);
     auto edges_ends_span = numpy_to_span<T>(edges_ends);
     auto capacities_span = numpy_to_span<T>(capacities);
+    auto minimums_span = numpy_to_span<T>(minimums);
     auto costs_span = numpy_to_span<T>(costs);
 
     nb::ndarray<T, nb::numpy, nb::shape<-1>> result = create_empty_numpy_array<T>(edges_starts_span.size());
     std::span<T> result_span(static_cast<T*>(result.data()), result.shape(0));
-    lmcf(node_supply_span, edges_starts_span, edges_ends_span, capacities_span, costs_span, result_span);
+    lmcf(node_supply_span, edges_starts_span, edges_ends_span, capacities_span, minimums_span, costs_span, result_span);
 
     return result;
 }
@@ -56,6 +58,8 @@ NB_MODULE(pylmcf_cpp, m) {
         .def("get_node_supply", &Graph<int64_t>::get_node_supply_py)
         .def("set_edge_capacities", &Graph<int64_t>::set_edge_capacities_py)
         .def("get_edge_capacities", &Graph<int64_t>::get_edge_capacities_py)
+        .def("set_edge_minimums", &Graph<int64_t>::set_edge_minimums_py)
+        .def("get_edge_minimums", &Graph<int64_t>::get_edge_minimums_py)
         .def("set_edge_costs", &Graph<int64_t>::set_edge_costs_py)
         .def("get_edge_costs", &Graph<int64_t>::get_edge_costs_py)
         .def("solve", &Graph<int64_t>::solve)
