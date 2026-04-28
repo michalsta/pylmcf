@@ -45,21 +45,22 @@ class Graph(CGraph):
         for node_id, supply in enumerate(self.get_node_supply()):
             nx_graph.add_node(node_id, demand=-supply)
         capacities = self.get_edge_capacities()
+        minimums = self.get_edge_minimums()
         costs = self.get_edge_costs()
         try:
             flows = self.result()
         except RuntimeError:
             flows = None
-        for i, (edge_start, edge_end, capacity, cost) in enumerate(
-            zip(self.edge_starts(), self.edge_ends(), capacities, costs)
+        for i, (edge_start, edge_end, capacity, minimum, cost) in enumerate(
+            zip(self.edge_starts(), self.edge_ends(), capacities, minimums, costs)
         ):
-            attrs = dict(capacity=capacity, cost=cost)
+            attrs = dict(capacity=capacity, minimum=minimum, cost=cost)
             if flows is not None:
                 flow = flows[i]
                 attrs["flow"] = flow
-                attrs["label"] = f"fl: {flow} / cap: {capacity} @ cost: {cost}"
+                attrs["label"] = f"fl: {flow} / cap: {capacity} / min: {minimum} @ cost: {cost}"
             else:
-                attrs["label"] = f"cap: {capacity} @ cost: {cost}"
+                attrs["label"] = f"cap: {capacity} / min: {minimum} @ cost: {cost}"
             nx_graph.add_edge(edge_start, edge_end, **attrs)
         # for edge_start, edge_end in zip(self.edge_starts(), self.edge_ends()):
         #    nx_graph.add_edge(
@@ -83,6 +84,7 @@ class Graph(CGraph):
         nx_graph: "nx.DiGraph",
         demand: Optional[str] = "demand",
         capacity: Optional[str] = "capacity",
+        lower_bound: Optional[str] = "lower_bound",
         weight: Optional[str] = "weight",
     ) -> "Graph":
         """
@@ -96,6 +98,9 @@ class Graph(CGraph):
             capacity (str, optional):
                 The edge attribute name for capacities. Defaults to "capacity".
                 If not present, capacities must be set later using set_edge_capacities().
+            lower_bound (str, optional):
+                The edge attribute name for minimum flow values. Defaults to "lower_bound".
+                If not present, minimums default to zero (no lower bound constraint).
             weight (str, optional):
                 The edge attribute name for costs. Defaults to "weight".
                 If not present, costs must be set later using set_edge_costs().
@@ -135,6 +140,14 @@ class Graph(CGraph):
             for i, (u, v) in enumerate(sorted_edges):
                 capacities[i] = nx_graph[u][v].get(capacity, 0)
             G.set_edge_capacities(capacities)
+
+        # Set edge lower bounds
+        if lower_bound is not None:
+            minimums = np.zeros(G.no_edges(), dtype=np.int64)
+            for i, (u, v) in enumerate(sorted_edges):
+                minimums[i] = nx_graph[u][v].get(lower_bound, 0)
+            if minimums.any():
+                G.set_edge_minimums(minimums)
 
         # Set edge costs
         if weight is not None:
