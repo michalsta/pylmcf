@@ -140,7 +140,8 @@ public:
 
         for (LEMON_INT ii = 0; ii < no_edges(); ii++)
         {
-            // std::cerr << "Setting minimum " << minimums[ii] << " for edge " << ii << std::endl;
+            if (minimums[ii] < 0)
+                throw std::invalid_argument("Minimums must be non-negative");
             minimums_map[lemon_graph.arcFromId(ii)] = minimums[ii];
         }
 
