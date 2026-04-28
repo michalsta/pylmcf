@@ -125,10 +125,7 @@ public:
             throw std::invalid_argument("Capacities must have the same size as the number of edges");
 
         for (LEMON_INT ii = 0; ii < no_edges(); ii++)
-        {
-            // std::cerr << "Setting capacity " << capacities[ii] << " for edge " << ii << std::endl;
             capacities_map[lemon_graph.arcFromId(ii)] = capacities[ii];
-        }
 
         solver.upperMap(capacities_map);
         _solved = false;
@@ -221,10 +218,7 @@ public:
             throw std::runtime_error("solve() must be called before reading results");
         T* data = static_cast<T*>(malloc(sizeof(T) * no_edges()));
         for (LEMON_INT ii = 0; ii < no_edges(); ii++)
-        {
             data[ii] = solver.flow(lemon_graph.arcFromId(ii));
-            // std::cerr << "Flow for edge " << ii << " is " << data[ii] << std::endl;
-        }
         return std::span<T>(data, no_edges());
     }
 
@@ -236,9 +230,6 @@ public:
             " and capacity " + std::to_string(capacities_map[lemon_graph.arcFromId(ii)]) +
             " and minimum " + std::to_string(minimums_map[lemon_graph.arcFromId(ii)]) + "\n";
         }
-        // for (size_t ii = 0; ii < no_edges(); ii++) {
-        //     out += "  " + std::to_string(edges_starts[ii]) + " -> " + std::to_string(edges_ends[ii]) + " with cost " + std::to_string(costs[ii]) + "\n";
-        // }
         return out;
     }
 
