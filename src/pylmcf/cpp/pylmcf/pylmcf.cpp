@@ -61,6 +61,50 @@ nb::ndarray<T, nb::numpy, nb::shape<-1>> py_lmcf_no_minimums(
     return result;
 }
 
+template <typename T>
+nb::ndarray<T, nb::numpy, nb::shape<-1>> py_lmcf_cycle_canceling(
+    nb::ndarray<T, nb::shape<-1>> node_supply,
+    nb::ndarray<T, nb::shape<-1>> edges_starts,
+    nb::ndarray<T, nb::shape<-1>> edges_ends,
+    nb::ndarray<T, nb::shape<-1>> capacities,
+    nb::ndarray<T, nb::shape<-1>> minimums,
+    nb::ndarray<T, nb::shape<-1>> costs
+    ) {
+    auto node_supply_span = numpy_to_span<T>(node_supply);
+    auto edges_starts_span = numpy_to_span<T>(edges_starts);
+    auto edges_ends_span = numpy_to_span<T>(edges_ends);
+    auto capacities_span = numpy_to_span<T>(capacities);
+    auto minimums_span = numpy_to_span<T>(minimums);
+    auto costs_span = numpy_to_span<T>(costs);
+
+    nb::ndarray<T, nb::numpy, nb::shape<-1>> result = create_empty_numpy_array<T>(edges_starts_span.size());
+    std::span<T> result_span(static_cast<T*>(result.data()), result.shape(0));
+    lmcf_cycle_canceling(node_supply_span, edges_starts_span, edges_ends_span, capacities_span, minimums_span, costs_span, result_span);
+
+    return result;
+}
+
+template <typename T>
+nb::ndarray<T, nb::numpy, nb::shape<-1>> py_lmcf_cycle_canceling_no_minimums(
+    nb::ndarray<T, nb::shape<-1>> node_supply,
+    nb::ndarray<T, nb::shape<-1>> edges_starts,
+    nb::ndarray<T, nb::shape<-1>> edges_ends,
+    nb::ndarray<T, nb::shape<-1>> capacities,
+    nb::ndarray<T, nb::shape<-1>> costs
+    ) {
+    auto node_supply_span = numpy_to_span<T>(node_supply);
+    auto edges_starts_span = numpy_to_span<T>(edges_starts);
+    auto edges_ends_span = numpy_to_span<T>(edges_ends);
+    auto capacities_span = numpy_to_span<T>(capacities);
+    auto costs_span = numpy_to_span<T>(costs);
+
+    nb::ndarray<T, nb::numpy, nb::shape<-1>> result = create_empty_numpy_array<T>(edges_starts_span.size());
+    std::span<T> result_span(static_cast<T*>(result.data()), result.shape(0));
+    lmcf_cycle_canceling(node_supply_span, edges_starts_span, edges_ends_span, capacities_span, costs_span, result_span);
+
+    return result;
+}
+
 NB_MODULE(pylmcf_cpp, m) {
     m.doc() = "Python binding for the LEMON min cost flow solver";
     // No-minimums overloads registered first so old call sites (5 arrays) continue to work
@@ -72,6 +116,15 @@ NB_MODULE(pylmcf_cpp, m) {
     m.def("lmcf", &py_lmcf<int16_t>, "Compute the lmcf for a given graph");
     m.def("lmcf", &py_lmcf<int32_t>, "Compute the lmcf for a given graph");
     m.def("lmcf", &py_lmcf<int64_t>, "Compute the lmcf for a given graph");
+    // Cycle-canceling variants
+    m.def("lmcf_cycle_canceling", &py_lmcf_cycle_canceling_no_minimums<int8_t>, "Compute the lmcf using cycle-canceling for a given graph");
+    m.def("lmcf_cycle_canceling", &py_lmcf_cycle_canceling_no_minimums<int16_t>, "Compute the lmcf using cycle-canceling for a given graph");
+    m.def("lmcf_cycle_canceling", &py_lmcf_cycle_canceling_no_minimums<int32_t>, "Compute the lmcf using cycle-canceling for a given graph");
+    m.def("lmcf_cycle_canceling", &py_lmcf_cycle_canceling_no_minimums<int64_t>, "Compute the lmcf using cycle-canceling for a given graph");
+    m.def("lmcf_cycle_canceling", &py_lmcf_cycle_canceling<int8_t>, "Compute the lmcf using cycle-canceling for a given graph");
+    m.def("lmcf_cycle_canceling", &py_lmcf_cycle_canceling<int16_t>, "Compute the lmcf using cycle-canceling for a given graph");
+    m.def("lmcf_cycle_canceling", &py_lmcf_cycle_canceling<int32_t>, "Compute the lmcf using cycle-canceling for a given graph");
+    m.def("lmcf_cycle_canceling", &py_lmcf_cycle_canceling<int64_t>, "Compute the lmcf using cycle-canceling for a given graph");
 
 
     nb::class_<Graph<int64_t>>(m, "CGraph")
