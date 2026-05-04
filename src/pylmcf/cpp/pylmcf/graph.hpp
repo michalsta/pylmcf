@@ -56,6 +56,7 @@ private:
     const lemon::StaticDigraph lemon_graph;
     lemon::StaticDigraph::NodeMap<T> node_supply_map;
     lemon::StaticDigraph::ArcMap<T> capacities_map;
+    lemon::StaticDigraph::ArcMap<T> minimums_map;
     lemon::StaticDigraph::ArcMap<T> costs_map;
 
     lemon::NetworkSimplex<lemon::StaticDigraph, T, T> solver;
@@ -71,6 +72,7 @@ public:
         lemon_graph(make_lemon_graph(no_nodes, edge_starts, edge_ends)),
         node_supply_map(lemon_graph),
         capacities_map(lemon_graph),
+        minimums_map(lemon_graph),
         costs_map(lemon_graph),
         solver(lemon_graph)
         {};
@@ -123,12 +125,24 @@ public:
             throw std::invalid_argument("Capacities must have the same size as the number of edges");
 
         for (LEMON_INT ii = 0; ii < no_edges(); ii++)
-        {
-            // std::cerr << "Setting capacity " << capacities[ii] << " for edge " << ii << std::endl;
             capacities_map[lemon_graph.arcFromId(ii)] = capacities[ii];
-        }
 
         solver.upperMap(capacities_map);
+        _solved = false;
+    }
+
+    void set_edge_minimums(const std::span<T> &minimums) {
+        if (minimums.size() != static_cast<size_t>(no_edges()))
+            throw std::invalid_argument("Minimums must have the same size as the number of edges");
+
+        for (LEMON_INT ii = 0; ii < no_edges(); ii++)
+        {
+            if (minimums[ii] < 0)
+                throw std::invalid_argument("Minimums must be non-negative");
+            minimums_map[lemon_graph.arcFromId(ii)] = minimums[ii];
+        }
+
+        solver.lowerMap(minimums_map);
         _solved = false;
     }
 
@@ -138,6 +152,16 @@ public:
         for (LEMON_INT ii = 0; ii < no_edges(); ii++)
         {
             data[ii] = capacities_map[lemon_graph.arcFromId(ii)];
+        }
+        return std::span<T>(data, no_edges());
+    }
+
+    // Caller must free() the returned span's data.
+    std::span<T> get_edge_minimums() const {
+        T* data = static_cast<T*>(malloc(sizeof(T) * no_edges()));
+        for (LEMON_INT ii = 0; ii < no_edges(); ii++)
+        {
+            data[ii] = minimums_map[lemon_graph.arcFromId(ii)];
         }
         return std::span<T>(data, no_edges());
     }
@@ -194,10 +218,7 @@ public:
             throw std::runtime_error("solve() must be called before reading results");
         T* data = static_cast<T*>(malloc(sizeof(T) * no_edges()));
         for (LEMON_INT ii = 0; ii < no_edges(); ii++)
-        {
             data[ii] = solver.flow(lemon_graph.arcFromId(ii));
-            // std::cerr << "Flow for edge " << ii << " is " << data[ii] << std::endl;
-        }
         return std::span<T>(data, no_edges());
     }
 
@@ -205,11 +226,10 @@ public:
         std::string out = "Graph with " + std::to_string(no_nodes()) + " nodes and " + std::to_string(no_edges()) + " edges\n";
         out += "Edges:\n";
         for (LEMON_INT ii = 0; ii < no_edges(); ii++) {
-            out += "  " + std::to_string(lemon_graph.id(lemon_graph.source(lemon_graph.arcFromId(ii)))) + " -> " + std::to_string(lemon_graph.id(lemon_graph.target(lemon_graph.arcFromId(ii)))) + " with cost " + std::to_string(costs_map[lemon_graph.arcFromId(ii)]) + " and capacity " + std::to_string(capacities_map[lemon_graph.arcFromId(ii)]) + "\n";
+            out += "  " + std::to_string(lemon_graph.id(lemon_graph.source(lemon_graph.arcFromId(ii)))) + " -> " + std::to_string(lemon_graph.id(lemon_graph.target(lemon_graph.arcFromId(ii)))) + " with cost " + std::to_string(costs_map[lemon_graph.arcFromId(ii)]) +
+            " and capacity " + std::to_string(capacities_map[lemon_graph.arcFromId(ii)]) +
+            " and minimum " + std::to_string(minimums_map[lemon_graph.arcFromId(ii)]) + "\n";
         }
-        // for (size_t ii = 0; ii < no_edges(); ii++) {
-        //     out += "  " + std::to_string(edges_starts[ii]) + " -> " + std::to_string(edges_ends[ii]) + " with cost " + std::to_string(costs[ii]) + "\n";
-        // }
         return out;
     }
 
@@ -226,6 +246,10 @@ public:
         set_edge_capacities(numpy_to_span(capacities));
     }
 
+    void set_edge_minimums_py(const nb::ndarray<T, nb::shape<-1>> &minimums) {
+        set_edge_minimums(numpy_to_span(minimums));
+    }
+
     void set_edge_costs_py(const nb::ndarray<T, nb::shape<-1>> &costs) {
         set_edge_costs(numpy_to_span(costs));
     }
@@ -236,6 +260,10 @@ public:
 
     nb::ndarray<T, nb::numpy, nb::shape<-1>> get_edge_capacities_py() const {
         return steal_mallocd_span_to_np_array(get_edge_capacities());
+    }
+
+    nb::ndarray<T, nb::numpy, nb::shape<-1>> get_edge_minimums_py() const {
+        return steal_mallocd_span_to_np_array(get_edge_minimums());
     }
 
     nb::ndarray<T, nb::numpy, nb::shape<-1>> get_edge_costs_py() const {

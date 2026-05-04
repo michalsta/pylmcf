@@ -1055,6 +1055,8 @@ namespace lemon {
 
   private:
 
+  public:
+
     // Initialize internal data structures
     bool init() {
       if (_node_num == 0) return false;
@@ -1234,6 +1236,79 @@ namespace lemon {
 
       return true;
     }
+
+    // Warm-start accessors — expose internal arrays for external repair.
+    // Index i is the internal simplex arc index (_arc_id[a]), not the LEMON id.
+    int  internalArcId(const Arc& a)   const { return _arc_id[a]; }
+    int  internalNodeId(const Node& n) const { return _node_id[n]; }
+    int  rootNode()                    const { return _root; }
+    Value&       internalCap(int i)    { return _cap[i]; }
+    Value&       internalFlow(int i)   { return _flow[i]; }
+    Value&       internalSupply(int i) { return _supply[i]; }
+    signed char& internalState(int i)  { return _state[i]; }
+    Value&       sumSupplyMutable()    { return _sum_supply; }
+    static constexpr signed char STATE_LOWER_VAL = STATE_LOWER;
+    static constexpr signed char STATE_UPPER_VAL = STATE_UPPER;
+    static constexpr signed char STATE_TREE_VAL  = STATE_TREE;
+
+    // Sync _cap[i] from _upper[i] for all real arcs (i < _arc_num).
+    // Call after upperMap() and before repairTreeFlows().
+    void syncCapsFromUpper() {
+      if (_has_lower) {
+        for (int i = 0; i != _arc_num; ++i) {
+          Value c = _lower[i];
+          _cap[i] = _upper[i] < MAX + c ? _upper[i] - c : INF;
+        }
+      } else {
+        for (int i = 0; i != _arc_num; ++i) {
+          _cap[i] = _upper[i];
+        }
+      }
+    }
+
+    // Recompute tree arc flows to satisfy conservation for the current _supply[]
+    // and _cap[] (after syncCapsFromUpper).  Non-tree arcs are forced to their
+    // bound: STATE_LOWER → 0, STATE_UPPER → cap.  Tree arc flows are computed
+    // bottom-up via reverse-preorder (_rev_thread).
+    // Returns false if any tree arc flow would be negative or exceed its capacity
+    // (primal infeasible — caller should fall back to a cold run()).
+    bool repairTreeFlows() {
+      // Fix non-tree arc flows to their bounds.
+      for (int i = 0; i != _arc_num; ++i) {
+        if      (_state[i] == STATE_LOWER) _flow[i] = 0;
+        else if (_state[i] == STATE_UPPER) _flow[i] = _cap[i];
+      }
+
+      // Per-node running excess: supply minus non-tree arc contributions.
+      std::vector<Value> running(_node_num + 1, Value(0));
+      for (int i = 0; i <= _node_num; ++i) running[i] = _supply[i];
+      for (int i = 0; i != _arc_num; ++i) {
+        if (_state[i] != STATE_TREE) {
+          running[_source[i]] -= _flow[i];
+          running[_target[i]] += _flow[i];
+        }
+      }
+
+      // Bottom-up traversal via reverse preorder (_rev_thread).
+      // For each non-root node u:  _flow[pred[u]] = _pred_dir[u] * running[u]
+      //   DIR_UP (+1): arc u→parent, carries running[u] units out of subtree.
+      //   DIR_DOWN (-1): arc parent→u, carries -running[u] units into subtree.
+      // Then propagate running[u] into parent.
+      for (int u = _rev_thread[_root]; u != _root; u = _rev_thread[u]) {
+        int e = _pred[u];
+        _flow[e] = Value(_pred_dir[u]) * running[u];
+        running[_parent[u]] += running[u];
+      }
+
+      // Check real tree arcs for capacity violations.
+      for (int i = 0; i != _arc_num; ++i) {
+        if (_state[i] == STATE_TREE && (_flow[i] < 0 || _flow[i] > _cap[i]))
+          return false;
+      }
+      return true;
+    }
+
+  private:
 
     // Check if the upper bound is greater than or equal to the lower bound
     // on each arc.
@@ -1568,6 +1643,8 @@ namespace lemon {
       }
       return true;
     }
+
+  public:
 
     // Execute the algorithm
     ProblemType start(PivotRule pivot_rule) {

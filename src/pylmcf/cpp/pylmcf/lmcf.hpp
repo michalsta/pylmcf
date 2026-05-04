@@ -1,6 +1,7 @@
 #ifndef PYLMCF_LMCF_HPP
 #define PYLMCF_LMCF_HPP
 
+#include <optional>
 #include <span>
 #include <iostream>
 #include <lemon/list_graph.h>
@@ -17,19 +18,23 @@ void print_span(std::span<T> span) {
 }
 
 // Function to compute the LMCF
+// minimums may be an empty span {} to indicate no lower bounds (zero by default)
 template <typename T>
 T lmcf(
     std::span<T> node_supply,
     std::span<T> edges_starts,
     std::span<T> edges_ends,
     std::span<T> capacities,
+    std::span<T> minimums,
     std::span<T> costs,
     std::span<T> result
     )
     requires std::is_signed<T>::value && std::is_integral<T>::value
     {
     // Make sure all edge arrays and result are the same size
-    if (edges_starts.size() != edges_ends.size() || edges_starts.size() != capacities.size() || edges_starts.size() != costs.size() || edges_starts.size() != result.size()) {
+    if (edges_starts.size() != edges_ends.size() || edges_starts.size() != capacities.size() ||
+        (!minimums.empty() && edges_starts.size() != minimums.size()) ||
+        edges_starts.size() != costs.size() || edges_starts.size() != result.size()) {
         throw std::invalid_argument("All edge arrays and result must be the same size");
     }
 
@@ -43,6 +48,9 @@ T lmcf(
         }
         if (capacities[i] < 0) {
             throw std::invalid_argument("Capacities must be non-negative");
+        }
+        if (!minimums.empty() && minimums[i] < 0) {
+            throw std::invalid_argument("Minimums must be non-negative");
         }
         if (costs[i] < 0) {
             throw std::invalid_argument("Costs must be non-negative");
@@ -78,6 +86,15 @@ T lmcf(
     // Create a new network simplex solver
     lemon::NetworkSimplex<lemon::ListDigraph, T, T> solver(graph);
 
+    // Only register lower bounds when provided — avoids the O(m) init overhead otherwise
+    std::optional<lemon::ListDigraph::ArcMap<T>> minimums_map;
+    if (!minimums.empty()) {
+        minimums_map.emplace(graph);
+        for (size_t i = 0; i < no_edges; i++)
+            (*minimums_map)[arcs[i]] = minimums[i];
+        solver.lowerMap(*minimums_map);
+    }
+
     // Run the solver
     solver.upperMap(capacities_map);
     solver.costMap(costs_map);
@@ -97,6 +114,21 @@ T lmcf(
         result[i] = solver.flow(arcs[i]);
 
     return solver.totalCost();
+}
+
+// Backward-compatible overload — no lower bounds
+template <typename T>
+T lmcf(
+    std::span<T> node_supply,
+    std::span<T> edges_starts,
+    std::span<T> edges_ends,
+    std::span<T> capacities,
+    std::span<T> costs,
+    std::span<T> result
+    )
+    requires std::is_signed<T>::value && std::is_integral<T>::value
+{
+    return lmcf(node_supply, edges_starts, edges_ends, capacities, std::span<T>{}, costs, result);
 }
 
 #endif // PYLMCF_LMCF_HPP
