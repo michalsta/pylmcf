@@ -90,7 +90,7 @@ namespace lemon {
   template<>
   class Tolerance<float>
   {
-    static float def_epsilon;
+    static inline float def_epsilon = 1e-4f;
     float _epsilon;
   public:
     ///\e
@@ -141,7 +141,7 @@ namespace lemon {
   template<>
   class Tolerance<double>
   {
-    static double def_epsilon;
+    static inline double def_epsilon = 1e-10;
     double _epsilon;
   public:
     ///\e
@@ -192,7 +192,7 @@ namespace lemon {
   template<>
   class Tolerance<long double>
   {
-    static long double def_epsilon;
+    static inline long double def_epsilon = 1e-14L;
     long double _epsilon;
   public:
     ///\e
