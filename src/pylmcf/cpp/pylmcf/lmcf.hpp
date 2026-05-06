@@ -7,6 +7,8 @@
 #include <lemon/list_graph.h>
 #include <lemon/network_simplex.h>
 #include <lemon/cycle_canceling.h>
+#include <lemon/cost_scaling.h>
+#include <lemon/capacity_scaling.h>
 #include <type_traits>
 
 
