@@ -337,8 +337,16 @@ namespace lemon {
 
     ///Destructor.
     ~BellmanFord() {
+      // _local_pred/_local_dist are false when maps are externally provided
+      // (e.g. via SetPredMap/SetDistMap traits + predMap()/distMap() calls).
+      // GCC's -Wfree-nonheap-object fires as a false positive after inlining
+      // because it loses track of the _local_* guard. Clang accepts GCC
+      // pragmas; MSVC silently ignores unknown pragmas.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wfree-nonheap-object"
       if(_local_pred) delete _pred;
       if(_local_dist) delete _dist;
+#pragma GCC diagnostic pop
       if(_mask) delete _mask;
     }
 
