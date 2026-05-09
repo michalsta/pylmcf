@@ -1693,7 +1693,14 @@ namespace lemon {
       // Execute the Network Simplex algorithm
       long long iter_count = 0;
       while (pivot.findEnteringArc()) {
-        if (_max_iter > 0 && ++iter_count > _max_iter) return MAX_ITER_REACHED;
+        ++iter_count;
+        if (iter_count % 1000000 == 0) {
+          std::cerr << "[lemon::NetworkSimplex] pivot #" << iter_count
+                    << " arcs=" << _search_arc_num
+                    << " nodes=" << _node_num << "\n";
+          std::cerr.flush();
+        }
+        if (_max_iter > 0 && iter_count > _max_iter) return MAX_ITER_REACHED;
         findJoinNode();
         bool change = findLeavingArc();
         if (delta >= MAX) return UNBOUNDED;
