@@ -1694,7 +1694,7 @@ namespace lemon {
       long long iter_count = 0;
       while (pivot.findEnteringArc()) {
         ++iter_count;
-        if (iter_count % 1000000 == 0) {
+        if (iter_count % 10000 == 0) {
           std::cerr << "[lemon::NetworkSimplex] pivot #" << iter_count
                     << " arcs=" << _search_arc_num
                     << " nodes=" << _node_num << "\n";
