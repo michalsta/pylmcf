@@ -97,7 +97,10 @@ namespace lemon {
       /// The objective function of the problem is unbounded, i.e.
       /// there is a directed cycle having negative total cost and
       /// infinite upper bound.
-      UNBOUNDED
+      UNBOUNDED,
+      /// The pivot loop exceeded the iteration limit set by maxIter().
+      /// The algorithm may be cycling on a degenerate instance.
+      MAX_ITER_REACHED
     };
 
     /// \brief Constants for selecting the type of the supply constraints.
@@ -235,6 +238,9 @@ namespace lemon {
     Value delta;
 
     const Value MAX;
+
+    // Iteration limit (0 = unlimited)
+    long long _max_iter;
 
   public:
 
@@ -651,7 +657,8 @@ namespace lemon {
       _arc_mixing(arc_mixing),
       MAX(std::numeric_limits<Value>::max()),
       INF(std::numeric_limits<Value>::has_infinity ?
-          std::numeric_limits<Value>::infinity() : MAX)
+          std::numeric_limits<Value>::infinity() : MAX),
+      _max_iter(0)
     {
       // Check the number types
       LEMON_ASSERT(std::numeric_limits<Value>::is_signed,
@@ -786,6 +793,18 @@ namespace lemon {
     /// \return <tt>(*this)</tt>
     NetworkSimplex& supplyType(SupplyType supply_type) {
       _stype = supply_type;
+      return *this;
+    }
+
+    /// \brief Set the maximum number of pivot iterations.
+    ///
+    /// Set an upper bound on the number of pivot iterations. If the
+    /// pivot loop exceeds this limit, \ref run() returns
+    /// \ref MAX_ITER_REACHED. A value of 0 (the default) means no limit.
+    ///
+    /// \return <tt>(*this)</tt>
+    NetworkSimplex& maxIter(long long max_iter) {
+      _max_iter = max_iter;
       return *this;
     }
 
@@ -1672,7 +1691,9 @@ namespace lemon {
       if (!initialPivots()) return UNBOUNDED;
 
       // Execute the Network Simplex algorithm
+      long long iter_count = 0;
       while (pivot.findEnteringArc()) {
+        if (_max_iter > 0 && ++iter_count > _max_iter) return MAX_ITER_REACHED;
         findJoinNode();
         bool change = findLeavingArc();
         if (delta >= MAX) return UNBOUNDED;
