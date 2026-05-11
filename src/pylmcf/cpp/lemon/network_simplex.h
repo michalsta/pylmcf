@@ -236,6 +236,10 @@ namespace lemon {
 
     const Value MAX;
 
+    // Warm-restart counters (incremented by warmRun() only).
+    int _warm_start_count = 0;
+    int _cold_start_count = 0;
+
   public:
 
     /// \brief Constant for infinite upper bounds (capacities).
@@ -1251,6 +1255,37 @@ namespace lemon {
     static constexpr signed char STATE_UPPER_VAL = STATE_UPPER;
     static constexpr signed char STATE_TREE_VAL  = STATE_TREE;
 
+    // Warm-start run: skip init(), repair the current spanning tree for the
+    // new bounds/supplies, then run the simplex from that repaired basis.
+    // Callers must have already called upperMap() and supplyMap() to update
+    // the internal _upper[] and _supply[] arrays.  Falls back transparently
+    // to a cold init()+start() if repairTreeFlows() reports an infeasible
+    // tree (e.g. a capacity decreased below the current tree-arc flow).
+    // Only meaningful for EQ-supply problems (_sum_supply == 0); other supply
+    // types fall back to cold start.
+    ProblemType warmRun(PivotRule pivot_rule = BLOCK_SEARCH) {
+      // Recompute _sum_supply from the (already updated) real-node supplies.
+      _sum_supply = 0;
+      for (int i = 0; i != _node_num; ++i)
+        _sum_supply += _supply[i];
+      // Warm path: EQ supply and tree remains primal-feasible after repair.
+      if (_sum_supply == 0) {
+        _supply[_root] = 0;
+        syncCapsFromUpper();
+        if (repairTreeFlows()) {
+          ++_warm_start_count;
+          return start(pivot_rule);
+        }
+      }
+      // Cold fallback.
+      ++_cold_start_count;
+      if (!init()) return INFEASIBLE;
+      return start(pivot_rule);
+    }
+
+    int warmStartCount() const { return _warm_start_count; }
+    int coldStartCount() const { return _cold_start_count; }
+
     // Sync _cap[i] from _upper[i] for all real arcs (i < _arc_num).
     // Call after upperMap() and before repairTreeFlows().
     void syncCapsFromUpper() {
@@ -1300,8 +1335,13 @@ namespace lemon {
         running[_parent[u]] += running[u];
       }
 
-      // Check real tree arcs for capacity violations.
-      for (int i = 0; i != _arc_num; ++i) {
+      // Check all tree arcs (real and artificial) for feasibility.
+      // Real arcs: flow must be in [0, cap].
+      // Artificial arcs: cap == INF so only check flow >= 0.  A negative
+      // artificial-arc flow means a STATE_UPPER real arc had its capacity
+      // increased, draining a node whose supply cannot be replenished by the
+      // current tree — the basis is not warm-startable in this case.
+      for (int i = 0; i != _all_arc_num; ++i) {
         if (_state[i] == STATE_TREE && (_flow[i] < 0 || _flow[i] > _cap[i]))
           return false;
       }
