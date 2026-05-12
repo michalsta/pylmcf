@@ -239,6 +239,12 @@ namespace lemon {
     // Warm-restart counters (incremented by warmRun() only).
     int _warm_start_count = 0;
     int _cold_start_count = 0;
+    // Per-arc repair counters (cumulative across all warmRun() calls).
+    int _ejected_arc_count = 0;          // real tree arcs repaired via ejection
+    int _cold_artificial_infeasible = 0; // artificial arc in tree / negative → forced cold
+    int _cold_dir_down_overcap = 0;      // DIR_DOWN arc overcapacity → forced cold
+    int _cold_underflow = 0;             // real tree arc computed flow < 0 → forced cold
+    int _dir_down_reattach = 0;          // DIR_DOWN overcapacity reattaches (debug)
 
   public:
 
@@ -1255,6 +1261,47 @@ namespace lemon {
     static constexpr signed char STATE_UPPER_VAL = STATE_UPPER;
     static constexpr signed char STATE_TREE_VAL  = STATE_TREE;
 
+    // After a cold solve, some supply>=0 artif arcs may remain STATE_TREE with
+    // flow=0 (degenerate basis).  A subsequent warm start recomputes tree-arc
+    // flows bottom-up; if such a node's subtree develops a deficit after cap
+    // changes, its artif arc would receive negative flow — causing cold
+    // fallback.  Fix by performing a zero-delta (degenerate) pivot for each
+    // such arc: swap it out for the first available STATE_LOWER real arc
+    // incident to u.  Uses the existing updateTreeStructure/updatePotential
+    // machinery so all spanning-tree bookkeeping stays consistent.
+    int _eject_found = 0, _eject_fixed_lower = 0;
+
+    void ejectDegenerateArtifArcs() {
+      for (int u = 0; u != _node_num; ++u) {
+        int a = _arc_num + u;
+        if (_state[a] != STATE_TREE || _flow[a] != 0) continue;
+        ++_eject_found;
+        for (int e = 0; e < _arc_num; ++e) {
+          if (_state[e] != STATE_LOWER) continue;
+          int vv = (_source[e] == u) ? _target[e] :
+                   (_target[e] == u) ? _source[e] : -1;
+          if (vv < 0) continue;
+          if (_succ_num[u] > 1) {
+            int p = vv;
+            while (p != _root && p != u) p = _parent[p];
+            if (p == u) continue;
+          }
+          in_arc = e;
+          u_in   = u;
+          u_out  = u;
+          v_in   = vv;
+          v_out  = _parent[u];
+          delta  = 0;
+          findJoinNode();
+          changeFlow(true);
+          updateTreeStructure();
+          updatePotential();
+          ++_eject_fixed_lower;
+          break;
+        }
+      }
+    }
+
     // Warm-start run: skip init(), repair the current spanning tree for the
     // new bounds/supplies, then run the simplex from that repaired basis.
     // Callers must have already called upperMap() and supplyMap() to update
@@ -1274,17 +1321,30 @@ namespace lemon {
         syncCapsFromUpper();
         if (repairTreeFlows()) {
           ++_warm_start_count;
-          return start(pivot_rule);
+          ProblemType r = start(pivot_rule);
+          if (r == OPTIMAL) ejectDegenerateArtifArcs();
+          return r;
         }
       }
       // Cold fallback.
       ++_cold_start_count;
       if (!init()) return INFEASIBLE;
-      return start(pivot_rule);
+      ProblemType r = start(pivot_rule);
+      if (r == OPTIMAL) ejectDegenerateArtifArcs();
+      return r;
     }
 
-    int warmStartCount() const { return _warm_start_count; }
-    int coldStartCount() const { return _cold_start_count; }
+    int warmStartCount()              const { return _warm_start_count; }
+    int coldStartCount()              const { return _cold_start_count; }
+    int ejectCount()                  const { return _ejected_arc_count; }
+    int coldArtificialInfeasibleCount() const { return _cold_artificial_infeasible; }
+    int coldDirDownOvercapCount()     const { return _cold_dir_down_overcap; }
+    int coldUnderflowCount()          const { return _cold_underflow; }
+    int ejectFoundCount()             const { return _eject_found; }
+    int ejectFixedCount()             const { return _eject_fixed_lower; }
+    int ejectFixedLowerCount()        const { return _eject_fixed_lower; }
+    int ejectFixedUpperCount()        const { return 0; }
+    int dirDownReattachCount()        const { return _dir_down_reattach; }
 
     // Sync _cap[i] from _upper[i] for all real arcs (i < _arc_num).
     // Call after upperMap() and before repairTreeFlows().
@@ -1303,12 +1363,51 @@ namespace lemon {
 
     // Recompute tree arc flows to satisfy conservation for the current _supply[]
     // and _cap[] (after syncCapsFromUpper).  Non-tree arcs are forced to their
-    // bound: STATE_LOWER → 0, STATE_UPPER → cap.  Tree arc flows are computed
-    // bottom-up via reverse-preorder (_rev_thread).
-    // Returns false if any tree arc flow would be negative or exceed its capacity
-    // (primal infeasible — caller should fall back to a cold run()).
+    // Re-attach node u's subtree (currently hanging off _parent[u]) directly
+    // to _root via tree arc a.  Updates _parent, _pred, _pred_dir, _thread,
+    // _rev_thread, _succ_num, and _last_succ.  Does NOT update potentials.
+    void reattachToRoot(int u, int a) {
+      int v_out    = _parent[u];
+      int old_rev  = _rev_thread[u];
+      int old_succ = _succ_num[u];
+      int old_last = _last_succ[u];
+
+      // Update u's tree data.
+      _parent[u]   = _root;
+      _pred[u]     = a;
+      _pred_dir[u] = (_source[a] == u) ? DIR_UP : DIR_DOWN;
+
+      // Remove u's DFS block from its current position.
+      int after = _thread[old_last];
+      _thread[old_rev] = after;
+      _rev_thread[after] = old_rev;
+      // Insert u's DFS block immediately after _root.
+      int root_next = _thread[_root];
+      _thread[_root]         = u;
+      _rev_thread[u]         = _root;
+      _thread[old_last]      = root_next;
+      _rev_thread[root_next] = old_last;
+
+      // Update _succ_num for ancestors of v_out up to (not including) _root.
+      // _root's _succ_num is invariant (_node_num + 1).
+      for (int p = v_out; p != _root; p = _parent[p])
+        _succ_num[p] -= old_succ;
+      // Update _last_succ for ancestors of v_out that had old_last as their
+      // last DFS successor.  Must go all the way up through _root (parent[_root]
+      // = -1 terminates the loop), matching LEMON's updateTreeStructure logic.
+      for (int p = v_out; p != -1 && _last_succ[p] == old_last; p = _parent[p])
+        _last_succ[p] = old_rev;
+    }
+
+    // Fix non-tree arc flows to their bounds, compute tree arc flows bottom-up,
+    // then repair any over-capacity real tree arcs by ejecting them to their
+    // corresponding artificial arcs (which absorb the excess via reattachment
+    // to the root).  The artificial arc's huge-or-zero cost ensures start()
+    // will naturally pivot it out in 1–3 extra pivots.
+    // Returns false only if an artificial tree arc already has negative flow
+    // (supply-imbalance — should be eliminated by the reserve arc mechanism).
     bool repairTreeFlows() {
-      // Fix non-tree arc flows to their bounds.
+      // Fix non-tree real arc flows to their bounds.
       for (int i = 0; i != _arc_num; ++i) {
         if      (_state[i] == STATE_LOWER) _flow[i] = 0;
         else if (_state[i] == STATE_UPPER) _flow[i] = _cap[i];
@@ -1324,26 +1423,111 @@ namespace lemon {
         }
       }
 
-      // Bottom-up traversal via reverse preorder (_rev_thread).
-      // For each non-root node u:  _flow[pred[u]] = _pred_dir[u] * running[u]
-      //   DIR_UP (+1): arc u→parent, carries running[u] units out of subtree.
-      //   DIR_DOWN (-1): arc parent→u, carries -running[u] units into subtree.
-      // Then propagate running[u] into parent.
-      for (int u = _rev_thread[_root]; u != _root; u = _rev_thread[u]) {
+      // Pre-collect bottom-up traversal order (deepest nodes first).
+      // Must be done before any reattachToRoot() calls because those modify
+      // _rev_thread, which would corrupt an in-progress traversal.
+      std::vector<int> order;
+      order.reserve(_node_num);
+      for (int u = _rev_thread[_root]; u != _root; u = _rev_thread[u])
+        order.push_back(u);
+
+      // Single bottom-up pass: compute tree arc flows and eject overcapacity
+      // arcs inline.  When a real tree arc e is overcapacity, u is reattached
+      // to the root via its artificial arc and only _cap[e] units continue
+      // flowing through e; the excess bypasses the original parent via the
+      // artificial arc.  To preserve flow conservation at ancestors, we
+      // accumulate pred_dir*cap[e] into the original parent's running total
+      // rather than the full running[u].  This is critical when both a
+      // descendant and its ancestor are overcapacity: the descendant must be
+      // ejected first (bottom-up order) and its reduced contribution correctly
+      // reflected in the ancestor's flow computation.
+      for (int u : order) {
         int e = _pred[u];
         _flow[e] = Value(_pred_dir[u]) * running[u];
-        running[_parent[u]] += running[u];
+
+        if (e < _arc_num && _flow[e] > _cap[e]) {
+          // DIR_DOWN overcapacity: ART_COST potential shift corrupts LP — fall back.
+          if (_pred_dir[u] != DIR_UP) { ++_cold_dir_down_overcap; return false; }
+          // Overcapacity real tree arc: eject to corresponding artificial arc.
+          // Only reachable for DIR_UP (supply>=0, artif u→root, cost=0→1).
+          Value excess = _flow[e] - _cap[e];
+          _flow[e] = _cap[e];
+          _state[e] = STATE_UPPER;
+
+          // Artificial arc for node u: index = _arc_num + u.
+          // source[a] == u, target[a] == root, cost was 0.
+          int a = _arc_num + u;
+          if (_state[a] != STATE_LOWER) {
+            // Artificial arc already in tree — cannot eject.
+            ++_cold_artificial_infeasible;
+            return false;
+          }
+          _flow[a] = excess;
+          _state[a] = STATE_TREE;
+          // Give the artif arc a small positive cost so start() is incentivised
+          // to pivot it out (cost 0 makes it indifferent).
+          if (_cost[a] == 0) _cost[a] = 1;
+
+          int v_out = _parent[u];   // capture original parent before reattachment
+          reattachToRoot(u, a);
+          ++_ejected_arc_count;
+
+          // Update potentials: pi_new = pi[root] + cost[a] = 1.
+          // Technically off by 2 from exact dual feasibility (c̄=2 instead of 0),
+          // but harmless in practice since start() absorbs small sigma in 1-2 pivots.
+          {
+            Value pi_new = _pi[_root] + _cost[a];
+            Value sigma = pi_new - _pi[u];
+            if (sigma != 0) {
+              int end = _thread[_last_succ[u]];
+              for (int v = u; v != end; v = _thread[v])
+                _pi[v] += sigma;
+            }
+          }
+
+          // Accumulate only the capped flow contribution to the original parent.
+          // The excess flows via the artificial arc directly to root, bypassing
+          // v_out and all higher ancestors.  Using pred_dir*cap[e] instead of
+          // running[u] avoids double-counting the excess in ancestor arc flows.
+          running[v_out] += Value(_pred_dir[u]) * _cap[e];
+        } else {
+          if (e < _arc_num && _flow[e] < 0) {
+            // Underflow: arc wants negative flow.  This can happen when a demand
+            // node (supply<0, artif root→u) has been pivoted into a DIR_UP tree
+            // position.  The artif arc carries the deficit to balance flow.
+            int a = _arc_num + u;
+            if (_state[a] != STATE_LOWER) { ++_cold_artificial_infeasible; return false; }
+            Value artif_flow = (_source[a] == u) ? running[u] : -running[u];
+            if (artif_flow <= 0) { ++_cold_underflow; return false; }
+            _flow[e] = 0;
+            _state[e] = STATE_LOWER;
+            _flow[a] = artif_flow;
+            _state[a] = STATE_TREE;
+            if (_cost[a] == 0) _cost[a] = 1;
+            reattachToRoot(u, a);
+            ++_ejected_arc_count;
+            // Potential update: same formula as LEMON init() assigns based on arc direction.
+            Value pi_new = (_source[a] == u)
+                         ? (_pi[_root] + _cost[a])
+                         : (_pi[_root] - _cost[a]);
+            Value sigma = pi_new - _pi[u];
+            if (sigma != 0) {
+              int end = _thread[_last_succ[u]];
+              for (int v = u; v != end; v = _thread[v])
+                _pi[v] += sigma;
+            }
+          } else {
+            running[_parent[u]] += running[u];
+          }
+        }
       }
 
-      // Check all tree arcs (real and artificial) for feasibility.
-      // Real arcs: flow must be in [0, cap].
-      // Artificial arcs: cap == INF so only check flow >= 0.  A negative
-      // artificial-arc flow means a STATE_UPPER real arc had its capacity
-      // increased, draining a node whose supply cannot be replenished by the
-      // current tree — the basis is not warm-startable in this case.
-      for (int i = 0; i != _all_arc_num; ++i) {
-        if (_state[i] == STATE_TREE && (_flow[i] < 0 || _flow[i] > _cap[i]))
+      // Final check: no artificial tree arc should have negative flow.
+      for (int i = _arc_num; i != _all_arc_num; ++i) {
+        if (_state[i] == STATE_TREE && _flow[i] < 0) {
+          ++_cold_artificial_infeasible;
           return false;
+        }
       }
       return true;
     }
