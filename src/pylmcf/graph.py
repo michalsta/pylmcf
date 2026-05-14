@@ -117,15 +117,27 @@ class Graph(CGraph):
                 f"got: {sorted(nx_graph.nodes())}"
             )
 
-        edge_starts = []
-        edge_ends = []
-
         sorted_edges = sorted(nx_graph.edges(), key=lambda edge: (edge[0], edge[1]))
+        no_edges = len(sorted_edges)
 
-        for u, v in sorted_edges:
-            edge_starts.append(u)
-            edge_ends.append(v)
-        G = Graph(no_nodes, np.array(edge_starts), np.array(edge_ends))
+        edge_starts  = np.empty(no_edges, dtype=np.int64)
+        edge_ends    = np.empty(no_edges, dtype=np.int64)
+        capacities   = np.zeros(no_edges, dtype=np.int64) if capacity    is not None else None
+        minimums     = np.zeros(no_edges, dtype=np.int64) if lower_bound is not None else None
+        costs        = np.zeros(no_edges, dtype=np.int64) if weight      is not None else None
+
+        for i, (u, v) in enumerate(sorted_edges):
+            edge_starts[i] = u
+            edge_ends[i]   = v
+            attrs = nx_graph[u][v]
+            if capacities is not None:
+                capacities[i] = attrs.get(capacity,    0)
+            if minimums   is not None:
+                minimums[i]   = attrs.get(lower_bound, 0)
+            if costs      is not None:
+                costs[i]      = attrs.get(weight,      0)
+
+        G = Graph(no_nodes, edge_starts, edge_ends)
 
         # Set node supply/demand
         if demand is not None:
@@ -134,26 +146,11 @@ class Graph(CGraph):
                 supply[node_id] = -nx_graph.nodes[node_id].get(demand, 0)
             G.set_node_supply(supply)
 
-        # Set edge capacities
-        if capacity is not None:
-            capacities = np.zeros(G.no_edges(), dtype=np.int64)
-            for i, (u, v) in enumerate(sorted_edges):
-                capacities[i] = nx_graph[u][v].get(capacity, 0)
+        if capacities is not None:
             G.set_edge_capacities(capacities)
-
-        # Set edge lower bounds
-        if lower_bound is not None:
-            minimums = np.zeros(G.no_edges(), dtype=np.int64)
-            for i, (u, v) in enumerate(sorted_edges):
-                minimums[i] = nx_graph[u][v].get(lower_bound, 0)
-            if minimums.any():
-                G.set_edge_minimums(minimums)
-
-        # Set edge costs
-        if weight is not None:
-            costs = np.zeros(G.no_edges(), dtype=np.int64)
-            for i, (u, v) in enumerate(sorted_edges):
-                costs[i] = nx_graph[u][v].get(weight, 0)
+        if minimums is not None and minimums.any():
+            G.set_edge_minimums(minimums)
+        if costs is not None:
             G.set_edge_costs(costs)
 
         return G
