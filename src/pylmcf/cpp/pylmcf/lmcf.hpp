@@ -23,7 +23,7 @@ void print_span(std::span<T> span) {
 // Core implementation — selects the LEMON solver via template template parameter.
 // minimums may be an empty span {} to indicate no lower bounds (zero by default).
 // validate_costs: if true, rejects negative arc costs (required by NetworkSimplex).
-template <template <typename, typename, typename> class Solver, typename T, bool validate_costs = false>
+template <template <typename...> class Solver, typename T, bool validate_costs = false>
 T lmcf_impl(
     std::span<T> node_supply,
     std::span<T> edges_starts,
