@@ -239,6 +239,7 @@ namespace lemon {
     // Warm-restart counters (incremented by warmRun() only).
     int _warm_start_count = 0;
     int _cold_start_count = 0;
+    int _dual_repair_count = 0;
 
   public:
 
@@ -1263,7 +1264,11 @@ namespace lemon {
     // tree (e.g. a capacity decreased below the current tree-arc flow).
     // Only meaningful for EQ-supply problems (_sum_supply == 0); other supply
     // types fall back to cold start.
-    ProblemType warmRun(PivotRule pivot_rule = BLOCK_SEARCH) {
+    // allow_dual=true also attempts the bounded dual-simplex repair when the
+    // cheap repairTreeFlows() basis patch fails, before the cold-init fallback.
+    // allow_dual=false is the original "simple" warm path (repair-or-cold).
+    ProblemType warmRun(PivotRule pivot_rule = BLOCK_SEARCH,
+                        bool allow_dual = true) {
       // Recompute _sum_supply from the (already updated) real-node supplies.
       _sum_supply = 0;
       for (int i = 0; i != _node_num; ++i)
@@ -1276,6 +1281,13 @@ namespace lemon {
           ++_warm_start_count;
           return start(pivot_rule);
         }
+        // repairTreeFlows() left the basis primal-infeasible but dual-feasible
+        // (and already pinned non-tree arcs / recomputed tree flows). Try a
+        // bounded dual-simplex repair before paying for a cold init.
+        if (allow_dual && dualSimplexRepair()) {
+          ++_dual_repair_count;
+          return start(pivot_rule);
+        }
       }
       // Cold fallback.
       ++_cold_start_count;
@@ -1285,6 +1297,7 @@ namespace lemon {
 
     int warmStartCount() const { return _warm_start_count; }
     int coldStartCount() const { return _cold_start_count; }
+    int dualRepairCount() const { return _dual_repair_count; }
 
     // Sync _cap[i] from _upper[i] for all real arcs (i < _arc_num).
     // Call after upperMap() and before repairTreeFlows().
@@ -1346,6 +1359,125 @@ namespace lemon {
           return false;
       }
       return true;
+    }
+
+    // Dual-simplex repair of a primal-infeasible / dual-feasible basis.
+    //
+    // Precondition: repairTreeFlows() has run (non-tree arcs pinned to bounds,
+    // tree-arc flows recomputed so conservation holds) but some basic arc has
+    // flow outside [0, cap].  Because costs and potentials are unchanged since
+    // the last optimal solve, the basis is still DUAL-feasible; only primal
+    // feasibility is lost.  Dual simplex restores primal feasibility while
+    // preserving dual feasibility, in a handful of pivots, without a cold init.
+    //
+    // Each iteration: pick the most-violated basic arc as the LEAVING arc;
+    // among non-basic arcs that cross the cut it induces and whose orientation
+    // relieves the violation, pick the ENTERING arc with the smallest |reduced
+    // cost| (the network dual ratio test, pivot coefficients are ±1).  LEMON's
+    // per-node artificial arcs to _root (cost ART_COST, cap INF) always cross
+    // every cut, so an eligible entering arc always exists — this is the
+    // built-in "reserve" that guarantees the repair never gets stuck.
+    //
+    // Reuses LEMON's own pivot primitives (findJoinNode / changeFlow /
+    // updateTreeStructure / updatePotential), mirroring their exact cycle
+    // conventions so signs cannot drift.  Returns false (caller falls back to
+    // a cold init — never a wrong answer) if no eligible entering arc is found
+    // or the iteration cap is hit.  After success the basis is primal- and
+    // dual-feasible; warmRun() still calls start() to finalize.
+    // Cut-based dual pivot, O(arcs + |subtree|) per pivot.
+    //
+    // Removing the leaving tree arc l = _pred[q] splits the tree into the
+    // subtree S rooted at q and the rest; l is the ONLY tree arc across that
+    // cut.  For any non-basic arc e the per-unit effect on _flow[l] of an
+    // augmentation depends solely on which side of the cut e's endpoints lie,
+    // _pred_dir[q], and _state[e] — no per-candidate findJoinNode / parent
+    // walk needed.  Derivation: the fundamental cycle of a cut-crossing e
+    // crosses the cut exactly twice (via e and via l), so
+    //   d(flow into S via l) = -d(flow into S via e),
+    //   d_flow[l] = pred_dir[q] * dir_e_into_S * _state[e] * delta,
+    // where dir_e_into_S = +1 if e enters S (src∉S, tgt∈S), -1 if it leaves S,
+    // and pred_dir[q] is +1 (DIR_UP, l carries S→out) or -1 (DIR_DOWN, out→S).
+    // This is algebraically identical to the previously verified branch-walk
+    // formulation, just computed in O(1).  The in-subtree endpoint of e is
+    // u_in (the detached subtree reattaches there); the other is v_in.
+    bool dualSimplexRepair() {
+      const int max_pivots = _all_arc_num + _node_num + 16;
+      std::vector<signed char> in_sub(_node_num + 1, 0);
+
+      for (int iter = 0; iter < max_pivots; ++iter) {
+        // --- Select leaving arc: most-violated basic arc, via its child node.
+        int q = -1;
+        Value worst = 0;
+        for (int u = 0; u != _node_num; ++u) {
+          if (u == _root) continue;
+          const int l = _pred[u];
+          if (_state[l] != STATE_TREE) continue;
+          Value v = 0;
+          if (_flow[l] < 0)            v = -_flow[l];
+          else if (_flow[l] > _cap[l]) v =  _flow[l] - _cap[l];
+          if (v > worst) { worst = v; q = u; }
+        }
+        if (q == -1) return true;                 // primal feasible — done.
+
+        const int l = _pred[q];
+        const bool over = _flow[l] > _cap[l];     // else: under (_flow[l] < 0)
+        const Value needed = over ? (_flow[l] - _cap[l]) : (-_flow[l]);
+        const int  pdq = _pred_dir[q];            // +1 DIR_UP, -1 DIR_DOWN
+        const int  want = over ? -1 : 1;          // required sign of d_flow[l]
+
+        // --- Mark the subtree rooted at q (contiguous thread interval).
+        {
+          int w = q;
+          for (int k = 0, n = _succ_num[q]; k < n; ++k) {
+            in_sub[w] = 1;
+            w = _thread[w];
+          }
+        }
+
+        // --- Dual ratio test: O(1) per arc, no join / parent walk.
+        int  best_e = -1, best_uin = 0, best_vin = 0;
+        Cost best_score = 0;
+        for (int e = 0; e != _all_arc_num; ++e) {
+          if (_state[e] == STATE_TREE) continue;          // basic — not entering
+          const int se = _source[e], te = _target[e];
+          const int ss = in_sub[se], st = in_sub[te];
+          if (ss == st) continue;                         // doesn't cross cut
+
+          const int dir_into_S = st ? 1 : -1;             // src∉S,tgt∈S => +1
+          if (pdq * dir_into_S * _state[e] != want) continue;  // wrong direction
+
+          Cost rc = _cost[e] + _pi[se] - _pi[te];
+          if (rc < 0) rc = -rc;
+          if (best_e == -1 || rc < best_score) {
+            best_e = e; best_score = rc;
+            best_uin = ss ? se : te;                       // in-subtree endpoint
+            best_vin = ss ? te : se;
+          }
+        }
+
+        // Clear subtree marks for the next iteration.
+        {
+          int w = q;
+          for (int k = 0, n = _succ_num[q]; k < n; ++k) {
+            in_sub[w] = 0;
+            w = _thread[w];
+          }
+        }
+
+        if (best_e == -1) return false;                   // no candidate — cold fallback.
+
+        // --- Perform the dual pivot with the exact violation as delta.
+        in_arc = best_e;
+        findJoinNode();
+        delta = needed;
+        u_out = q;
+        u_in  = best_uin;
+        v_in  = best_vin;
+        changeFlow(true);
+        updateTreeStructure();
+        updatePotential();
+      }
+      return false;                                       // iteration cap — cold fallback.
     }
 
   private:
