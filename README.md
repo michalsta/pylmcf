@@ -60,6 +60,8 @@ G.total_cost()  # 24
 
 #### Constructing from a NetworkX graph
 
+> **Note:** `Graph.FromNX()` iterates over graph elements in Python and is significantly slower than constructing `Graph` directly from numpy arrays. Prefer the direct API for performance-sensitive code.
+
 ```python
 import networkx as nx
 
