@@ -268,6 +268,31 @@ namespace lemon {
     std::vector<int> _repair_in_sub;
     int              _repair_gen = 0;
 
+    // CSR node->incident-arc index over ALL internal arcs (incl. the
+    // artificial root arcs), used by the cut-incident entering scan in
+    // {dual,primal}SimplexRepair (1b).  Built lazily once per problem size;
+    // _source/_target are fixed after construction so this stays valid
+    // across warm restarts (and deterministic cold re-inits).
+    IntVector _inc_head;          // size _node_num+2
+    IntVector _inc_arc;           // size 2*_all_arc_num
+    int       _inc_built_for = -1;
+    void buildIncidenceCsr() {
+      const int nn = _node_num + 1;          // nodes 0.._node_num (root incl.)
+      _inc_head.assign(nn + 1, 0);
+      for (int e = 0; e != _all_arc_num; ++e) {
+        ++_inc_head[_source[e] + 1];
+        ++_inc_head[_target[e] + 1];
+      }
+      for (int i = 0; i < nn; ++i) _inc_head[i + 1] += _inc_head[i];
+      _inc_arc.resize(2 * _all_arc_num);
+      IntVector cur(_inc_head.begin(), _inc_head.begin() + nn);
+      for (int e = 0; e != _all_arc_num; ++e) {
+        _inc_arc[cur[_source[e]]++] = e;
+        _inc_arc[cur[_target[e]]++] = e;
+      }
+      _inc_built_for = _all_arc_num;
+    }
+
   public:
 
     /// \brief Constant for infinite upper bounds (capacities).
@@ -1455,6 +1480,7 @@ namespace lemon {
       if ((int)_repair_in_sub.size() < _node_num + 1)
         _repair_in_sub.resize(_node_num + 1, 0);
       std::vector<int>& in_sub = _repair_in_sub;
+      if (_inc_built_for != _all_arc_num) buildIncidenceCsr();
 
       for (int iter = 0; iter < max_pivots; ++iter) {
         // --- Select leaving arc: most-violated basic arc, via its child node.
@@ -1487,24 +1513,43 @@ namespace lemon {
           }
         }
 
-        // --- Dual ratio test: O(1) per arc, no join / parent walk.
+        // --- Dual ratio test, restricted to arcs INCIDENT to the smaller
+        //     cut side.  Every cut-crossing arc has exactly one endpoint in
+        //     S, hence one on the smaller side, so it is visited exactly
+        //     once.  Order-independent: min-|rc|, ties broken by smallest
+        //     internal index e -> identical result to the previous full
+        //     ascending O(all_arcs) scan, now O(arcs incident to the
+        //     smaller side).
         int  best_e = -1, best_uin = 0, best_vin = 0;
         Cost best_score = 0;
-        for (int e = 0; e != _all_arc_num; ++e) {
-          if (_state[e] == STATE_TREE) continue;          // basic — not entering
+        auto consider = [&](int e) {
+          if (_state[e] == STATE_TREE) return;            // basic — not entering
           const int se = _source[e], te = _target[e];
           const bool ss = (in_sub[se] == g), st = (in_sub[te] == g);
-          if (ss == st) continue;                         // doesn't cross cut
-
+          if (ss == st) return;                           // doesn't cross cut
           const int dir_into_S = st ? 1 : -1;             // src∉S,tgt∈S => +1
-          if (pdq * dir_into_S * _state[e] != want) continue;  // wrong direction
-
+          if (pdq * dir_into_S * _state[e] != want) return;  // wrong direction
           Cost rc = _cost[e] + _pi[se] - _pi[te];
           if (rc < 0) rc = -rc;
-          if (best_e == -1 || rc < best_score) {
+          if (best_e == -1 || rc < best_score ||
+              (rc == best_score && e < best_e)) {
             best_e = e; best_score = rc;
             best_uin = ss ? se : te;                       // in-subtree endpoint
             best_vin = ss ? te : se;
+          }
+        };
+        if (2 * _succ_num[q] <= _node_num) {              // smaller side = S
+          int w = q;
+          for (int k = 0, n = _succ_num[q]; k < n; ++k) {
+            for (int p = _inc_head[w]; p < _inc_head[w + 1]; ++p)
+              consider(_inc_arc[p]);
+            w = _thread[w];
+          }
+        } else {                                          // smaller side = complement (incl. root)
+          for (int vv = 0; vv <= _node_num; ++vv) {
+            if (in_sub[vv] == g) continue;
+            for (int p = _inc_head[vv]; p < _inc_head[vv + 1]; ++p)
+              consider(_inc_arc[p]);
           }
         }
 
@@ -1553,6 +1598,7 @@ namespace lemon {
       if ((int)_repair_in_sub.size() < _node_num + 1)
         _repair_in_sub.resize(_node_num + 1, 0);
       std::vector<int>& in_sub = _repair_in_sub;
+      if (_inc_built_for != _all_arc_num) buildIncidenceCsr();
 
       for (int iter = 0; iter < max_pivots; ++iter) {
         // --- Select leaving arc: most-violated basic arc, via its child node.
@@ -1585,24 +1631,41 @@ namespace lemon {
           }
         }
 
-        // --- Primal entering rule: cheapest (min signed reduced cost)
-        //     eligible cut-crossing arc.  O(1) per arc, no join / parent walk.
+        // --- Primal entering rule (cheapest min signed reduced cost),
+        //     restricted to arcs INCIDENT to the smaller cut side (every
+        //     cut-crossing arc has exactly one endpoint in S).  Ties broken
+        //     by smallest internal index e so the result is independent of
+        //     enumeration order -> identical to the previous full ascending
+        //     O(all_arcs) scan, now O(arcs incident to the smaller side).
         int  best_e = -1, best_uin = 0, best_vin = 0;
         Cost best_score = 0;
-        for (int e = 0; e != _all_arc_num; ++e) {
-          if (_state[e] == STATE_TREE) continue;          // basic — not entering
+        auto consider = [&](int e) {
+          if (_state[e] == STATE_TREE) return;            // basic — not entering
           const int se = _source[e], te = _target[e];
           const bool ss = (in_sub[se] == g), st = (in_sub[te] == g);
-          if (ss == st) continue;                         // doesn't cross cut
-
+          if (ss == st) return;                           // doesn't cross cut
           const int dir_into_S = st ? 1 : -1;             // src∉S,tgt∈S => +1
-          if (pdq * dir_into_S * _state[e] != want) continue;  // wrong direction
-
+          if (pdq * dir_into_S * _state[e] != want) return;  // wrong direction
           const Cost rc = _cost[e] + _pi[se] - _pi[te];   // signed (may be < 0)
-          if (best_e == -1 || rc < best_score) {
+          if (best_e == -1 || rc < best_score ||
+              (rc == best_score && e < best_e)) {
             best_e = e; best_score = rc;
             best_uin = ss ? se : te;                       // in-subtree endpoint
             best_vin = ss ? te : se;
+          }
+        };
+        if (2 * _succ_num[q] <= _node_num) {              // smaller side = S
+          int w = q;
+          for (int k = 0, n = _succ_num[q]; k < n; ++k) {
+            for (int p = _inc_head[w]; p < _inc_head[w + 1]; ++p)
+              consider(_inc_arc[p]);
+            w = _thread[w];
+          }
+        } else {                                          // smaller side = complement (incl. root)
+          for (int vv = 0; vv <= _node_num; ++vv) {
+            if (in_sub[vv] == g) continue;
+            for (int p = _inc_head[vv]; p < _inc_head[vv + 1]; ++p)
+              consider(_inc_arc[p]);
           }
         }
 
