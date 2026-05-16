@@ -4,7 +4,7 @@ on:
     push:
         branches:
             - ci_test
-            - main
+#            - main
     workflow_call:
 
 jobs:
