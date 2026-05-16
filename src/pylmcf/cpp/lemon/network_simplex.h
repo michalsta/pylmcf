@@ -256,6 +256,18 @@ namespace lemon {
     int _dual_repair_count = 0;
     int _primal_repair_count = 0;
 
+    // Reusable scratch buffers for the warm-restart repair routines, sized
+    // lazily to _node_num+1 to avoid a per-solve heap allocation.  The solver
+    // is single-threaded so sharing these across calls is safe.
+    //   _repair_running : per-node running excess (repairTreeFlows)
+    //   _repair_in_sub  : generation-stamped subtree membership
+    //                     (dual/primalSimplexRepair); _repair_gen strictly
+    //                     increases so stale stamps never alias the current
+    //                     generation — no clear pass needed.
+    ValueVector      _repair_running;
+    std::vector<int> _repair_in_sub;
+    int              _repair_gen = 0;
+
   public:
 
     /// \brief Constant for infinite upper bounds (capacities).
@@ -1296,13 +1308,21 @@ namespace lemon {
         _supply[_root] = 0;
         syncCapsFromUpper();
         if (repairTreeFlows()) {
+          // Costs are unchanged between solves, so the basis is still dual-
+          // feasible; repairTreeFlows() just restored primal feasibility =>
+          // already optimal.  start()'s pivot loop would do zero useful work,
+          // so finalize directly.
           ++_warm_start_count;
-          return start(pivot_rule);
+          return finalizeOptimal();
         }
         // repairTreeFlows() left the basis primal-infeasible but dual-feasible
         // (and already pinned non-tree arcs / recomputed tree flows). Try a
         // bounded simplex repair before paying for a cold init.
         if (strategy == WarmRepair::Dual && dualSimplexRepair()) {
+          // dualSimplexRepair() is a heuristic feasibility restorer (delta is
+          // the full violation, no ratio test), so it does NOT by itself
+          // guarantee optimality — start() must finalize.  (Only the
+          // repairTreeFlows() path above is provably optimal and fast-paths.)
           ++_dual_repair_count;
           return start(pivot_rule);
         }
@@ -1351,7 +1371,11 @@ namespace lemon {
       }
 
       // Per-node running excess: supply minus non-tree arc contributions.
-      std::vector<Value> running(_node_num + 1, Value(0));
+      // Reuse a member buffer (fully overwritten below) to avoid a per-solve
+      // heap allocation.
+      if ((int)_repair_running.size() < _node_num + 1)
+        _repair_running.resize(_node_num + 1);
+      ValueVector& running = _repair_running;
       for (int i = 0; i <= _node_num; ++i) running[i] = _supply[i];
       for (int i = 0; i != _arc_num; ++i) {
         if (_state[i] != STATE_TREE) {
@@ -1425,7 +1449,12 @@ namespace lemon {
     // u_in (the detached subtree reattaches there); the other is v_in.
     bool dualSimplexRepair() {
       const int max_pivots = _all_arc_num + _node_num + 16;
-      std::vector<signed char> in_sub(_node_num + 1, 0);
+      // Generation-stamped subtree membership in a reused member buffer:
+      // a strictly increasing _repair_gen means stale stamps never alias the
+      // current generation, so no per-iteration clear pass is needed.
+      if ((int)_repair_in_sub.size() < _node_num + 1)
+        _repair_in_sub.resize(_node_num + 1, 0);
+      std::vector<int>& in_sub = _repair_in_sub;
 
       for (int iter = 0; iter < max_pivots; ++iter) {
         // --- Select leaving arc: most-violated basic arc, via its child node.
@@ -1449,10 +1478,11 @@ namespace lemon {
         const int  want = over ? -1 : 1;          // required sign of d_flow[l]
 
         // --- Mark the subtree rooted at q (contiguous thread interval).
+        const int g = ++_repair_gen;
         {
           int w = q;
           for (int k = 0, n = _succ_num[q]; k < n; ++k) {
-            in_sub[w] = 1;
+            in_sub[w] = g;
             w = _thread[w];
           }
         }
@@ -1463,7 +1493,7 @@ namespace lemon {
         for (int e = 0; e != _all_arc_num; ++e) {
           if (_state[e] == STATE_TREE) continue;          // basic — not entering
           const int se = _source[e], te = _target[e];
-          const int ss = in_sub[se], st = in_sub[te];
+          const bool ss = (in_sub[se] == g), st = (in_sub[te] == g);
           if (ss == st) continue;                         // doesn't cross cut
 
           const int dir_into_S = st ? 1 : -1;             // src∉S,tgt∈S => +1
@@ -1475,15 +1505,6 @@ namespace lemon {
             best_e = e; best_score = rc;
             best_uin = ss ? se : te;                       // in-subtree endpoint
             best_vin = ss ? te : se;
-          }
-        }
-
-        // Clear subtree marks for the next iteration.
-        {
-          int w = q;
-          for (int k = 0, n = _succ_num[q]; k < n; ++k) {
-            in_sub[w] = 0;
-            w = _thread[w];
           }
         }
 
@@ -1527,7 +1548,11 @@ namespace lemon {
     // if no eligible entering arc is found or the iteration cap is hit.
     bool primalSimplexRepair() {
       const int max_pivots = _all_arc_num + _node_num + 16;
-      std::vector<signed char> in_sub(_node_num + 1, 0);
+      // Generation-stamped subtree membership in a reused member buffer
+      // (see dualSimplexRepair for the no-clear-pass rationale).
+      if ((int)_repair_in_sub.size() < _node_num + 1)
+        _repair_in_sub.resize(_node_num + 1, 0);
+      std::vector<int>& in_sub = _repair_in_sub;
 
       for (int iter = 0; iter < max_pivots; ++iter) {
         // --- Select leaving arc: most-violated basic arc, via its child node.
@@ -1551,10 +1576,11 @@ namespace lemon {
         const int  want = over ? -1 : 1;          // required sign of d_flow[l]
 
         // --- Mark the subtree rooted at q (contiguous thread interval).
+        const int g = ++_repair_gen;
         {
           int w = q;
           for (int k = 0, n = _succ_num[q]; k < n; ++k) {
-            in_sub[w] = 1;
+            in_sub[w] = g;
             w = _thread[w];
           }
         }
@@ -1566,7 +1592,7 @@ namespace lemon {
         for (int e = 0; e != _all_arc_num; ++e) {
           if (_state[e] == STATE_TREE) continue;          // basic — not entering
           const int se = _source[e], te = _target[e];
-          const int ss = in_sub[se], st = in_sub[te];
+          const bool ss = (in_sub[se] == g), st = (in_sub[te] == g);
           if (ss == st) continue;                         // doesn't cross cut
 
           const int dir_into_S = st ? 1 : -1;             // src∉S,tgt∈S => +1
@@ -1577,15 +1603,6 @@ namespace lemon {
             best_e = e; best_score = rc;
             best_uin = ss ? se : te;                       // in-subtree endpoint
             best_vin = ss ? te : se;
-          }
-        }
-
-        // Clear subtree marks for the next iteration.
-        {
-          int w = q;
-          for (int k = 0, n = _succ_num[q]; k < n; ++k) {
-            in_sub[w] = 0;
-            w = _thread[w];
           }
         }
 
@@ -1980,6 +1997,22 @@ namespace lemon {
         }
       }
 
+      return finalizeOptimal();
+    }
+
+    // Post-pivot-loop finalization, shared by start() and warmRun()'s fast
+    // path.  Precondition: the spanning-tree basis is primal- AND dual-
+    // feasible (hence optimal).  warmRun() may call this directly (skipping
+    // start()'s pivot loop) ONLY after a successful repairTreeFlows(): with
+    // costs unchanged between solves the tree/potentials are unchanged so
+    // reduced costs are unchanged, the previous basis was optimal hence
+    // still dual-feasible, and repairTreeFlows() just restored primal
+    // feasibility => optimal, start() would do zero useful pivots.  NOTE:
+    // dualSimplexRepair()/primalSimplexRepair() do NOT satisfy this
+    // precondition (heuristic restorers) — they still need full start().
+    // This is exactly the tail of start(): artificial-arc infeasibility
+    // check, lower-bound reconstruction, GEQ/LEQ potential canonicalization.
+    ProblemType finalizeOptimal() {
       // Check feasibility
       for (int e = _search_arc_num; e != _all_arc_num; ++e) {
         if (_flow[e] != 0) return INFEASIBLE;
