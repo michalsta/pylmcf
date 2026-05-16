@@ -171,4 +171,4 @@ cython_debug/
 .pypirc
 
 # scikit-build-core persistent build dir (used by reinstall.sh)
-_skbuild_*/
+_skbuild*/
