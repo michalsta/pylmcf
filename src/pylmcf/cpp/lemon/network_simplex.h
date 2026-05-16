@@ -164,6 +164,20 @@ namespace lemon {
       ALTERING_LIST
     };
 
+    /// \brief Warm-restart repair strategy for \ref warmRun().
+    ///
+    /// Selects what warmRun() does when the cheap repairTreeFlows() basis
+    /// patch fails but a cold init() is not yet warranted.
+    enum class WarmRepair {
+      /// Repair-or-cold: no extra repair, fall straight back to a cold init().
+      RepairOnly,
+      /// Dual-simplex repair (keeps dual feasibility, restores primal).
+      Dual,
+      /// Primal-pivot repair (restores primal feasibility on the existing
+      /// basis; does not preserve dual feasibility — start() reoptimizes).
+      Primal
+    };
+
   private:
 
     TEMPLATE_DIGRAPH_TYPEDEFS(GR);
@@ -240,6 +254,7 @@ namespace lemon {
     int _warm_start_count = 0;
     int _cold_start_count = 0;
     int _dual_repair_count = 0;
+    int _primal_repair_count = 0;
 
   public:
 
@@ -1264,11 +1279,14 @@ namespace lemon {
     // tree (e.g. a capacity decreased below the current tree-arc flow).
     // Only meaningful for EQ-supply problems (_sum_supply == 0); other supply
     // types fall back to cold start.
-    // allow_dual=true also attempts the bounded dual-simplex repair when the
-    // cheap repairTreeFlows() basis patch fails, before the cold-init fallback.
-    // allow_dual=false is the original "simple" warm path (repair-or-cold).
+    // strategy selects the extra repair attempted when the cheap
+    // repairTreeFlows() basis patch fails, before the cold-init fallback:
+    //   RepairOnly — original "simple" warm path (repair-or-cold).
+    //   Dual       — bounded dual-simplex repair (keeps dual feasibility).
+    //   Primal     — bounded primal-pivot repair (restores primal feasibility
+    //                on the existing basis; start() then reoptimizes).
     ProblemType warmRun(PivotRule pivot_rule = BLOCK_SEARCH,
-                        bool allow_dual = true) {
+                        WarmRepair strategy = WarmRepair::Dual) {
       // Recompute _sum_supply from the (already updated) real-node supplies.
       _sum_supply = 0;
       for (int i = 0; i != _node_num; ++i)
@@ -1283,9 +1301,13 @@ namespace lemon {
         }
         // repairTreeFlows() left the basis primal-infeasible but dual-feasible
         // (and already pinned non-tree arcs / recomputed tree flows). Try a
-        // bounded dual-simplex repair before paying for a cold init.
-        if (allow_dual && dualSimplexRepair()) {
+        // bounded simplex repair before paying for a cold init.
+        if (strategy == WarmRepair::Dual && dualSimplexRepair()) {
           ++_dual_repair_count;
+          return start(pivot_rule);
+        }
+        if (strategy == WarmRepair::Primal && primalSimplexRepair()) {
+          ++_primal_repair_count;
           return start(pivot_rule);
         }
       }
@@ -1298,6 +1320,7 @@ namespace lemon {
     int warmStartCount() const { return _warm_start_count; }
     int coldStartCount() const { return _cold_start_count; }
     int dualRepairCount() const { return _dual_repair_count; }
+    int primalRepairCount() const { return _primal_repair_count; }
 
     // Sync _cap[i] from _upper[i] for all real arcs (i < _arc_num).
     // Call after upperMap() and before repairTreeFlows().
@@ -1467,6 +1490,108 @@ namespace lemon {
         if (best_e == -1) return false;                   // no candidate — cold fallback.
 
         // --- Perform the dual pivot with the exact violation as delta.
+        in_arc = best_e;
+        findJoinNode();
+        delta = needed;
+        u_out = q;
+        u_in  = best_uin;
+        v_in  = best_vin;
+        changeFlow(true);
+        updateTreeStructure();
+        updatePotential();
+      }
+      return false;                                       // iteration cap — cold fallback.
+    }
+
+    // Primal-pivot repair of a primal-infeasible basis.
+    //
+    // Precondition: identical to dualSimplexRepair() — repairTreeFlows() has
+    // run (non-tree arcs pinned, tree flows recomputed) but some basic arc is
+    // out of [0, cap].  This is the *primal* counterpart of dualSimplexRepair:
+    // it restores primal feasibility by basis-maintaining pivots but does NOT
+    // preserve dual feasibility, so the reduced costs may go negative.  That
+    // is intentional — warmRun()'s trailing start() is ordinary primal network
+    // simplex phase-2 which reoptimizes from the (now primal-feasible) basis.
+    //
+    // Structurally a mirror of dualSimplexRepair (same leaving-arc choice,
+    // same O(1) cut-membership formula, same LEMON pivot primitives so the
+    // spanning tree + _pi stay consistent for free).  The only behavioural
+    // difference is the ENTERING-arc rule: among eligible cut-crossing arcs
+    // that relieve the violation, pick the one with the smallest *signed*
+    // reduced cost rc = _cost[e] + _pi[se] - _pi[te] (the cheapest augmenting
+    // direction — the "minimum-cost flow of the error" character, restricted
+    // to the basis cut).  dualSimplexRepair uses |rc| and keeps dual
+    // feasibility; here rc may be negative and is allowed.
+    //
+    // Returns false (caller falls back to a cold init — never a wrong answer)
+    // if no eligible entering arc is found or the iteration cap is hit.
+    bool primalSimplexRepair() {
+      const int max_pivots = _all_arc_num + _node_num + 16;
+      std::vector<signed char> in_sub(_node_num + 1, 0);
+
+      for (int iter = 0; iter < max_pivots; ++iter) {
+        // --- Select leaving arc: most-violated basic arc, via its child node.
+        int q = -1;
+        Value worst = 0;
+        for (int u = 0; u != _node_num; ++u) {
+          if (u == _root) continue;
+          const int l = _pred[u];
+          if (_state[l] != STATE_TREE) continue;
+          Value v = 0;
+          if (_flow[l] < 0)            v = -_flow[l];
+          else if (_flow[l] > _cap[l]) v =  _flow[l] - _cap[l];
+          if (v > worst) { worst = v; q = u; }
+        }
+        if (q == -1) return true;                 // primal feasible — done.
+
+        const int l = _pred[q];
+        const bool over = _flow[l] > _cap[l];     // else: under (_flow[l] < 0)
+        const Value needed = over ? (_flow[l] - _cap[l]) : (-_flow[l]);
+        const int  pdq = _pred_dir[q];            // +1 DIR_UP, -1 DIR_DOWN
+        const int  want = over ? -1 : 1;          // required sign of d_flow[l]
+
+        // --- Mark the subtree rooted at q (contiguous thread interval).
+        {
+          int w = q;
+          for (int k = 0, n = _succ_num[q]; k < n; ++k) {
+            in_sub[w] = 1;
+            w = _thread[w];
+          }
+        }
+
+        // --- Primal entering rule: cheapest (min signed reduced cost)
+        //     eligible cut-crossing arc.  O(1) per arc, no join / parent walk.
+        int  best_e = -1, best_uin = 0, best_vin = 0;
+        Cost best_score = 0;
+        for (int e = 0; e != _all_arc_num; ++e) {
+          if (_state[e] == STATE_TREE) continue;          // basic — not entering
+          const int se = _source[e], te = _target[e];
+          const int ss = in_sub[se], st = in_sub[te];
+          if (ss == st) continue;                         // doesn't cross cut
+
+          const int dir_into_S = st ? 1 : -1;             // src∉S,tgt∈S => +1
+          if (pdq * dir_into_S * _state[e] != want) continue;  // wrong direction
+
+          const Cost rc = _cost[e] + _pi[se] - _pi[te];   // signed (may be < 0)
+          if (best_e == -1 || rc < best_score) {
+            best_e = e; best_score = rc;
+            best_uin = ss ? se : te;                       // in-subtree endpoint
+            best_vin = ss ? te : se;
+          }
+        }
+
+        // Clear subtree marks for the next iteration.
+        {
+          int w = q;
+          for (int k = 0, n = _succ_num[q]; k < n; ++k) {
+            in_sub[w] = 0;
+            w = _thread[w];
+          }
+        }
+
+        if (best_e == -1) return false;                   // no candidate — cold fallback.
+
+        // --- Perform the primal pivot with the exact violation as delta.
         in_arc = best_e;
         findJoinNode();
         delta = needed;

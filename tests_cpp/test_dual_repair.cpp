@@ -55,8 +55,10 @@ struct Instance {
 };
 
 static int  g_fail = 0;
-static long g_warm = 0, g_cold = 0, g_dual = 0, g_checks = 0;
-static bool g_allow_dual = true;   // false => Simple warm path (regression)
+static long g_warm = 0, g_cold = 0, g_dual = 0, g_primal = 0, g_checks = 0;
+// Warm-repair strategy under test: RepairOnly (Simple regression),
+// Dual, or Primal.  Set per campaign in main().
+static NS::WarmRepair g_strategy = NS::WarmRepair::Dual;
 
 #define CHECK(cond, msg)                                                      \
     do {                                                                      \
@@ -152,12 +154,14 @@ static bool step(const char* tag, NS& ns, Graph& g,
     for (int i = 0; i < (int)in.arcs.size(); ++i) um[g.arcFromId(i)] = in.cap[i];
     for (int v = 0; v < in.n; ++v) sm[g.nodeFromId(v)] = in.supply[v];
 
-    int w0 = ns.warmStartCount(), c0 = ns.coldStartCount(), d0 = ns.dualRepairCount();
+    int w0 = ns.warmStartCount(), c0 = ns.coldStartCount(),
+        d0 = ns.dualRepairCount(), p0 = ns.primalRepairCount();
     ns.upperMap(um).supplyMap(sm);
-    auto st_warm = ns.warmRun(NS::BLOCK_SEARCH, g_allow_dual);
-    g_warm += ns.warmStartCount() - w0;
-    g_cold += ns.coldStartCount() - c0;
-    g_dual += ns.dualRepairCount() - d0;
+    auto st_warm = ns.warmRun(NS::BLOCK_SEARCH, g_strategy);
+    g_warm   += ns.warmStartCount()   - w0;
+    g_cold   += ns.coldStartCount()   - c0;
+    g_dual   += ns.dualRepairCount()  - d0;
+    g_primal += ns.primalRepairCount() - p0;
 
     Value ref_cost = 0;
     auto st_ref = solve_fresh(in, ref_cost);
@@ -268,7 +272,7 @@ static void minimal_dual_repro() {
         for (int i = 0; i < m; ++i) um[g.arcFromId(i)] = b.cap[i];
         for (int v = 0; v < n; ++v) sm[g.nodeFromId(v)] = b.supply[v];
         ns.upperMap(um).supplyMap(sm);
-        auto st = ns.warmRun(NS::BLOCK_SEARCH, /*allow_dual=*/true);
+        auto st = ns.warmRun(NS::BLOCK_SEARCH, NS::WarmRepair::Dual);
         bool used_dual = ns.dualRepairCount() > d0;
         if (!used_dual) continue;                         // only care about dual path
 
@@ -383,7 +387,7 @@ static void infeasible_agreement() {
         for (int i = 0; i < (int)bad.arcs.size(); ++i) um[g.arcFromId(i)] = bad.cap[i];
         for (int v = 0; v < bad.n; ++v) sm[g.nodeFromId(v)] = bad.supply[v];
         ns.upperMap(um).supplyMap(sm);
-        auto stw = ns.warmRun(NS::BLOCK_SEARCH, g_allow_dual);
+        auto stw = ns.warmRun(NS::BLOCK_SEARCH, g_strategy);
         Value rc = 0; auto str = solve_fresh(bad, rc);
         CHECK((stw == NS::OPTIMAL) == (str == NS::OPTIMAL),
               "warm/cold disagree on infeasible");
@@ -431,29 +435,45 @@ int main() {
     // 0. Hunt a minimal single-step Dual failure first (exits on first hit).
     minimal_dual_repro();
 
-    // 1. Regression: the Simple warm path (no dual) must be flawless.
+    // 1. Regression: the Simple warm path (no extra repair) must be flawless.
     std::printf("\n[Simple warm-path regression]\n");
-    g_allow_dual = false;
+    g_strategy = NS::WarmRepair::RepairOnly;
     edge_cases();
     infeasible_agreement();
     random_campaign();
-    std::printf("after Simple: checks=%ld warm=%ld dual=%ld cold=%ld fails=%d\n",
-                g_checks, g_warm, g_dual, g_cold, g_fail);
+    std::printf("after Simple: checks=%ld warm=%ld dual=%ld primal=%ld cold=%ld fails=%d\n",
+                g_checks, g_warm, g_dual, g_primal, g_cold, g_fail);
 
     // 2. Full Dual campaign.
     std::printf("\n[Dual warm-path]\n");
-    g_allow_dual = true;
+    g_strategy = NS::WarmRepair::Dual;
+    long dual0 = g_dual;
     edge_cases();
     infeasible_agreement();
     random_campaign();
+    long dual_fired = g_dual - dual0;
+
+    // 3. Full Primal campaign (independent-cold oracle, same as Dual).
+    std::printf("\n[Primal warm-path]\n");
+    g_strategy = NS::WarmRepair::Primal;
+    long primal0 = g_primal;
+    edge_cases();
+    infeasible_agreement();
+    random_campaign();
+    long primal_fired = g_primal - primal0;
 
     std::printf("\n--- summary ---\n");
-    std::printf("checks=%ld  warm=%ld  dual=%ld  cold=%ld\n",
-                g_checks, g_warm, g_dual, g_cold);
+    std::printf("checks=%ld  warm=%ld  dual=%ld  primal=%ld  cold=%ld\n",
+                g_checks, g_warm, g_dual, g_primal, g_cold);
 
-    // Coverage guard: the suite is meaningless if the dual path never ran.
-    if (g_dual < 20) {
-        std::printf("INEFFECTIVE: dual-repair exercised only %ld times (<20)\n", g_dual);
+    // Coverage guards: each repair path must actually have run, else the
+    // corresponding campaign is vacuous.
+    if (dual_fired < 20) {
+        std::printf("INEFFECTIVE: dual-repair exercised only %ld times (<20)\n", dual_fired);
+        ++g_fail;
+    }
+    if (primal_fired < 20) {
+        std::printf("INEFFECTIVE: primal-repair exercised only %ld times (<20)\n", primal_fired);
         ++g_fail;
     }
     if (g_fail) { std::printf("RESULT: FAILED (%d)\n", g_fail); return 1; }
