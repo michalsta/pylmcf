@@ -181,7 +181,12 @@ namespace lemon {
       /// cheap bound flips of cheaper cut-crossing arcs, cutting the number
       /// of basis pivots.  Not bit-identical to Dual (different basis at
       /// degenerate optima); opt-in.
-      DualRatio
+      DualRatio,
+      /// Greedy-capacity dual repair: like DualRatio but the entering arc is
+      /// chosen by maximum capacity (not minimum |rc|), aiming to cover the
+      /// violation in a single pivot with fewer bound-flip steps on graphs
+      /// where arc capacities vary widely.  Not bit-identical to DualRatio.
+      DualGreedy
     };
 
   private:
@@ -1368,6 +1373,10 @@ namespace lemon {
           ++_dual_repair_count;          // counted with the dual-repair family
           return start(pivot_rule);
         }
+        if (strategy == WarmRepair::DualGreedy && dualGreedyRepair()) {
+          ++_dual_repair_count;          // counted with the dual-repair family
+          return start(pivot_rule);
+        }
       }
       // Cold fallback.
       ++_cold_start_count;
@@ -1682,6 +1691,133 @@ namespace lemon {
         std::make_heap(cand.begin(), cand.end(), heap_cmp);
 
         // Long-step walk: bound-flip cheap arcs until one can absorb the
+        // residual, which then enters the basis (single pivot).
+        bool pivoted = false;
+        while (!cand.empty()) {
+          std::pop_heap(cand.begin(), cand.end(), heap_cmp);
+          const int e = cand.back().second;
+          cand.pop_back();
+          if (_cap[e] < remaining) {
+            // Full bound flip: cycle augmentation, no basis change.
+            in_arc = e;
+            findJoinNode();
+            delta = _cap[e];
+            changeFlow(false);
+            remaining -= _cap[e];
+            continue;
+          }
+          // This arc covers the residual: basis pivot with step=remaining.
+          const int se = _source[e], te = _target[e];
+          const bool ss = (in_sub[se] == g);
+          in_arc = e;
+          findJoinNode();
+          delta = remaining;
+          u_out = q;
+          u_in  = ss ? se : te;
+          v_in  = ss ? te : se;
+          changeFlow(true);
+          updateTreeStructure();
+          updatePotential();
+          pivoted = true;
+          break;
+        }
+        if (!pivoted) return false;   // couldn't cover violation -> cold.
+      }
+      return false;                                       // iteration cap -> cold.
+    }
+
+    // Greedy-capacity dual repair (WarmRepair::DualGreedy).
+    //
+    // Identical to dualRatioRepair() except the entering arc is chosen by
+    // maximum capacity rather than minimum |rc|.  The intuition: a large-cap
+    // arc is most likely to cover the full violation `remaining` in a single
+    // pivot, avoiding bound-flip steps entirely.  When remaining is large,
+    // large-cap flips reduce the residual faster, requiring fewer iterations.
+    //
+    // Trade-off vs DualRatio: may produce a higher-cost repair path (ignores
+    // reduced costs), but minimises the number of bound-flip/pivot operations.
+    // Does not preserve dual feasibility; start() reoptimises (same as DualRatio).
+    bool dualGreedyRepair() {
+      const int max_pivots = _all_arc_num + _node_num + 16;
+      if ((int)_repair_in_sub.size() < _node_num + 1)
+        _repair_in_sub.resize(_node_num + 1, 0);
+      std::vector<int>& in_sub = _repair_in_sub;
+      if (_inc_built_for != _all_arc_num) buildIncidenceCsr();
+      auto& cand = _ratio_cand;
+
+      for (int iter = 0; iter < max_pivots; ++iter) {
+        // Leaving arc: most-violated basic arc, via its child node q.
+        int q = -1;
+        Value worst = 0;
+        for (int u = 0; u != _node_num; ++u) {
+          if (u == _root) continue;
+          const int l = _pred[u];
+          if (_state[l] != STATE_TREE) continue;
+          Value v = 0;
+          if (_flow[l] < 0)            v = -_flow[l];
+          else if (_flow[l] > _cap[l]) v =  _flow[l] - _cap[l];
+          if (v > worst) { worst = v; q = u; }
+        }
+        if (q == -1) return true;                 // primal feasible — done.
+
+        const int l = _pred[q];
+        const bool over = _flow[l] > _cap[l];
+        const int  pdq  = _pred_dir[q];
+        const int  want = over ? -1 : 1;
+        Value remaining = over ? (_flow[l] - _cap[l]) : (-_flow[l]);
+
+        // Mark the subtree rooted at q (the cut).
+        const int g = ++_repair_gen;
+        {
+          int w = q;
+          for (int k = 0, n = _succ_num[q]; k < n; ++k) {
+            in_sub[w] = g; w = _thread[w];
+          }
+        }
+
+        // Collect eligible cut-crossing candidates (cap, arc), reusing the
+        // 1b smaller-side incidence enumeration (each cut arc visited once).
+        // Artificial arcs (_search_arc_num <= e < _all_arc_num) are excluded:
+        // they have cap=INF and would be selected first, but pivoting them into
+        // the basis leaves non-zero artificial-arc flow that finalizeOptimal()
+        // treats as INFEASIBLE.  dualRatioRepair avoids this implicitly (huge
+        // |rc| pushes them to the back); here we exclude them explicitly.
+        cand.clear();
+        auto consider = [&](int e) {
+          if (e >= _search_arc_num) return;               // skip artificial arcs
+          if (_state[e] == STATE_TREE) return;
+          const int se = _source[e], te = _target[e];
+          const bool ss = (in_sub[se] == g), st = (in_sub[te] == g);
+          if (ss == st) return;
+          const int dir_into_S = st ? 1 : -1;
+          if (pdq * dir_into_S * _state[e] != want) return;
+          if (_cap[e] <= 0) return;                       // no capacity to give
+          cand.emplace_back(static_cast<Cost>(_cap[e]), e);
+        };
+        if (2 * _succ_num[q] <= _node_num) {
+          int w = q;
+          for (int k = 0, n = _succ_num[q]; k < n; ++k) {
+            for (int p = _inc_head[w]; p < _inc_head[w + 1]; ++p)
+              consider(_inc_arc[p]);
+            w = _thread[w];
+          }
+        } else {
+          for (int vv = 0; vv <= _node_num; ++vv) {
+            if (in_sub[vv] == g) continue;
+            for (int p = _inc_head[vv]; p < _inc_head[vv + 1]; ++p)
+              consider(_inc_arc[p]);
+          }
+        }
+        if (cand.empty()) return false;                   // no candidate -> cold.
+
+        // Max-heap by (cap, arc_index): pop largest-capacity first.
+        auto heap_cmp = [](const std::pair<Cost,int>& a,
+                           const std::pair<Cost,int>& b) {
+          return a.first != b.first ? a.first < b.first : a.second > b.second;
+        };
+        std::make_heap(cand.begin(), cand.end(), heap_cmp);
+
+        // Long-step walk: bound-flip large arcs until one can absorb the
         // residual, which then enters the basis (single pivot).
         bool pivoted = false;
         while (!cand.empty()) {
