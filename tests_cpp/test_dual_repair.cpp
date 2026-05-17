@@ -462,6 +462,16 @@ int main() {
     random_campaign();
     long primal_fired = g_primal - primal0;
 
+    // 4. Full DualRatio campaign (bound-flipping long-step dual; counts in
+    //    the dual-repair family).  Independent-cold oracle, same as Dual.
+    std::printf("\n[DualRatio warm-path]\n");
+    g_strategy = NS::WarmRepair::DualRatio;
+    long dr0 = g_dual;
+    edge_cases();
+    infeasible_agreement();
+    random_campaign();
+    long dualratio_fired = g_dual - dr0;
+
     std::printf("\n--- summary ---\n");
     std::printf("checks=%ld  warm=%ld  dual=%ld  primal=%ld  cold=%ld\n",
                 g_checks, g_warm, g_dual, g_primal, g_cold);
@@ -474,6 +484,10 @@ int main() {
     }
     if (primal_fired < 20) {
         std::printf("INEFFECTIVE: primal-repair exercised only %ld times (<20)\n", primal_fired);
+        ++g_fail;
+    }
+    if (dualratio_fired < 20) {
+        std::printf("INEFFECTIVE: dualratio-repair exercised only %ld times (<20)\n", dualratio_fired);
         ++g_fail;
     }
     if (g_fail) { std::printf("RESULT: FAILED (%d)\n", g_fail); return 1; }

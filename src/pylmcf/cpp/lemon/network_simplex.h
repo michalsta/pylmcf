@@ -175,7 +175,13 @@ namespace lemon {
       Dual,
       /// Primal-pivot repair (restores primal feasibility on the existing
       /// basis; does not preserve dual feasibility — start() reoptimizes).
-      Primal
+      Primal,
+      /// Dual repair with a bound-flipping (long-step) ratio test: like
+      /// Dual but a single basis pivot per leaving arc may be preceded by
+      /// cheap bound flips of cheaper cut-crossing arcs, cutting the number
+      /// of basis pivots.  Not bit-identical to Dual (different basis at
+      /// degenerate optima); opt-in.
+      DualRatio
     };
 
   private:
@@ -276,6 +282,9 @@ namespace lemon {
     IntVector _inc_head;          // size _node_num+2
     IntVector _inc_arc;           // size 2*_all_arc_num
     int       _inc_built_for = -1;
+    // Reused scratch for the DualRatio long-step ratio test: eligible
+    // cut-crossing candidates as (|reduced cost|, arc index).
+    std::vector<std::pair<Cost,int>> _ratio_cand;
     void buildIncidenceCsr() {
       const int nn = _node_num + 1;          // nodes 0.._node_num (root incl.)
       _inc_head.assign(nn + 1, 0);
@@ -1355,6 +1364,10 @@ namespace lemon {
           ++_primal_repair_count;
           return start(pivot_rule);
         }
+        if (strategy == WarmRepair::DualRatio && dualRatioRepair()) {
+          ++_dual_repair_count;          // counted with the dual-repair family
+          return start(pivot_rule);
+        }
       }
       // Cold fallback.
       ++_cold_start_count;
@@ -1567,6 +1580,137 @@ namespace lemon {
         updatePotential();
       }
       return false;                                       // iteration cap — cold fallback.
+    }
+
+    // Dual repair with a bound-flipping (long-step) ratio test.
+    //
+    // Same outer structure as dualSimplexRepair (most-violated leaving tree
+    // arc l=_pred[q]; fundamental cut of l; cut-incident candidate
+    // enumeration via the 1b CSR).  Difference: instead of one basis pivot
+    // that pushes the FULL violation through a single entering arc (which
+    // routinely overshoots and re-violates other arcs -> ~122 pivots), it
+    // walks eligible cut-crossing arcs in ascending |reduced cost| and
+    // *bound-flips* the cheap ones (changeFlow(change=false) = a flow-
+    // conserving fundamental-cycle augmentation that toggles the arc's bound
+    // with NO basis change, NO tree/potential update) until their cumulative
+    // capacity covers the violation; the breakpoint arc enters the basis with
+    // the residual step (one basis pivot per leaving arc).  Flipped arcs all
+    // have |rc| <= the entering arc's |rc|, so after the single potential
+    // shift the basis stays dual-feasible (textbook long-step dual simplex).
+    //
+    // l is guaranteed to lie on every candidate's fundamental cycle (it is
+    // the unique tree arc across the cut), so each flip relieves l by exactly
+    // that arc's capacity in the required direction.  Same max_pivots cap and
+    // false->cold fallback as dualSimplexRepair: never a wrong answer.
+    bool dualRatioRepair() {
+      const int max_pivots = _all_arc_num + _node_num + 16;
+      if ((int)_repair_in_sub.size() < _node_num + 1)
+        _repair_in_sub.resize(_node_num + 1, 0);
+      std::vector<int>& in_sub = _repair_in_sub;
+      if (_inc_built_for != _all_arc_num) buildIncidenceCsr();
+      auto& cand = _ratio_cand;
+
+      for (int iter = 0; iter < max_pivots; ++iter) {
+        // Leaving arc: most-violated basic arc, via its child node q.
+        int q = -1;
+        Value worst = 0;
+        for (int u = 0; u != _node_num; ++u) {
+          if (u == _root) continue;
+          const int l = _pred[u];
+          if (_state[l] != STATE_TREE) continue;
+          Value v = 0;
+          if (_flow[l] < 0)            v = -_flow[l];
+          else if (_flow[l] > _cap[l]) v =  _flow[l] - _cap[l];
+          if (v > worst) { worst = v; q = u; }
+        }
+        if (q == -1) return true;                 // primal feasible — done.
+
+        const int l = _pred[q];
+        const bool over = _flow[l] > _cap[l];
+        const int  pdq  = _pred_dir[q];
+        const int  want = over ? -1 : 1;
+        Value remaining = over ? (_flow[l] - _cap[l]) : (-_flow[l]);
+
+        // Mark the subtree rooted at q (the cut).
+        const int g = ++_repair_gen;
+        {
+          int w = q;
+          for (int k = 0, n = _succ_num[q]; k < n; ++k) {
+            in_sub[w] = g; w = _thread[w];
+          }
+        }
+
+        // Collect eligible cut-crossing candidates (|rc|, arc), reusing the
+        // 1b smaller-side incidence enumeration (each cut arc visited once).
+        cand.clear();
+        auto consider = [&](int e) {
+          if (_state[e] == STATE_TREE) return;
+          const int se = _source[e], te = _target[e];
+          const bool ss = (in_sub[se] == g), st = (in_sub[te] == g);
+          if (ss == st) return;
+          const int dir_into_S = st ? 1 : -1;
+          if (pdq * dir_into_S * _state[e] != want) return;
+          if (_cap[e] <= 0) return;                       // no capacity to give
+          Cost rc = _cost[e] + _pi[se] - _pi[te];
+          if (rc < 0) rc = -rc;
+          cand.emplace_back(rc, e);
+        };
+        if (2 * _succ_num[q] <= _node_num) {
+          int w = q;
+          for (int k = 0, n = _succ_num[q]; k < n; ++k) {
+            for (int p = _inc_head[w]; p < _inc_head[w + 1]; ++p)
+              consider(_inc_arc[p]);
+            w = _thread[w];
+          }
+        } else {
+          for (int vv = 0; vv <= _node_num; ++vv) {
+            if (in_sub[vv] == g) continue;
+            for (int p = _inc_head[vv]; p < _inc_head[vv + 1]; ++p)
+              consider(_inc_arc[p]);
+          }
+        }
+        if (cand.empty()) return false;                   // no candidate -> cold.
+
+        // Ascending |rc|, ties by smallest arc index (deterministic).
+        std::sort(cand.begin(), cand.end(),
+                  [](const std::pair<Cost,int>& a,
+                     const std::pair<Cost,int>& b) {
+                    return a.first != b.first ? a.first < b.first
+                                              : a.second < b.second;
+                  });
+
+        // Long-step walk: bound-flip cheap arcs until one can absorb the
+        // residual, which then enters the basis (single pivot).
+        bool pivoted = false;
+        for (const auto& c : cand) {
+          const int e = c.second;
+          if (_cap[e] < remaining) {
+            // Full bound flip: cycle augmentation, no basis change.
+            in_arc = e;
+            findJoinNode();
+            delta = _cap[e];
+            changeFlow(false);
+            remaining -= _cap[e];
+            continue;
+          }
+          // This arc covers the residual: basis pivot with step=remaining.
+          const int se = _source[e], te = _target[e];
+          const bool ss = (in_sub[se] == g);
+          in_arc = e;
+          findJoinNode();
+          delta = remaining;
+          u_out = q;
+          u_in  = ss ? se : te;
+          v_in  = ss ? te : se;
+          changeFlow(true);
+          updateTreeStructure();
+          updatePotential();
+          pivoted = true;
+          break;
+        }
+        if (!pivoted) return false;   // couldn't cover violation -> cold.
+      }
+      return false;                                       // iteration cap -> cold.
     }
 
     // Primal-pivot repair of a primal-infeasible basis.
