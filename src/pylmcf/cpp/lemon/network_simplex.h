@@ -1671,19 +1671,23 @@ namespace lemon {
         }
         if (cand.empty()) return false;                   // no candidate -> cold.
 
-        // Ascending |rc|, ties by smallest arc index (deterministic).
-        std::sort(cand.begin(), cand.end(),
-                  [](const std::pair<Cost,int>& a,
-                     const std::pair<Cost,int>& b) {
-                    return a.first != b.first ? a.first < b.first
-                                              : a.second < b.second;
-                  });
+        // Min-heap by (|rc|, arc_index): pop cheapest first without sorting
+        // the whole candidate list.  make_heap is O(k) vs O(k log k) for sort;
+        // we only pay O(log k) per arc actually consumed (often 1-3 total).
+        // Traversal order is identical to a full sort → bit-identical results.
+        auto heap_cmp = [](const std::pair<Cost,int>& a,
+                           const std::pair<Cost,int>& b) {
+          return a.first != b.first ? a.first > b.first : a.second > b.second;
+        };
+        std::make_heap(cand.begin(), cand.end(), heap_cmp);
 
         // Long-step walk: bound-flip cheap arcs until one can absorb the
         // residual, which then enters the basis (single pivot).
         bool pivoted = false;
-        for (const auto& c : cand) {
-          const int e = c.second;
+        while (!cand.empty()) {
+          std::pop_heap(cand.begin(), cand.end(), heap_cmp);
+          const int e = cand.back().second;
+          cand.pop_back();
           if (_cap[e] < remaining) {
             // Full bound flip: cycle augmentation, no basis change.
             in_arc = e;
