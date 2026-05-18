@@ -41,6 +41,7 @@
 #include <pylmcf/link_cut_tree.h>
 
 #include <limits>
+#include <cmath>
 #include <memory>
 #include <vector>
 
@@ -151,6 +152,10 @@ class NetworkSimplexLCT {
     _par.assign(_N, -1);
     _predArc.assign(_N, -1);
     _predDir.assign(_N, 0);
+    _piMemo.assign(_N, Cost(0));
+    _piStamp.assign(_N, 0);
+    _piGen = 0;
+    _priceNext = 0;
     for (int u = 0; u < _n; ++u) {     // artificial arc ids/costs are stable
       _cost[_m + u] = _BIGM;
       _cap[_m + u] = _INF;
@@ -191,6 +196,8 @@ class NetworkSimplexLCT {
     _par[R] = -1;
     _predArc[R] = -1;
     _lct->setVal(R, Cost(0));
+    _priceNext = 0;                      // fresh basis: restart block pricing
+    ++_piGen;                            // invalidate any stale potential memo
   }
 
   // LEMON's repairTreeFlows analog: pin non-tree real arcs to their bound,
@@ -250,25 +257,63 @@ class NetworkSimplexLCT {
 
   void pivotLoop() {
     const int m = _m, n = _n;
+    const int A = m + n;
     LinkCutTree<Cost>& lct = *_lct;
-    auto pi = [&](int x) -> Cost { return lct.sumToRoot(x); };
+
+    // Lever 1: per-pivot potential memo.  pi[x] = sumToRoot(x) is O(log n)
+    // (inherent to the LCT — an explicit O(1) array would reintroduce the
+    // O(subtree) potential update the LCT exists to eliminate).  But within
+    // ONE entering-pricing pass a hub node is the endpoint of many arcs;
+    // memoizing collapses those repeated splays to one.  pi is invariant
+    // under bound flips and changes only on a true pivot, so the memo is
+    // refreshed (generation bump) only there.
+    ++_piGen;
+    auto pi = [&](int x) -> Cost {
+      if (_piStamp[x] == _piGen) return _piMemo[x];
+      const Cost v = lct.sumToRoot(x);
+      _piMemo[x] = v;
+      _piStamp[x] = _piGen;
+      return v;
+    };
     auto reduced = [&](int a) -> Cost {
       return _cost[a] + pi(_src[a]) - pi(_tgt[a]);
     };
+    auto violation = [&](int e) -> Cost {  // >0 ⇒ eligible to enter
+      const Cost rc = reduced(e);
+      if (_state[e] == ST_LOWER) return rc < 0 ? -rc : Cost(0);
+      return rc > 0 ? rc : Cost(0);        // ST_UPPER
+    };
 
-    const long long iter_cap = 1LL * (m + n + 4) * (m + n + 4) + 1000;
+    // Lever 2: block-search pricing.  Instead of scanning all A arcs every
+    // pivot, scan cyclically in blocks of ~sqrt(A); pick the most-violating
+    // arc in the first block that contains an eligible one.  O(sqrt(A)) priced
+    // arcs/pivot instead of O(A).  The strongly-feasible (Cunningham) leaving
+    // rule is unchanged, so anti-cycling holds for ANY entering rule (LEMON
+    // pairs block-search with exactly this leaving rule).
+    int block = (int)std::sqrt((double)A) + 1;
+    if (block < 8) block = 8;
+    if (block > A) block = A;
+
+    const long long iter_cap = 1LL * (A + 4) * (A + 4) + 1000;
     for (long long iter = 0; iter < iter_cap; ++iter) {
-      int a = -1;                       // entering: smallest-id eligible arc
-      for (int e = 0; e < m + n; ++e) {
-        if (_state[e] == ST_TREE) continue;
-        const Cost rc = reduced(e);
-        if ((_state[e] == ST_LOWER && rc < 0) ||
-            (_state[e] == ST_UPPER && rc > 0)) {
-          a = e;
-          break;
+      int a = -1;
+      Cost best = 0;
+      int scanned = 0, since_block = 0;
+      while (scanned < A) {
+        const int e = _priceNext;
+        _priceNext = (_priceNext + 1 == A) ? 0 : _priceNext + 1;
+        ++scanned;
+        ++since_block;
+        if (_state[e] != ST_TREE) {
+          const Cost v = violation(e);
+          if (v > best) { best = v; a = e; }
+        }
+        if (since_block >= block) {
+          if (a >= 0) break;            // committed: pivot on best in scan
+          since_block = 0;
         }
       }
-      if (a < 0) break;                 // optimal
+      if (a < 0) break;                 // optimal (no eligible arc anywhere)
 
       const int i = _src[a], j = _tgt[a];
       int first, second;
@@ -348,6 +393,7 @@ class NetworkSimplexLCT {
 
       for (int s : _stem) lct.setVal(s, edgeVal(s));
       lct.link(u_in, v_in);
+      ++_piGen;                         // potentials changed: invalidate memo
     }
   }
 
@@ -405,6 +451,10 @@ class NetworkSimplexLCT {
   std::vector<int> _head, _nxt, _order, _stk;
   std::unique_ptr<LinkCutTree<Cost>> _lct;
   std::vector<Cost> _piCache;
+  std::vector<Cost> _piMemo;            // lever 1: per-pivot potential memo
+  std::vector<int> _piStamp;            // generation stamp for _piMemo
+  int _piGen = 0;                       // bumped per pivot / basis rebuild
+  int _priceNext = 0;                   // lever 2: rotating block-search cursor
   Cost _total = 0;
   int _warm_count = 0, _cold_count = 0;
 };
