@@ -64,11 +64,83 @@ class NetworkSimplexLCTDyn {
     ensureBuilt();
     coldStart();
     pivotLoop();
-    return finish();
+    Status st = finish();
+    _haveBasis = (st == OPTIMAL);
+    snapshot();
+    ++_coldCnt;
+    return st;
+  }
+
+  // Lever 1: incremental warm restart (Simple fast path only).  Costs are
+  // fixed across warm solves.  A supply change Δs[v] re-routes that imbalance
+  // along the tree path v→R: in the r-frame that is a single O(log K) lazy
+  // path range-add per changed node (NOT an O(N) repairTreeFlows recompute).
+  // Feasibility is checked for FREE on just the perturbed segments: the prior
+  // solve left every tree arc feasible (vi,vj ≥ 0), so only nodes on a
+  // perturbation path can violate, and the segment's mi/mj aggregate (which
+  // the range-add already maintains) is exactly that check — no O(N) scan.
+  // If any perturbed segment goes negative, or any capacity changed (handled
+  // conservatively in this first cut), fall back to a cold solve.
+  Status warmRun() {
+    ensureBuilt();
+    if (!_haveBasis) {
+      coldStart();
+      pivotLoop();
+      Status st = finish();
+      _haveBasis = (st == OPTIMAL);
+      snapshot();
+      ++_coldCnt;
+      return st;
+    }
+    bool cap_changed = false;
+    for (int e = 0; e < _m && !cap_changed; ++e)
+      if (_cap[e] != _prevCap[e]) cap_changed = true;
+    if (cap_changed) {                              // conservative: cold
+      coldStart();
+      pivotLoop();
+      Status st = finish();
+      _haveBasis = (st == OPTIMAL);
+      snapshot();
+      ++_coldCnt;
+      return st;
+    }
+    // Supply-only: apply each Δs[v] as one O(log K) lazy path add v→R.
+    _changed.clear();
+    for (int v = 0; v < _n; ++v) {
+      const Value d = _supply[v] - _prevSupply[v];
+      if (d == 0) continue;
+      _changed.push_back(v);
+      const int seg = _lct.segBelow(v, _R);         // path R-excl .. v
+      _lct.applyAddI(seg, +d);                       // r += d ⇒ vi += d
+      _lct.applyAddJ(seg, -d);                       //          vj -= d
+      _lct.segPull();
+    }
+    bool feasible = true;                            // check perturbed segs
+    for (int v : _changed) {                         // (cumulative deltas now)
+      const int seg = _lct.segBelow(v, _R);
+      if (seg == _lct.NIL) continue;
+      if (_lct.mi[seg] < 0 || _lct.mj[seg] < 0) { feasible = false; break; }
+    }
+    if (feasible) {                                  // optimal: costs fixed ⇒
+      ++_warmCnt;                                    // still dual-feasible
+      Status st = finish();
+      _haveBasis = (st == OPTIMAL);
+      snapshot();
+      return st;
+    }
+    coldStart();                                     // basis broke ⇒ cold
+    pivotLoop();
+    Status st = finish();
+    _haveBasis = (st == OPTIMAL);
+    snapshot();
+    ++_coldCnt;
+    return st;
   }
 
   Cost totalCost() const { return _total; }
   Value flow(int arc_id) const { return _flowOut[arc_id]; }
+  int warmCount() const { return _warmCnt; }
+  int coldCount() const { return _coldCnt; }
 
  private:
   enum { ST_UPPER = -1, ST_TREE = 0, ST_LOWER = 1 };
@@ -497,6 +569,13 @@ class NetworkSimplexLCTDyn {
     return OPTIMAL;
   }
 
+  void snapshot() {
+    if ((int)_prevSupply.size() < _n) _prevSupply.assign(_n, 0);
+    if ((int)_prevCap.size() < _m) _prevCap.assign(_m, 0);
+    for (int v = 0; v < _n; ++v) _prevSupply[v] = _supply[v];
+    for (int e = 0; e < _m; ++e) _prevCap[e] = _cap[e];
+  }
+
   int _n, _m = 0, _R = 0, _N = 0;
   bool _built = false;
   Cost _BIGM = 0;
@@ -505,8 +584,10 @@ class NetworkSimplexLCTDyn {
   std::vector<Value> _cap, _flowOut, _supply;
   std::vector<signed char> _state;
   std::vector<int> _par, _predArc, _predDir;
-  std::vector<int> _stem, _oldArc, _oldDir;
-  std::vector<Value> _oldFlow;
+  std::vector<int> _stem, _oldArc, _oldDir, _changed;
+  std::vector<Value> _oldFlow, _prevSupply, _prevCap;
+  bool _haveBasis = false;
+  int _warmCnt = 0, _coldCnt = 0;
   std::vector<Cost> _piMemo;
   std::vector<int> _piStamp;
   int _piGen = 0, _priceNext = 0;
