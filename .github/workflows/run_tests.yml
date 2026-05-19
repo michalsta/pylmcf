@@ -11,7 +11,7 @@ on:
 jobs:
   run_pytest:
     name: ${{ matrix.compiler == 'clang' && format('[clang] {0}', matrix.os) || format('{0} / py{1}', matrix.os, matrix.python-version) }}
-    if: github.ref != 'refs/heads/main' || startsWith(matrix.os, 'linux')
+    if: github.ref != 'refs/heads/main'
     runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
@@ -67,7 +67,6 @@ jobs:
         - os: macos-15-intel
           python-version: "3.13"
 
-
     steps:
       - uses: actions/checkout@v5
       - name: Set up Python ${{ matrix.python-version }}
@@ -94,3 +93,43 @@ jobs:
         run: |
           python -m pytest .
 
+  run_pytest_main:
+    name: ${{ matrix.compiler == 'clang' && format('[clang] {0}', matrix.os) || format('{0} / py{1}', matrix.os, matrix.python-version) }}
+    if: github.ref == 'refs/heads/main'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        os: [linux-amd64, linux-arm64]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        compiler: [default, clang]
+        include:
+        - os: linux-amd64
+          runner: [self-hosted, wloczykij-amd64]
+        - os: linux-arm64
+          runner: [self-hosted, wloczykij-arm64]
+
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+      - name: "Non-default compiler: set up Clang"
+        if: matrix.compiler == 'clang'
+        run: |
+          sudo apt-get install -y clang
+          echo "CC=clang" >> $GITHUB_ENV
+          echo "CXX=clang++" >> $GITHUB_ENV
+          echo "CMAKE_ARGS=-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++" >> $GITHUB_ENV
+      - name: Install package
+        env:
+          VERBOSE: '1'
+        run: |
+          python -m pip install -v .[pytest]
+      - name: Test with pytest
+        working-directory: ./tests
+        run: |
+          python -m pytest .
