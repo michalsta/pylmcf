@@ -4,7 +4,7 @@ on:
     push:
         branches:
             - ci_test
-#            - main
+            - testing
     workflow_call:
 
 jobs:
@@ -14,7 +14,7 @@ jobs:
     strategy:
       matrix:
         # macos-13 is an intel runner, macos-14 is apple silicon
-        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-15-intel, macos-latest, windows-11-arm]
+        os: [self-hosted, ubuntu-24.04-arm, windows-latest, macos-15-intel, macos-latest, windows-11-arm]
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
         compiler: [default, clang]
         exclude:
@@ -31,6 +31,27 @@ jobs:
           compiler: clang
         - os: macos-15-intel
           compiler: clang
+        # mac: only newest Python
+        - os: macos-latest
+          python-version: "3.9"
+        - os: macos-latest
+          python-version: "3.10"
+        - os: macos-latest
+          python-version: "3.11"
+        - os: macos-latest
+          python-version: "3.12"
+        - os: macos-latest
+          python-version: "3.13"
+        - os: macos-15-intel
+          python-version: "3.9"
+        - os: macos-15-intel
+          python-version: "3.10"
+        - os: macos-15-intel
+          python-version: "3.11"
+        - os: macos-15-intel
+          python-version: "3.12"
+        - os: macos-15-intel
+          python-version: "3.13"
 
 
     steps:
