@@ -5,18 +5,32 @@ on:
         branches:
             - ci_test
             - testing
+            - main
     workflow_call:
 
 jobs:
   run_pytest:
     name: ${{ matrix.compiler == 'clang' && format('[clang] {0}', matrix.os) || format('{0} / py{1}', matrix.os, matrix.python-version) }}
-    runs-on: ${{ matrix.os }}
+    if: github.ref != 'refs/heads/main' || startsWith(matrix.os, 'linux')
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
-        # macos-13 is an intel runner, macos-14 is apple silicon
-        os: [self-hosted, ubuntu-24.04-arm, windows-latest, macos-15-intel, macos-latest, windows-11-arm]
+        os: [linux-amd64, linux-arm64, windows-latest, macos-15-intel, macos-latest, windows-11-arm]
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
         compiler: [default, clang]
+        include:
+        - os: linux-amd64
+          runner: [self-hosted, wloczykij-amd64]
+        - os: linux-arm64
+          runner: [self-hosted, wloczykij-arm64]
+        - os: windows-latest
+          runner: windows-latest
+        - os: macos-15-intel
+          runner: macos-15-intel
+        - os: macos-latest
+          runner: macos-latest
+        - os: windows-11-arm
+          runner: windows-11-arm
         exclude:
         - os: windows-11-arm
           python-version: "3.10"
