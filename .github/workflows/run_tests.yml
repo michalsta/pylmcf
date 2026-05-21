@@ -10,7 +10,7 @@ on:
 
 jobs:
   run_pytest:
-    name: ${{ matrix.compiler == 'clang' && format('[clang] {0}', matrix.os) || format('{0} / py{1}', matrix.os, matrix.python-version) }}
+    name: ${{ matrix.compiler == 'clang' && format('[clang] {0} / py{1}', matrix.os, matrix.python-version) || format('{0} / py{1}', matrix.os, matrix.python-version) }}
     if: github.ref != 'refs/heads/main'
     runs-on: ${{ matrix.runner }}
     container: ${{ matrix.container }}
@@ -103,13 +103,13 @@ jobs:
           python -m pytest .
 
   run_pytest_main:
-    name: ${{ matrix.compiler == 'clang' && format('[clang] {0}', matrix.os) || format('{0} / py{1}', matrix.os, matrix.python-version) }}
+    name: ${{ matrix.compiler == 'clang' && format('[clang] {0} / py{1}', matrix.os, matrix.python-version) || format('{0} / py{1}', matrix.os, matrix.python-version) }}
     if: github.ref == 'refs/heads/main'
     runs-on: ${{ matrix.runner }}
     container: ${{ matrix.container }}
     strategy:
       matrix:
-        os: [linux-amd64, linux-arm64]
+        os: [linux-amd64, linux-arm64, windows-latest, macos-latest]
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
         compiler: [default, clang]
         include:
@@ -119,6 +119,10 @@ jobs:
         - os: linux-arm64
           runner: [self-hosted, wloczykij-arm64]
           container: localhost:5000/ubuntu-ci:24.04
+        - os: windows-latest
+          runner: windows-latest
+        - os: macos-latest
+          runner: macos-latest
         exclude:
         # arm64 linux: every other Python version (keep newer)
         - os: linux-arm64
@@ -127,6 +131,32 @@ jobs:
           python-version: "3.11"
         - os: linux-arm64
           python-version: "3.13"
+        # On main, only run 3.14 for Windows/macOS
+        - os: windows-latest
+          python-version: "3.9"
+        - os: windows-latest
+          python-version: "3.10"
+        - os: windows-latest
+          python-version: "3.11"
+        - os: windows-latest
+          python-version: "3.12"
+        - os: windows-latest
+          python-version: "3.13"
+        - os: macos-latest
+          python-version: "3.9"
+        - os: macos-latest
+          python-version: "3.10"
+        - os: macos-latest
+          python-version: "3.11"
+        - os: macos-latest
+          python-version: "3.12"
+        - os: macos-latest
+          python-version: "3.13"
+        # No clang on Windows/macOS
+        - os: windows-latest
+          compiler: clang
+        - os: macos-latest
+          compiler: clang
 
     steps:
       - uses: actions/checkout@v5
