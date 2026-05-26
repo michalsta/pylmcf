@@ -1496,6 +1496,17 @@ namespace lemon {
     // u_in (the detached subtree reattaches there); the other is v_in.
     bool dualSimplexRepair() {
       const int max_pivots = _all_arc_num + _node_num + 16;
+      // Stall bailout: full-step single-pivot dual can overshoot and re-violate
+      // other arcs without strictly reducing the worst basic violation.  On
+      // some graphs that cascade runs to max_pivots before any productive
+      // candidate is exhausted; the cap is so generous (~|arcs|+|nodes|) that
+      // seconds get burned before the cold fallback kicks in.  If the worst
+      // violation has not strictly decreased in MAX_STALL consecutive
+      // iterations the repair is cycling — bail to cold init at once
+      // (DualRatio's bound-flipping is the textbook fix; see below).
+      constexpr int MAX_STALL = 16;
+      Value best_worst = std::numeric_limits<Value>::max();
+      int stall = 0;
       // Generation-stamped subtree membership in a reused member buffer:
       // a strictly increasing _repair_gen means stale stamps never alias the
       // current generation, so no per-iteration clear pass is needed.
@@ -1518,6 +1529,12 @@ namespace lemon {
           if (v > worst) { worst = v; q = u; }
         }
         if (q == -1) return true;                 // primal feasible — done.
+        if (worst < best_worst) {
+          best_worst = worst;
+          stall = 0;
+        } else if (++stall >= MAX_STALL) {
+          return false;                            // stalling — cold fallback.
+        }
 
         const int l = _pred[q];
         const bool over = _flow[l] > _cap[l];     // else: under (_flow[l] < 0)
