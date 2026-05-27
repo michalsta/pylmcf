@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: pylmcf
+version: 0.9.13
+repository-code: "https://github.com/michalsta/pylmcf"
+license: BSL-1.0
+authors:
+  - family-names: Startek
+    given-names: "Michał Piotr"
+    email: michal.startek@mimuw.edu.pl
+preferred-citation:
+  type: article
+  title: "WNetAlign: fast and accurate spectra alignment using truncated Wasserstein distance and network simplex"
+  authors:
+    - family-names: "Król"
+      given-names: Justyna
+    - family-names: Bochenek
+      given-names: Maria
+    - family-names: Jopa
+      given-names: Sylwia
+    - family-names: Kazimierczuk
+      given-names: Krzysztof
+    - family-names: Gambin
+      given-names: Anna
+    - family-names: Startek
+      given-names: "Michał Piotr"
+  journal: "Briefings in Bioinformatics"
+  volume: 27
+  issue: 3
+  article-number: bbag247
+  year: 2026
+  doi: 10.1093/bib/bbag247
