@@ -122,6 +122,28 @@ python -m pylmcf --include
 pylmcf is published under the Boost Software Licence.
 LEMON (which resides in `src/pylmcf/cpp/lemon`) is also covered by the Boost Software Licence.
 
+### Citation
+
+If you use this software, please cite:
+
+Król J, Bochenek M, Jopa S, Kazimierczuk K, Gambin A, Startek MP (2026).
+WNetAlign: fast and accurate spectra alignment using truncated Wasserstein distance and network simplex.
+*Briefings in Bioinformatics*, 27(3), bbag247.
+https://doi.org/10.1093/bib/bbag247
+
+```bibtex
+@article{krol2026wnetalign,
+  title   = {WNetAlign: fast and accurate spectra alignment using truncated Wasserstein distance and network simplex},
+  author  = {Kr{\'o}l, Justyna and Bochenek, Maria and Jopa, Sylwia and Kazimierczuk, Krzysztof and Gambin, Anna and Startek, Micha{\l} Piotr},
+  journal = {Briefings in Bioinformatics},
+  volume  = {27},
+  number  = {3},
+  pages   = {bbag247},
+  year    = {2026},
+  doi     = {10.1093/bib/bbag247}
+}
+```
+
 ### References
 
 - [LEMON Graph Library](https://lemon.cs.elte.hu/trac/lemon)
