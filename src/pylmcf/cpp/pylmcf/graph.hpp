@@ -24,9 +24,12 @@ inline lemon::StaticDigraph make_lemon_graph(LEMON_INDEX no_nodes, const std::sp
         throw std::invalid_argument("All edge arrays must be the same size");
     }
 
-    // Make sure all arcs are valid
+    // Make sure all arcs are valid. LEMON_INDEX is signed, so guard against
+    // negative indices explicitly — they would otherwise pass the upper-bound
+    // check and feed an invalid node id into lemon_graph.build() (UB).
     for (size_t ii = 0; ii < no_edges; ii++) {
-        if (edge_starts[ii] >= no_nodes || edge_ends[ii] >= no_nodes) {
+        if (edge_starts[ii] < 0 || edge_starts[ii] >= no_nodes ||
+            edge_ends[ii] < 0 || edge_ends[ii] >= no_nodes) {
             throw std::invalid_argument("Edge start or end index out of bounds: start=" + std::to_string(edge_starts[ii]) + ", end=" + std::to_string(edge_ends[ii]));
         }
     }
