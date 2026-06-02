@@ -3,13 +3,18 @@
 
 #include <optional>
 #include <span>
+#include <vector>
+#include <utility>
+#include <algorithm>
 #include <iostream>
-#include <lemon/list_graph.h>
+#include <lemon/static_graph.h>
 #include <lemon/network_simplex.h>
 #include <lemon/cycle_canceling.h>
 #include <lemon/cost_scaling.h>
 #include <lemon/capacity_scaling.h>
 #include <type_traits>
+
+#include "basics.hpp"
 
 
 template <typename T>
@@ -43,6 +48,8 @@ T lmcf_impl(
 
     const size_t no_edges = edges_starts.size();
     const size_t no_nodes = node_supply.size();
+    assert_fits_lemon_index(no_nodes, "Node");
+    assert_fits_lemon_index(no_edges, "Edge");
 
     for (size_t i = 0; i < no_edges; i++) {
         if (static_cast<size_t>(edges_starts[i]) >= no_nodes || static_cast<size_t>(edges_ends[i]) >= no_nodes) {
@@ -61,37 +68,55 @@ T lmcf_impl(
         }
     }
 
-    lemon::ListDigraph graph;
+    // StaticDigraph (flat arrays, cache-friendly for the residual traversals
+    // the LEMON MCF algorithms run) requires arcs sorted by (source, target).
+    // The functional API accepts arbitrary edge order, so we sort via a
+    // permutation `perm` (perm[j] = caller's index of the j-th sorted arc) and
+    // map flows back to the caller's order on the way out. A pre-sorted input
+    // (the common case) skips the sort entirely.
+    std::vector<LEMON_INDEX> perm(no_edges);
+    for (size_t i = 0; i < no_edges; i++) perm[i] = static_cast<LEMON_INDEX>(i);
+    auto less_edge = [&](LEMON_INDEX a, LEMON_INDEX b) {
+        if (edges_starts[a] != edges_starts[b]) return edges_starts[a] < edges_starts[b];
+        return edges_ends[a] < edges_ends[b];
+    };
+    bool already_sorted = true;
+    for (size_t j = 1; j < no_edges; j++)
+        if (less_edge(perm[j], perm[j - 1])) { already_sorted = false; break; }
+    if (!already_sorted)
+        std::sort(perm.begin(), perm.end(), less_edge);
 
-    std::vector<lemon::ListDigraph::Node> nodes;
-    nodes.reserve(no_nodes);
-    for (size_t i = 0; i < no_nodes; i++)
-        nodes.push_back(graph.addNode());
-
-    std::vector<lemon::ListDigraph::Arc> arcs;
+    std::vector<std::pair<LEMON_INDEX, LEMON_INDEX>> arcs;
     arcs.reserve(no_edges);
-    for (size_t i = 0; i < no_edges; i++)
-        arcs.push_back(graph.addArc(nodes[edges_starts[i]], nodes[edges_ends[i]]));
+    for (size_t j = 0; j < no_edges; j++)
+        arcs.emplace_back(static_cast<LEMON_INDEX>(edges_starts[perm[j]]),
+                          static_cast<LEMON_INDEX>(edges_ends[perm[j]]));
 
-    lemon::ListDigraph::ArcMap<T> capacities_map(graph);
-    lemon::ListDigraph::ArcMap<T> costs_map(graph);
-    for (size_t i = 0; i < no_edges; i++) {
-        capacities_map[arcs[i]] = capacities[i];
-        costs_map[arcs[i]] = costs[i];
+    lemon::StaticDigraph graph;
+    graph.build(static_cast<LEMON_INDEX>(no_nodes), arcs.begin(), arcs.end());
+
+    // Arc with id j (== arcFromId(j)) is the j-th arc passed to build(), i.e.
+    // the caller's edge perm[j].
+    lemon::StaticDigraph::ArcMap<T> capacities_map(graph);
+    lemon::StaticDigraph::ArcMap<T> costs_map(graph);
+    for (size_t j = 0; j < no_edges; j++) {
+        const auto a = graph.arcFromId(static_cast<LEMON_INDEX>(j));
+        capacities_map[a] = capacities[perm[j]];
+        costs_map[a] = costs[perm[j]];
     }
 
-    lemon::ListDigraph::NodeMap<typename std::make_signed<T>::type> node_supply_map(graph);
+    lemon::StaticDigraph::NodeMap<T> node_supply_map(graph);
     for (size_t i = 0; i < no_nodes; i++)
-        node_supply_map[nodes[i]] = node_supply[i];
+        node_supply_map[graph.nodeFromId(static_cast<LEMON_INDEX>(i))] = node_supply[i];
 
-    using SolverType = Solver<lemon::ListDigraph, T, T>;
+    using SolverType = Solver<lemon::StaticDigraph, T, T>;
     SolverType solver(graph);
 
-    std::optional<lemon::ListDigraph::ArcMap<T>> minimums_map;
+    std::optional<lemon::StaticDigraph::ArcMap<T>> minimums_map;
     if (!minimums.empty()) {
         minimums_map.emplace(graph);
-        for (size_t i = 0; i < no_edges; i++)
-            (*minimums_map)[arcs[i]] = minimums[i];
+        for (size_t j = 0; j < no_edges; j++)
+            (*minimums_map)[graph.arcFromId(static_cast<LEMON_INDEX>(j))] = minimums[perm[j]];
         solver.lowerMap(*minimums_map);
     }
 
@@ -108,8 +133,8 @@ T lmcf_impl(
             throw std::runtime_error("Solver failed with unknown status");
     }
 
-    for (size_t i = 0; i < no_edges; i++)
-        result[i] = solver.flow(arcs[i]);
+    for (size_t j = 0; j < no_edges; j++)
+        result[perm[j]] = solver.flow(graph.arcFromId(static_cast<LEMON_INDEX>(j)));
 
     return solver.totalCost();
 }
