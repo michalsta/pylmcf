@@ -19,12 +19,12 @@ namespace nb = nanobind;
 
 template <typename T>
 nb::ndarray<T, nb::numpy, nb::shape<-1>> py_lmcf(
-    nb::ndarray<T, nb::shape<-1>> node_supply,
-    nb::ndarray<T, nb::shape<-1>> edges_starts,
-    nb::ndarray<T, nb::shape<-1>> edges_ends,
-    nb::ndarray<T, nb::shape<-1>> capacities,
-    nb::ndarray<T, nb::shape<-1>> minimums,
-    nb::ndarray<T, nb::shape<-1>> costs
+    ndarray_1d<T> node_supply,
+    ndarray_1d<T> edges_starts,
+    ndarray_1d<T> edges_ends,
+    ndarray_1d<T> capacities,
+    ndarray_1d<T> minimums,
+    ndarray_1d<T> costs
     ) {
     auto node_supply_span = numpy_to_span<T>(node_supply);
     auto edges_starts_span = numpy_to_span<T>(edges_starts);
@@ -42,11 +42,11 @@ nb::ndarray<T, nb::numpy, nb::shape<-1>> py_lmcf(
 
 template <typename T>
 nb::ndarray<T, nb::numpy, nb::shape<-1>> py_lmcf_no_minimums(
-    nb::ndarray<T, nb::shape<-1>> node_supply,
-    nb::ndarray<T, nb::shape<-1>> edges_starts,
-    nb::ndarray<T, nb::shape<-1>> edges_ends,
-    nb::ndarray<T, nb::shape<-1>> capacities,
-    nb::ndarray<T, nb::shape<-1>> costs
+    ndarray_1d<T> node_supply,
+    ndarray_1d<T> edges_starts,
+    ndarray_1d<T> edges_ends,
+    ndarray_1d<T> capacities,
+    ndarray_1d<T> costs
     ) {
     auto node_supply_span = numpy_to_span<T>(node_supply);
     auto edges_starts_span = numpy_to_span<T>(edges_starts);
@@ -63,12 +63,12 @@ nb::ndarray<T, nb::numpy, nb::shape<-1>> py_lmcf_no_minimums(
 
 template <typename T>
 nb::ndarray<T, nb::numpy, nb::shape<-1>> py_lmcf_cycle_canceling(
-    nb::ndarray<T, nb::shape<-1>> node_supply,
-    nb::ndarray<T, nb::shape<-1>> edges_starts,
-    nb::ndarray<T, nb::shape<-1>> edges_ends,
-    nb::ndarray<T, nb::shape<-1>> capacities,
-    nb::ndarray<T, nb::shape<-1>> minimums,
-    nb::ndarray<T, nb::shape<-1>> costs
+    ndarray_1d<T> node_supply,
+    ndarray_1d<T> edges_starts,
+    ndarray_1d<T> edges_ends,
+    ndarray_1d<T> capacities,
+    ndarray_1d<T> minimums,
+    ndarray_1d<T> costs
     ) {
     auto node_supply_span = numpy_to_span<T>(node_supply);
     auto edges_starts_span = numpy_to_span<T>(edges_starts);
@@ -86,11 +86,11 @@ nb::ndarray<T, nb::numpy, nb::shape<-1>> py_lmcf_cycle_canceling(
 
 template <typename T>
 nb::ndarray<T, nb::numpy, nb::shape<-1>> py_lmcf_cycle_canceling_no_minimums(
-    nb::ndarray<T, nb::shape<-1>> node_supply,
-    nb::ndarray<T, nb::shape<-1>> edges_starts,
-    nb::ndarray<T, nb::shape<-1>> edges_ends,
-    nb::ndarray<T, nb::shape<-1>> capacities,
-    nb::ndarray<T, nb::shape<-1>> costs
+    ndarray_1d<T> node_supply,
+    ndarray_1d<T> edges_starts,
+    ndarray_1d<T> edges_ends,
+    ndarray_1d<T> capacities,
+    ndarray_1d<T> costs
     ) {
     auto node_supply_span = numpy_to_span<T>(node_supply);
     auto edges_starts_span = numpy_to_span<T>(edges_starts);
@@ -107,12 +107,12 @@ nb::ndarray<T, nb::numpy, nb::shape<-1>> py_lmcf_cycle_canceling_no_minimums(
 
 template <typename T>
 nb::ndarray<T, nb::numpy, nb::shape<-1>> py_lmcf_cost_scaling(
-    nb::ndarray<T, nb::shape<-1>> node_supply,
-    nb::ndarray<T, nb::shape<-1>> edges_starts,
-    nb::ndarray<T, nb::shape<-1>> edges_ends,
-    nb::ndarray<T, nb::shape<-1>> capacities,
-    nb::ndarray<T, nb::shape<-1>> minimums,
-    nb::ndarray<T, nb::shape<-1>> costs
+    ndarray_1d<T> node_supply,
+    ndarray_1d<T> edges_starts,
+    ndarray_1d<T> edges_ends,
+    ndarray_1d<T> capacities,
+    ndarray_1d<T> minimums,
+    ndarray_1d<T> costs
     ) {
     auto node_supply_span = numpy_to_span<T>(node_supply);
     auto edges_starts_span = numpy_to_span<T>(edges_starts);
@@ -130,11 +130,11 @@ nb::ndarray<T, nb::numpy, nb::shape<-1>> py_lmcf_cost_scaling(
 
 template <typename T>
 nb::ndarray<T, nb::numpy, nb::shape<-1>> py_lmcf_cost_scaling_no_minimums(
-    nb::ndarray<T, nb::shape<-1>> node_supply,
-    nb::ndarray<T, nb::shape<-1>> edges_starts,
-    nb::ndarray<T, nb::shape<-1>> edges_ends,
-    nb::ndarray<T, nb::shape<-1>> capacities,
-    nb::ndarray<T, nb::shape<-1>> costs
+    ndarray_1d<T> node_supply,
+    ndarray_1d<T> edges_starts,
+    ndarray_1d<T> edges_ends,
+    ndarray_1d<T> capacities,
+    ndarray_1d<T> costs
     ) {
     auto node_supply_span = numpy_to_span<T>(node_supply);
     auto edges_starts_span = numpy_to_span<T>(edges_starts);
@@ -151,12 +151,12 @@ nb::ndarray<T, nb::numpy, nb::shape<-1>> py_lmcf_cost_scaling_no_minimums(
 
 template <typename T>
 nb::ndarray<T, nb::numpy, nb::shape<-1>> py_lmcf_capacity_scaling(
-    nb::ndarray<T, nb::shape<-1>> node_supply,
-    nb::ndarray<T, nb::shape<-1>> edges_starts,
-    nb::ndarray<T, nb::shape<-1>> edges_ends,
-    nb::ndarray<T, nb::shape<-1>> capacities,
-    nb::ndarray<T, nb::shape<-1>> minimums,
-    nb::ndarray<T, nb::shape<-1>> costs
+    ndarray_1d<T> node_supply,
+    ndarray_1d<T> edges_starts,
+    ndarray_1d<T> edges_ends,
+    ndarray_1d<T> capacities,
+    ndarray_1d<T> minimums,
+    ndarray_1d<T> costs
     ) {
     auto node_supply_span = numpy_to_span<T>(node_supply);
     auto edges_starts_span = numpy_to_span<T>(edges_starts);
@@ -174,11 +174,11 @@ nb::ndarray<T, nb::numpy, nb::shape<-1>> py_lmcf_capacity_scaling(
 
 template <typename T>
 nb::ndarray<T, nb::numpy, nb::shape<-1>> py_lmcf_capacity_scaling_no_minimums(
-    nb::ndarray<T, nb::shape<-1>> node_supply,
-    nb::ndarray<T, nb::shape<-1>> edges_starts,
-    nb::ndarray<T, nb::shape<-1>> edges_ends,
-    nb::ndarray<T, nb::shape<-1>> capacities,
-    nb::ndarray<T, nb::shape<-1>> costs
+    ndarray_1d<T> node_supply,
+    ndarray_1d<T> edges_starts,
+    ndarray_1d<T> edges_ends,
+    ndarray_1d<T> capacities,
+    ndarray_1d<T> costs
     ) {
     auto node_supply_span = numpy_to_span<T>(node_supply);
     auto edges_starts_span = numpy_to_span<T>(edges_starts);
@@ -226,7 +226,7 @@ NB_MODULE(pylmcf_cpp, m) {
 
 
     nb::class_<Graph<int64_t>>(m, "CGraph")
-        .def(nb::init<LEMON_INDEX, const nb::ndarray<LEMON_INDEX, nb::shape<-1>> &, const nb::ndarray<LEMON_INDEX, nb::shape<-1>> &>())
+        .def(nb::init<LEMON_INDEX, const ndarray_1d<LEMON_INDEX> &, const ndarray_1d<LEMON_INDEX> &>())
         .def("no_nodes", &Graph<int64_t>::no_nodes)
         .def("no_edges", &Graph<int64_t>::no_edges)
         .def("edge_starts", &Graph<int64_t>::edge_starts)
