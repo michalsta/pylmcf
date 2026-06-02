@@ -17,7 +17,7 @@ env:
 jobs:
   run_pytest:
     name: ${{ matrix.compiler == 'clang' && format('[clang] {0} / py{1}', matrix.os, matrix.python-version) || format('{0} / py{1}', matrix.os, matrix.python-version) }}
-    if: github.ref != 'refs/heads/main'
+    if: github.repository_owner == 'michalsta' && github.ref != 'refs/heads/main'
     runs-on: ${{ matrix.runner }}
     container: ${{ matrix.container }}
     strategy:
@@ -132,7 +132,7 @@ jobs:
 
   run_pytest_main:
     name: ${{ matrix.compiler == 'clang' && format('[clang] {0} / py{1}', matrix.os, matrix.python-version) || format('{0} / py{1}', matrix.os, matrix.python-version) }}
-    if: github.ref == 'refs/heads/main'
+    if: github.repository_owner == 'michalsta' && github.ref == 'refs/heads/main'
     runs-on: ${{ matrix.runner }}
     container: ${{ matrix.container }}
     strategy:

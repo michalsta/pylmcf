@@ -9,6 +9,7 @@ on:
 jobs:
   build_wheels:
     name: Build wheels on ${{ matrix.os }}
+    if: github.repository_owner == 'michalsta'
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -47,6 +48,7 @@ jobs:
 
   build_sdist:
     name: Build source distribution
+    if: github.repository_owner == 'michalsta'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

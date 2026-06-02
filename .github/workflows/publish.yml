@@ -7,13 +7,16 @@ on:
 
 jobs:
   build_wheels:
+    if: github.repository_owner == 'michalsta'
     uses: ./.github/workflows/build_wheels.yml
 
   tests:
+    if: github.repository_owner == 'michalsta'
     uses: ./.github/workflows/run_tests.yml
 
   upload_pypi:
     name: Upload to PyPI
+    if: github.repository_owner == 'michalsta'
     needs: [build_wheels, tests]
     runs-on: ubuntu-latest
     environment: pypi
