@@ -106,3 +106,25 @@ class TestInfeasibleRaises:
         with pytest.raises(RuntimeError, match="INFEASIBLE"):
             solve(solver, self.supply, self.starts, self.ends,
                   self.caps, self.costs)
+
+
+@pytest.mark.parametrize("dtype", [np.int8, np.int16, np.int32, np.int64])
+def test_narrow_dtype_cost_overflow(dtype):
+    """Costs are accumulated in a wide type, so narrow flow dtypes don't
+    corrupt the optimum even when path-cost sums exceed the dtype's range.
+
+    Every individual value fits in int8 (<=127), but the cheap path
+    0->1->2->3->4 sums to 160 (> int8 max 127). The direct edge 0->4 costs
+    120, so the optimum routes everything through it. Before costs were
+    widened, int8 overflowed the path potential and spuriously failed.
+    """
+    a = lambda x: np.asarray(x, dtype=dtype)
+    fn = pylmcf_cpp.lmcf
+    flows = fn(
+        a([10, 0, 0, 0, -10]),          # supply
+        a([0, 0, 1, 2, 3]),             # starts: 0->1, 0->4, 1->2, 2->3, 3->4
+        a([1, 4, 2, 3, 4]),             # ends
+        a([10, 10, 10, 10, 10]),        # capacities
+        a([40, 120, 40, 40, 40]),       # costs: path sum 160 vs direct 120
+    )
+    assert list(flows) == [0, 10, 0, 0, 0]

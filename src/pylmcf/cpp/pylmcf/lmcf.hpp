@@ -25,11 +25,19 @@ void print_span(std::span<T> span) {
     std::cerr << std::endl;
 }
 
+// The flow/capacity/supply value type matches the caller's array dtype T, but
+// costs are accumulated in a wide type: individual costs fit in T, yet path
+// potentials and the cost*flow products that LEMON computes internally overflow
+// a narrow T (e.g. int8/int16), silently corrupting the optimum. int64 cost
+// arithmetic is what the OO API (Graph<int64_t>) already uses.
+using LmcfCost = std::int64_t;
+
 // Core implementation — selects the LEMON solver via template template parameter.
 // minimums may be an empty span {} to indicate no lower bounds (zero by default).
 // validate_costs: if true, rejects negative arc costs (required by NetworkSimplex).
+// Returns the optimal total cost (in the wide cost type, never the narrow T).
 template <template <typename...> class Solver, typename T, bool validate_costs = false>
-T lmcf_impl(
+LmcfCost lmcf_impl(
     std::span<T> node_supply,
     std::span<T> edges_starts,
     std::span<T> edges_ends,
@@ -98,7 +106,7 @@ T lmcf_impl(
     // Arc with id j (== arcFromId(j)) is the j-th arc passed to build(), i.e.
     // the caller's edge perm[j].
     lemon::StaticDigraph::ArcMap<T> capacities_map(graph);
-    lemon::StaticDigraph::ArcMap<T> costs_map(graph);
+    lemon::StaticDigraph::ArcMap<LmcfCost> costs_map(graph);
     for (size_t j = 0; j < no_edges; j++) {
         const auto a = graph.arcFromId(static_cast<LEMON_INDEX>(j));
         capacities_map[a] = capacities[perm[j]];
@@ -109,7 +117,7 @@ T lmcf_impl(
     for (size_t i = 0; i < no_nodes; i++)
         node_supply_map[graph.nodeFromId(static_cast<LEMON_INDEX>(i))] = node_supply[i];
 
-    using SolverType = Solver<lemon::StaticDigraph, T, T>;
+    using SolverType = Solver<lemon::StaticDigraph, T, LmcfCost>;
     SolverType solver(graph);
 
     std::optional<lemon::StaticDigraph::ArcMap<T>> minimums_map;
@@ -141,7 +149,7 @@ T lmcf_impl(
 
 // NetworkSimplex — requires non-negative costs
 template <typename T>
-T lmcf(
+LmcfCost lmcf(
     std::span<T> node_supply,
     std::span<T> edges_starts,
     std::span<T> edges_ends,
@@ -158,7 +166,7 @@ T lmcf(
 
 // Backward-compatible overload — no lower bounds
 template <typename T>
-T lmcf(
+LmcfCost lmcf(
     std::span<T> node_supply,
     std::span<T> edges_starts,
     std::span<T> edges_ends,
@@ -173,7 +181,7 @@ T lmcf(
 
 // CycleCanceling variant
 template <typename T>
-T lmcf_cycle_canceling(
+LmcfCost lmcf_cycle_canceling(
     std::span<T> node_supply,
     std::span<T> edges_starts,
     std::span<T> edges_ends,
@@ -190,7 +198,7 @@ T lmcf_cycle_canceling(
 
 // CycleCanceling overload — no lower bounds
 template <typename T>
-T lmcf_cycle_canceling(
+LmcfCost lmcf_cycle_canceling(
     std::span<T> node_supply,
     std::span<T> edges_starts,
     std::span<T> edges_ends,
@@ -205,7 +213,7 @@ T lmcf_cycle_canceling(
 
 // CostScaling variant
 template <typename T>
-T lmcf_cost_scaling(
+LmcfCost lmcf_cost_scaling(
     std::span<T> node_supply,
     std::span<T> edges_starts,
     std::span<T> edges_ends,
@@ -222,7 +230,7 @@ T lmcf_cost_scaling(
 
 // CostScaling overload — no lower bounds
 template <typename T>
-T lmcf_cost_scaling(
+LmcfCost lmcf_cost_scaling(
     std::span<T> node_supply,
     std::span<T> edges_starts,
     std::span<T> edges_ends,
@@ -237,7 +245,7 @@ T lmcf_cost_scaling(
 
 // CapacityScaling variant
 template <typename T>
-T lmcf_capacity_scaling(
+LmcfCost lmcf_capacity_scaling(
     std::span<T> node_supply,
     std::span<T> edges_starts,
     std::span<T> edges_ends,
@@ -254,7 +262,7 @@ T lmcf_capacity_scaling(
 
 // CapacityScaling overload — no lower bounds
 template <typename T>
-T lmcf_capacity_scaling(
+LmcfCost lmcf_capacity_scaling(
     std::span<T> node_supply,
     std::span<T> edges_starts,
     std::span<T> edges_ends,
