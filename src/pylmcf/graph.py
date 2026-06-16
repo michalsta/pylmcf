@@ -62,11 +62,6 @@ class Graph(CGraph):
             else:
                 attrs["label"] = f"cap: {capacity} / min: {minimum} @ cost: {cost}"
             nx_graph.add_edge(edge_start, edge_end, **attrs)
-        # for edge_start, edge_end in zip(self.edge_starts(), self.edge_ends()):
-        #    nx_graph.add_edge(
-        #        edge_start,
-        #        edge_end,
-        #    )
         return nx_graph
 
     def show(self, filename: Optional[str] = None) -> None:

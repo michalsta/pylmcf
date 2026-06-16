@@ -276,6 +276,16 @@ public:
     nb::ndarray<T, nb::numpy, nb::shape<-1>> extract_result_py() const {
         return steal_mallocd_span_to_np_array(get_edge_flows());
     }
+
+    nb::ndarray<LEMON_INDEX, nb::numpy, nb::shape<-1>, nb::ro> edge_starts_py() const {
+        return nb::ndarray<LEMON_INDEX, nb::numpy, nb::shape<-1>, nb::ro>(
+            const_cast<LEMON_INDEX*>(_edge_starts.data()), { _edge_starts.size() }, nb::find(this));
+    }
+
+    nb::ndarray<LEMON_INDEX, nb::numpy, nb::shape<-1>, nb::ro> edge_ends_py() const {
+        return nb::ndarray<LEMON_INDEX, nb::numpy, nb::shape<-1>, nb::ro>(
+            const_cast<LEMON_INDEX*>(_edge_ends.data()), { _edge_ends.size() }, nb::find(this));
+    }
 #endif
 
 };
