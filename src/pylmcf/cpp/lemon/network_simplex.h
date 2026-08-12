@@ -27,6 +27,7 @@
 #include <vector>
 #include <limits>
 #include <algorithm>
+#include <cstdlib>
 
 #include <lemon/core.h>
 #include <lemon/math.h>
@@ -37,6 +38,10 @@
 namespace pylmcf_stats {
   inline thread_local unsigned long long pivot_calls = 0;
   inline thread_local unsigned long long pivot_arcs = 0;
+  // Diagnostics of the last warmRun() whose repairTreeFlows() failed:
+  // number of violated basic arcs and their total violation mass.
+  inline thread_local unsigned long long warm_violations = 0;
+  inline thread_local unsigned long long warm_violation_mass = 0;
 }
 #endif
 
@@ -275,6 +280,13 @@ namespace lemon {
     int _cold_start_count = 0;
     int _dual_repair_count = 0;
     int _primal_repair_count = 0;
+    int _policy_cold_count = 0;
+    // Warm/cold repair policy (see warmViolationLimit()):
+    //   -2 = auto/unset (currently identical to -1; callers that know the
+    //   problem structure resolve it, e.g. wnetdeconv sets 0 for shared-grid
+    //   profile data), -1 = no limit (always attempt repair), >=0 = explicit
+    //   max violated basic arcs before skipping repair.
+    long _warm_violation_limit = -2;
 
     // Reusable scratch buffers for the warm-restart repair routines, sized
     // lazily to _node_num+1 to avoid a per-solve heap allocation.  The solver
@@ -1502,8 +1514,28 @@ namespace lemon {
         }
         // repairTreeFlows() left the basis primal-infeasible but dual-feasible
         // (and already pinned non-tree arcs / recomputed tree flows). Try a
-        // bounded simplex repair before paying for a cold init.
-        if (strategy == WarmRepair::Dual && dualSimplexRepair()) {
+        // bounded simplex repair before paying for a cold init — unless the
+        // warm/cold policy says repair is a losing move on this problem.
+        const long limit = warmViolationLimit();
+        bool try_repair = strategy != WarmRepair::RepairOnly;
+        if (try_repair) {
+#ifndef PYLMCF_PIVOT_STATS
+          if (limit >= 0)
+#endif
+          {
+            Value viol_mass = 0;
+            const int viol_cnt = countTreeViolations(viol_mass);
+#ifdef PYLMCF_PIVOT_STATS
+            pylmcf_stats::warm_violations = (unsigned long long)viol_cnt;
+            pylmcf_stats::warm_violation_mass = (unsigned long long)viol_mass;
+#endif
+            if (limit >= 0 && viol_cnt > limit) {
+              ++_policy_cold_count;
+              try_repair = false;
+            }
+          }
+        }
+        if (try_repair && strategy == WarmRepair::Dual && dualSimplexRepair()) {
           // dualSimplexRepair() is a heuristic feasibility restorer (delta is
           // the full violation, no ratio test), so it does NOT by itself
           // guarantee optimality — start() must finalize.  (Only the
@@ -1511,15 +1543,15 @@ namespace lemon {
           ++_dual_repair_count;
           return start(pivot_rule);
         }
-        if (strategy == WarmRepair::Primal && primalSimplexRepair()) {
+        if (try_repair && strategy == WarmRepair::Primal && primalSimplexRepair()) {
           ++_primal_repair_count;
           return start(pivot_rule);
         }
-        if (strategy == WarmRepair::DualRatio && dualRatioRepair()) {
+        if (try_repair && strategy == WarmRepair::DualRatio && dualRatioRepair()) {
           ++_dual_repair_count;          // counted with the dual-repair family
           return start(pivot_rule);
         }
-        if (strategy == WarmRepair::DualGreedy && dualGreedyRepair()) {
+        if (try_repair && strategy == WarmRepair::DualGreedy && dualGreedyRepair()) {
           ++_dual_repair_count;          // counted with the dual-repair family
           return start(pivot_rule);
         }
@@ -1534,6 +1566,56 @@ namespace lemon {
     int coldStartCount() const { return _cold_start_count; }
     int dualRepairCount() const { return _dual_repair_count; }
     int primalRepairCount() const { return _primal_repair_count; }
+    // Cold fallbacks forced by the adaptive warm/cold policy (subset of
+    // coldStartCount()).
+    int policyColdCount() const { return _policy_cold_count; }
+
+    // Set the warm/cold repair policy:
+    //   -2 (default) — auto/unset: currently identical to -1.  Callers that
+    //       know the problem structure should resolve it — e.g. wnetdeconv
+    //       sets 0 for shared-grid profile data, where repair measured 2-5x
+    //       slower than plain cold restarts (long-chain bound-flip walks),
+    //       and leaves repair on for centroided data, where it measured ~4x
+    //       faster (PBTTT).
+    //   -1 — always attempt repair (pre-policy behaviour).
+    //   >=0 — skip repair whenever repairTreeFlows() fails with more than
+    //       this many violated basic arcs.  NOTE (measured 2026-08): per-
+    //       solve cutoffs interact with the basis trajectory — a forced cold
+    //       start yields a basis from which subsequent repairs are
+    //       systematically more expensive, and a repair keeps later solves
+    //       on the cheap repairTreeFlows() fast path — so INTERMEDIATE
+    //       thresholds can lose to both extremes (0 and -1).  The useful
+    //       settings in practice are 0 and -1; per-solve time-based latching
+    //       was tried and reverted for the same reason (it broke PBTTT).
+    // The cold fallback is always correct, so every mode is safe.
+    void setWarmViolationLimit(long v) { _warm_violation_limit = v; }
+
+    // Effective policy mode.  Priority: PYLMCF_WARM_VIOLATION_LIMIT
+    // environment variable (read once per process; intended for A/B timing
+    // without rebuilding callers) > setWarmViolationLimit() > auto (-2).
+    long warmViolationLimit() const {
+      static const long env_limit = [] {
+        const char* s = std::getenv("PYLMCF_WARM_VIOLATION_LIMIT");
+        if (!s || !*s) return long(-3);          // -3 = unset
+        return std::strtol(s, nullptr, 10);
+      }();
+      if (env_limit != -3) return env_limit;
+      return _warm_violation_limit;
+    }
+
+    // Count basic (tree) arcs whose flow violates [0, cap] and sum the total
+    // violation mass.  Single O(m) pass over the arc arrays; used by the
+    // adaptive warm/cold policy after repairTreeFlows() fails.
+    int countTreeViolations(Value& mass) const {
+      int cnt = 0;
+      mass = 0;
+      for (int i = 0; i != _all_arc_num; ++i) {
+        if (_state[i] != STATE_TREE) continue;
+        if (_flow[i] < 0)            { ++cnt; mass += -_flow[i]; }
+        else if (_flow[i] > _cap[i]) { ++cnt; mass += _flow[i] - _cap[i]; }
+      }
+      return cnt;
+    }
 
     // Sync _cap[i] from _upper[i] for all real arcs (i < _arc_num).
     // Call after upperMap() and before repairTreeFlows().
