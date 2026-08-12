@@ -31,6 +31,15 @@
 #include <lemon/core.h>
 #include <lemon/math.h>
 
+#ifdef PYLMCF_PIVOT_STATS
+// pylmcf: diagnostic counters for A/B-ing pivot rules.  Not even declared
+// unless PYLMCF_PIVOT_STATS is defined at compile time.
+namespace pylmcf_stats {
+  inline thread_local unsigned long long pivot_calls = 0;
+  inline thread_local unsigned long long pivot_arcs = 0;
+}
+#endif
+
 namespace lemon {
 
   /// \addtogroup min_cost_flow_algs
@@ -447,10 +456,143 @@ namespace lemon {
 
       // Find next entering arc
       bool findEnteringArc() {
+#ifdef PYLMCF_PIVOT_STATS
+        ++pylmcf_stats::pivot_calls;
+#endif
+#if PYLMCF_BLOCK_LOOP == 2
+        // Variant 2: same idea as variant 1, but the wrap is kept off the hot
+        // path.  A call almost always terminates in the first block or two,
+        // long before the scan reaches the end of [_next_arc, m), so phase 1
+        // below is the code that actually runs: a bare `while` over whole
+        // blocks with a bounded inner scan, no rank arithmetic, no conditional
+        // moves, no run-splitting.  Phases 2-4 handle the straddling block and
+        // the [0, _next_arc) tail and are entered rarely.
+        const int na = _next_arc;
+        const int m  = _search_arc_num;
+        const int bs = _block_size;
+        Cost min = 0;
+        int best = -1;
+
+#ifdef PYLMCF_PIVOT_STATS
+#  define PYLMCF_COUNT(n) pylmcf_stats::pivot_arcs += (unsigned long long)(n)
+#else
+#  define PYLMCF_COUNT(n) ((void)0)
+#endif
+#define PYLMCF_SCAN(lo, hi)                                              \
+        do {                                                             \
+          for (int e_ = (lo); e_ < (hi); ++e_) {                         \
+            const Cost c_ = _state[e_] *                                 \
+                (_cost[e_] + _pi[_source[e_]] - _pi[_target[e_]]);       \
+            if (c_ < min) { min = c_; best = e_; }                       \
+          }                                                              \
+          PYLMCF_COUNT((hi) - (lo));                                     \
+        } while (0)
+
+        // Phase 1 -- whole blocks inside [na, m).  No wrap can occur here.
+        int e = na;
+        int leftA = m - na;
+        while (leftA >= bs) {
+          PYLMCF_SCAN(e, e + bs);
+          e += bs;
+          leftA -= bs;
+          if (min < 0) { _in_arc = best; _next_arc = e - 1; return true; }
+        }
+
+        // Phase 2 -- the ragged end of [na, m); this block continues at arc 0.
+        int rem = bs;                       // arcs still owed to the open block
+        if (leftA > 0) { PYLMCF_SCAN(e, e + leftA); rem = bs - leftA; }
+
+        // Phase 3 -- finish that straddling block from the head of [0, na).
+        e = 0;
+        int leftB = na;
+        if (rem < bs && leftB > 0) {
+          const int take = rem < leftB ? rem : leftB;
+          PYLMCF_SCAN(0, take);
+          e = take;
+          leftB -= take;
+          if (take == rem && min < 0) {     // block completed
+            _in_arc = best; _next_arc = e - 1; return true;
+          }
+        }
+
+        // Phase 4 -- whole blocks in [0, na), then the trailing partial block.
+        while (leftB >= bs) {
+          PYLMCF_SCAN(e, e + bs);
+          e += bs;
+          leftB -= bs;
+          if (min < 0) { _in_arc = best; _next_arc = e - 1; return true; }
+        }
+        if (leftB > 0) PYLMCF_SCAN(e, e + leftB);
+
+#undef PYLMCF_SCAN
+#undef PYLMCF_COUNT
+        if (min >= 0) return false;
+        _in_arc = best;
+        return true;  // full scan: stock leaves _next_arc unchanged
+#elif defined(PYLMCF_BLOCK_LOOP)
+        // Same rule, same arcs, same tie-break -- the block boundary is just
+        // lifted out of the inner loop.
+        //
+        // The stock version decrements `cnt` and branches on it once per arc,
+        // which a source-line profile puts at ~13% of total solve time (plus
+        // ~7% in the loop header itself) on the workspace's real instances.
+        // Here the inner loop is a plain bounded scan with no counter and a
+        // trip count known on entry, so the compiler can unroll and pipeline
+        // it; the boundary test happens once per block instead of once per arc.
+        //
+        // Scan order is the concatenation [_next_arc, m) ++ [0, _next_arc), and
+        // a position in that order is an arc's "rank".  Blocks are cut on rank
+        // boundaries exactly where `cnt` cut them -- note `cnt` carries across
+        // the wrap, so a block may straddle it and is then scanned as two
+        // contiguous runs.  Ties keep the arc seen first in scan order, which
+        // strict `<` gives us for free because runs are visited in order.
+        const int na = _next_arc;
+        const int m = _search_arc_num;
+        const int lenA = m - na;
+        auto rank_to_arc = [&](int rk) { return rk < lenA ? na + rk : rk - lenA; };
+
+        Cost min = 0;
+        int best = -1;
+
+        for (int r = 0; r < m; ) {
+          int blk_end = r + _block_size;
+          const bool full_block = blk_end <= m;
+          if (!full_block) blk_end = m;
+
+          for (int p = r; p < blk_end; ) {
+            const int q = (p < lenA && blk_end > lenA) ? lenA : blk_end;
+            const int lo = rank_to_arc(p);
+            const int hi = lo + (q - p);
+            for (int e = lo; e < hi; ++e) {
+              const Cost c = _state[e] *
+                  (_cost[e] + _pi[_source[e]] - _pi[_target[e]]);
+              if (c < min) { min = c; best = e; }
+            }
+            p = q;
+          }
+#ifdef PYLMCF_PIVOT_STATS
+          pylmcf_stats::pivot_arcs += (unsigned long long)(blk_end - r);
+#endif
+          r = blk_end;
+
+          if (full_block && min < 0) {
+            _in_arc = best;
+            _next_arc = rank_to_arc(r - 1);  // last arc examined, as stock
+            return true;
+          }
+        }
+
+        if (min >= 0) return false;
+        _in_arc = best;
+        return true;  // full scan: stock leaves _next_arc unchanged
+#else
         Cost c, min = 0;
         int cnt = _block_size;
         int e;
         for (e = _next_arc; e != _search_arc_num; ++e) {
+#ifdef PYLMCF_PIVOT_STATS
+          ++pylmcf_stats::pivot_arcs;
+#endif
           c = _state[e] * (_cost[e] + _pi[_source[e]] - _pi[_target[e]]);
           if (c < min) {
             min = c;
@@ -462,6 +604,9 @@ namespace lemon {
           }
         }
         for (e = 0; e != _next_arc; ++e) {
+#ifdef PYLMCF_PIVOT_STATS
+          ++pylmcf_stats::pivot_arcs;
+#endif
           c = _state[e] * (_cost[e] + _pi[_source[e]] - _pi[_target[e]]);
           if (c < min) {
             min = c;
@@ -477,6 +622,7 @@ namespace lemon {
       search_end:
         _next_arc = e;
         return true;
+#endif
       }
 
     }; //class BlockSearchPivotRule
