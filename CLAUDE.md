@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 1. **A Python extension** (`pylmcf_cpp`, nanobind) wrapping LEMON's min-cost-flow solvers — the wheel on PyPI.
 2. **A header-only C++ include tree** (`src/pylmcf/cpp/`) that downstream C++ code compiles against directly, located via `python -m pylmcf --include`. This is how `wnet` consumes the solvers.
 
-Most of the recent development is in (2), and **none of it is exposed to Python**: the link-cut-tree simplex variants, the 1D chain solver, and the LEMON warm-restart extensions are all header-only, reachable only from C++. Do not assume a new header is reflected in the Python API — check `pylmcf.cpp`.
+Most of the recent development is in (2) and **mostly not exposed to Python**: the link-cut-tree simplex variants and the 1D chain solver are header-only, reachable only from C++. The exception is the LEMON warm-restart machinery, which `Graph::solve()` now uses on re-solves (with counters exposed on `CGraph`). Do not assume a new header is reflected in the Python API — check `pylmcf.cpp`.
 
 ## Commands
 
@@ -56,13 +56,14 @@ python .github/scripts/check_version.py
 
 `src/pylmcf/cpp/lemon/` is a vendored LEMON copy, but `network_simplex.h` carries substantial pylmcf-specific work that upstream does not have. Overwriting it with a stock LEMON release silently destroys the warm-restart machinery that `wnet` depends on. Additions:
 
-- **`warmRun(PivotRule, WarmRepair)`** — skip `init()`, patch the retained spanning-tree basis for new caps/supplies, then reoptimize. Falls back transparently to a cold `init()+start()`. Only meaningful for EQ supply (`_sum_supply == 0`).
+- **`warmRun(PivotRule, WarmRepair, costs_changed)`** — skip `init()`, patch the retained spanning-tree basis for new caps/supplies, then reoptimize. Falls back transparently to a cold `init()+start()`. Only meaningful for EQ supply (`_sum_supply == 0`); nonzero lower bounds always force the cold fallback (init()/finalizeOptimal() transform supplies and flows and the warm path re-applies neither). Pass `costs_changed=true` when costs were re-pushed since the last solve: tree potentials are recomputed and `start()` reoptimizes from the reused basis instead of taking the "repair succeeded ⇒ already optimal" fast path (which would silently return stale flows).
 - **`WarmRepair` strategies**: `RepairOnly` (repair-or-cold), `Dual` (default; dual-simplex repair preserving dual feasibility), `Primal`, `DualRatio` (bound-flipping long-step ratio test), `DualGreedy` (max-capacity entering arc). The last two are not bit-identical to `Dual` at degenerate optima — opt-in.
 - **Supporting internals**: `repairTreeFlows()`, `dualSimplexRepair()`, `primalSimplexRepair()`, `dualRatioRepair()`, `dualGreedyRepair()`, `syncCapsFromUpper()`, `finalizeOptimal()`, reusable scratch buffers (`_repair_*`), a lazily built CSR node→incident-arc index, and exposed `internalState()` / `sumSupplyMutable()` / `STATE_*_VAL`.
-- **Counters**: `warmStartCount()`, `coldStartCount()`, `dualRepairCount()`, `primalRepairCount()`.
+- **Counters**: `warmStartCount()`, `coldStartCount()`, `dualRepairCount()`, `primalRepairCount()`, `policyColdCount()`; each `warmRun()` increments exactly one of warm/cold/dual/primal.
+- **Warm/cold repair policy**: `setWarmViolationLimit(v)` / `warmViolationLimit()` — `-1`/`-2` always attempt repair (default), `>=0` skip the simplex repair (straight to cold, counted in `policyColdCount()`) when `repairTreeFlows()` fails with more than `v` violated basic arcs. The `PYLMCF_WARM_VIOLATION_LIMIT` env var overrides everything (read once per process; `test_dual_repair.cpp` refuses to run under it).
 - **Stall detection** in `dualSimplexRepair` (`MAX_STALL = 16` non-decreasing violations → cold fallback).
 
-**Correctness precondition, load-bearing everywhere:** edge *costs* must stay fixed across a warm chain; only capacities and supplies may change. That is what keeps the retained basis dual-feasible. `wnet` honors this (only `set_point` mutates caps/supplies).
+**Correctness precondition, load-bearing everywhere:** a warm chain with `costs_changed=false` requires edge *costs* to stay fixed — that is what keeps the retained basis dual-feasible and licenses the fast path. `wnet` honors this (only `set_point` mutates caps/supplies). If costs did change, `costs_changed=true` must be passed (as `Graph::solve()` does via its `_costs_dirty` flag); forgetting it produces silently suboptimal results, not an error.
 
 Two opt-in compile-time flags (off by default, not set by CMake or CI — pass `-D` by hand when experimenting):
 
@@ -74,7 +75,7 @@ Two opt-in compile-time flags (off by default, not set by CMake or CI — pass `
 Shipped to Python:
 
 - **`basics.hpp`** — `LEMON_INT` (`int64_t`, the value type) and `LEMON_INDEX` (`int`, node/arc ids), `assert_fits_lemon_index()`, `sorted_copy()`.
-- **`graph.hpp`** — `Graph<T>` wrapping `lemon::StaticDigraph` + `lemon::NetworkSimplex<..., T, T>`. All solver state lives here. The constructor requires edges **sorted by (start_node, end_node)** and rejects negative/out-of-range node ids; throws `std::invalid_argument` otherwise. Note it calls plain `run()`, not `warmRun()` — the warm path is C++-only.
+- **`graph.hpp`** — `Graph<T>` wrapping `lemon::StaticDigraph` + `lemon::NetworkSimplex<..., T, T>`. All solver state lives here. The constructor requires edges **sorted by (start_node, end_node)** and rejects negative/out-of-range node ids; throws `std::invalid_argument` otherwise. `solve()` warm-restarts via `warmRun()` on re-solves: the first solve (and any solve after a non-OPTIMAL result) goes through plain `run()`; `set_edge_costs()` sets a `_costs_dirty` flag forwarded as `costs_changed`; minimums/non-EQ supply fall back to cold inside `warmRun()` itself. Counters and `set_warm_violation_limit()` are exposed to Python on `CGraph`.
 - **`lmcf.hpp`** — functional API (`lmcf_impl<Solver>`): raw spans in, temporary `lemon::ListDigraph`, chosen solver, flows written back.
 - **`pylmcf.cpp`** — nanobind entry point. Registers the overloaded free functions (int8/16/32/64) and `CGraph` (= `Graph<int64_t>`).
 - **`py_support.hpp`** — nanobind ndarray ↔ `std::span` conversion; hands malloc'd spans to numpy with ownership transfer.
@@ -98,7 +99,7 @@ Header-only, C++-consumers only (this is where the active work is):
 
 ### Two public Python APIs
 
-1. **OO API** (`Graph`): stateful, supports re-solving after changing costs/supplies, exposes `set_edge_minimums()` for lower bounds.
+1. **OO API** (`Graph`): stateful, supports re-solving after changing costs/supplies — re-solves warm-restart from the retained basis (cost changes ride the `costs_changed` path; minimums force cold) — exposes `set_edge_minimums()` for lower bounds, warm/cold counters, and `set_warm_violation_limit()`.
 2. **Functional API** (`pylmcf.pylmcf_cpp.lmcf`, etc.): stateless, numpy arrays in. Four variants: `lmcf` (NetworkSimplex), `lmcf_cycle_canceling`, `lmcf_cost_scaling`, `lmcf_capacity_scaling`. The latter two only support int32/int64 due to arithmetic range requirements. Each has a with- and without-minimums overload.
 
 ### Important constraints
@@ -112,14 +113,14 @@ Header-only, C++-consumers only (this is where the active work is):
 
 ### `tests/` — Python, pytest, run by CI
 
-`test_graph.py`, `test_graph_lb.py` (lower bounds), `test_networkx.py`, `test_solver_variants.py` (the four functional solvers), `test_api.py` (`as_nx`, `FromNX` edge cases, `include()`).
+`test_graph.py`, `test_graph_lb.py` (lower bounds), `test_networkx.py`, `test_solver_variants.py` (the four functional solvers), `test_api.py` (`as_nx`, `FromNX` edge cases, `include()`), `test_warm_resolve.py` (warm re-solve chains vs a fresh-cold oracle: cap/supply/cost mutations, minimums forcing cold, infeasible-then-feasible recovery, the violation-limit policy, and a counter guard that fails if warm restarts silently stop firing).
 
 ### `tests_cpp/` — C++ oracle suites, hand-compiled, NOT in CMake or CI
 
 Each is a standalone `main()` with its `g++` line in the header comment. They are the real correctness net for the solver work, and they all validate against an independent oracle rather than golden values:
 
 - `test_link_cut_tree.cpp` — LCT vs a brute-force O(n) adjacency-list reference over randomized op sequences.
-- `test_dual_repair.cpp` — exhaustive suite for LEMON's `warmRun`/`dualSimplexRepair`: warm chain vs a fresh cold solve after each mutation, checking status, exact cost, primal feasibility, *and* the dual optimality certificate via `potential()`. Also fails if the dual-repair path is never exercised, so a regression that quietly routes everything through cold init cannot pass.
+- `test_dual_repair.cpp` — exhaustive suite for LEMON's `warmRun`/`dualSimplexRepair`: warm chain vs a fresh cold solve after each mutation (cap/supply and `costs_changed=true` cost repricing), checking status, exact cost, primal feasibility, *and* the dual optimality certificate via `potential()`. Also covers the `setWarmViolationLimit` policy (0 must suppress repair and be recorded, -1 must restore it) and the lower-bounds cold guard. Fails if the dual-repair or costs_changed paths are never exercised, so a regression that quietly routes everything through cold init cannot pass. Refuses to run under `PYLMCF_WARM_VIOLATION_LIMIT`.
 - `test_network_simplex_lct.cpp` / `_warm.cpp` — `NetworkSimplexLCT` cold / warm vs LEMON's array solver.
 - `test_network_simplex_lct_dyn.cpp` / `_dyn_warm.cpp` — the dynamic variant vs LEMON.
 - `test_lct_adapter.cpp` — the adapter vs real `lemon::NetworkSimplex` on wnet's exact call pattern.

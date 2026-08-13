@@ -64,6 +64,15 @@ private:
 
     lemon::NetworkSimplex<lemon::StaticDigraph, T, T> solver;
     bool _solved = false;
+    // True when the solver retains an optimal basis from a previous solve()
+    // that warmRun() may restart from.  Invalidated by a non-OPTIMAL solve:
+    // after a failed run the internal tree state is not a reusable basis.
+    bool _basis_valid = false;
+    // Costs changed since the last solve.  warmRun() must then recompute the
+    // tree potentials and reoptimize instead of taking the
+    // "repair succeeded => already optimal" fast path, which is only valid
+    // while the retained basis prices the current costs.
+    bool _costs_dirty = false;
 
 public:
     Graph(LEMON_INDEX no_nodes, const std::span<LEMON_INDEX> &edge_starts,
@@ -181,6 +190,7 @@ public:
         }
 
         solver.costMap(costs_map);
+        _costs_dirty = true;
         _solved = false;
     }
 
@@ -195,19 +205,42 @@ public:
     }
 
     void solve(){
+        using Solver = lemon::NetworkSimplex<lemon::StaticDigraph, T, T>;
         solver.supplyMap(node_supply_map);
         solver.costMap(costs_map);
-        auto status = solver.run();
-        if (status != lemon::NetworkSimplex<lemon::StaticDigraph, T, T>::OPTIMAL) {
-            if (status == lemon::NetworkSimplex<lemon::StaticDigraph, T, T>::INFEASIBLE)
+        // Re-solves warm-restart from the retained basis.  warmRun() itself
+        // falls back to a cold init()+start() whenever the basis cannot be
+        // reused (non-EQ supply, nonzero lower bounds, failed repair), so
+        // every mutation of capacities/supplies/costs/minimums is safe here;
+        // _costs_dirty only steers it off the costs-unchanged fast path.
+        const auto status = _basis_valid
+            ? solver.warmRun(Solver::BLOCK_SEARCH, Solver::WarmRepair::Dual,
+                             _costs_dirty)
+            : solver.run();
+        _basis_valid = (status == Solver::OPTIMAL);
+        if (status != Solver::OPTIMAL) {
+            if (status == Solver::INFEASIBLE)
                 throw std::runtime_error("Solver failed: problem is INFEASIBLE");
-            else if (status == lemon::NetworkSimplex<lemon::StaticDigraph, T, T>::UNBOUNDED)
+            else if (status == Solver::UNBOUNDED)
                 throw std::runtime_error("Solver failed: problem is UNBOUNDED");
             else
                 throw std::runtime_error("Solver failed with unknown status");
         }
+        _costs_dirty = false;
         _solved = true;
     }
+
+    // Warm-restart observability, backed by the solver's counters.  Only
+    // warmRun() increments them: the first solve() and any solve() after a
+    // non-OPTIMAL result go through plain run() and count in neither, so
+    // across a chain of successful re-solves
+    //   warm + cold + dual_repair + primal_repair == number of re-solves.
+    int warm_start_count() const { return solver.warmStartCount(); }
+    int cold_start_count() const { return solver.coldStartCount(); }
+    int dual_repair_count() const { return solver.dualRepairCount(); }
+    int primal_repair_count() const { return solver.primalRepairCount(); }
+    int policy_cold_count() const { return solver.policyColdCount(); }
+    void set_warm_violation_limit(long v) { solver.setWarmViolationLimit(v); }
 
     T total_cost() const {
         if (!_solved)
