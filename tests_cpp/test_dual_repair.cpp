@@ -38,8 +38,10 @@
 //
 // The suite also fails if the dual-repair path is never exercised, so a
 // regression that quietly routes everything through cold init cannot pass.
-// It refuses to run under PYLMCF_WARM_VIOLATION_LIMIT — the env override
-// preempts every per-solver policy and would invalidate those guards.
+// It refuses to run under PYLMCF_WARM_VIOLATION_LIMIT or
+// PYLMCF_WARM_REPAIR_BUDGET — either env override preempts every per-solver
+// setting (a tiny budget starves all repairs) and would invalidate those
+// guards.
 //
 // Build (mirrors src/wnet/cpp/wnet/Makefile):
 //   g++ -I$(python -m pylmcf --include) -std=c++20 -O2 -o /tmp/test_dual_repair \
@@ -581,13 +583,17 @@ static void lower_bounds_force_cold() {
 }
 
 int main() {
-    // The env override outranks every per-solver policy; running under it
-    // would silently invalidate the coverage guards, so refuse outright.
-    if (const char* s = std::getenv("PYLMCF_WARM_VIOLATION_LIMIT"); s && *s) {
-        std::printf("ERROR: PYLMCF_WARM_VIOLATION_LIMIT=%s is set; it overrides "
-                    "the warm/cold policy for every solver and invalidates this "
-                    "suite. Unset it and rerun.\n", s);
-        return 1;
+    // The env overrides outrank every per-solver setting; running under one
+    // would silently invalidate the coverage guards (a tiny repair budget
+    // starves every repair path), so refuse outright.
+    for (const char* name : {"PYLMCF_WARM_VIOLATION_LIMIT",
+                             "PYLMCF_WARM_REPAIR_BUDGET"}) {
+        if (const char* s = std::getenv(name); s && *s) {
+            std::printf("ERROR: %s=%s is set; it overrides the warm-repair "
+                        "policy for every solver and invalidates this suite. "
+                        "Unset it and rerun.\n", name, s);
+            return 1;
+        }
     }
 
     // 0. Hunt a minimal single-step Dual failure first (exits on first hit).
