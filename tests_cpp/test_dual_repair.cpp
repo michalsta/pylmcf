@@ -56,6 +56,7 @@ struct Instance {
 
 static int  g_fail = 0;
 static long g_warm = 0, g_cold = 0, g_dual = 0, g_primal = 0, g_checks = 0;
+static long g_cost_steps = 0;   // warm steps taken through costs_changed=true
 // Warm-repair strategy under test: RepairOnly (Simple regression),
 // Dual, or Primal.  Set per campaign in main().
 static NS::WarmRepair g_strategy = NS::WarmRepair::Dual;
@@ -148,16 +149,25 @@ static void certify(const char* tag, NS& ns, const Graph& g, const Instance& in,
 // persistent solver is still safe to reuse for a further warm restart
 // (i.e. the warm result was OPTIMAL).  Production (wnet) never reuses a
 // solver across a non-OPTIMAL result, so neither do the chained campaigns.
+// When `cm` is non-null the instance's (mutated) costs are re-pushed and
+// warmRun is told costs_changed=true — the update_positions/apply_new_costs
+// production path, where the "repair succeeded => optimal" fast path is
+// forbidden and potentials must be recomputed.
 static bool step(const char* tag, NS& ns, Graph& g,
                  Graph::ArcMap<Value>& um, Graph::NodeMap<Value>& sm,
-                 const Instance& in) {
+                 const Instance& in, Graph::ArcMap<Value>* cm = nullptr) {
     for (int i = 0; i < (int)in.arcs.size(); ++i) um[g.arcFromId(i)] = in.cap[i];
     for (int v = 0; v < in.n; ++v) sm[g.nodeFromId(v)] = in.supply[v];
 
     int w0 = ns.warmStartCount(), c0 = ns.coldStartCount(),
         d0 = ns.dualRepairCount(), p0 = ns.primalRepairCount();
     ns.upperMap(um).supplyMap(sm);
-    auto st_warm = ns.warmRun(NS::BLOCK_SEARCH, g_strategy);
+    if (cm) {
+        for (int i = 0; i < (int)in.arcs.size(); ++i)
+            (*cm)[g.arcFromId(i)] = in.cost[i];
+        ns.costMap(*cm);
+    }
+    auto st_warm = ns.warmRun(NS::BLOCK_SEARCH, g_strategy, /*costs_changed=*/cm != nullptr);
     g_warm   += ns.warmStartCount()   - w0;
     g_cold   += ns.coldStartCount()   - c0;
     g_dual   += ns.dualRepairCount()  - d0;
@@ -183,9 +193,9 @@ struct Gen {
     explicit Gen(uint64_t seed) : rng(seed) {}
     int uni(int lo, int hi) { return std::uniform_int_distribution<int>(lo, hi)(rng); }
 
-    // Costs are drawn ONCE here and never mutated again: warm restart only
-    // supports changing capacities/supplies (it never re-pushes the cost map),
-    // so cost-changing "mutations" are out of scope by design.
+    // Costs are drawn once here.  Cap/supply mutations (mutate) never touch
+    // them — the classic warm path.  Cost mutations (mutate_costs) are pushed
+    // through the separate costs_changed=true warmRun path.
     Instance make(int n, int m) {
         Instance in; in.n = n;
         for (int e = 0; e < m; ++e) {
@@ -230,6 +240,14 @@ struct Gen {
                 in.cap[i] = std::max<Value>(in.cap[i], in.wit[i]);         // stay feasible
             }
         }
+    }
+
+    // Redraw a random subset of arc costs (feasibility untouched).  Models
+    // update_positions_and_solve: same graph, repriced arcs.
+    void mutate_costs(Instance& in) {
+        const int m = (int)in.arcs.size();
+        for (int i = 0; i < m; ++i)
+            if (uni(0, 1) == 0) in.cost[i] = uni(0, 50);
     }
 };
 
@@ -419,14 +437,20 @@ static void random_campaign() {
 
         const int steps = gen.uni(4, 12);          // sequential warm chain
         for (int s = 0; s < steps; ++s) {
-            int kind = gen.uni(0, 2);
+            int kind = gen.uni(0, 4);
+            bool costs = false;
             if (kind == 0)      gen.mutate(in, true,  false);   // supply only
             else if (kind == 1) gen.mutate(in, false, true);    // caps only
-            else                gen.mutate(in, true,  true);    // both
-            if (!step("random-step", ns, g, um, sm, in)) {
+            else if (kind == 2) gen.mutate(in, true,  true);    // both
+            else if (kind == 3) { gen.mutate_costs(in); costs = true; }  // costs only
+            else {              gen.mutate(in, true, true);     // caps+supply+costs
+                                gen.mutate_costs(in); costs = true; }
+            if (!step(costs ? "random-step-costs" : "random-step",
+                      ns, g, um, sm, in, costs ? &cm : nullptr)) {
                 CHECK(false, "feasible chain returned non-OPTIMAL");
                 break;                              // never chain on poisoned solver
             }
+            if (costs) ++g_cost_steps;
         }
     }
 }
@@ -502,6 +526,10 @@ int main() {
     }
     if (dualgreedy_fired < 20) {
         std::printf("INEFFECTIVE: dualgreedy-repair exercised only %ld times (<20)\n", dualgreedy_fired);
+        ++g_fail;
+    }
+    if (g_cost_steps < 100) {
+        std::printf("INEFFECTIVE: costs_changed warm path exercised only %ld times (<100)\n", g_cost_steps);
         ++g_fail;
     }
     if (g_fail) { std::printf("RESULT: FAILED (%d)\n", g_fail); return 1; }

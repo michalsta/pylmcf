@@ -1494,8 +1494,18 @@ namespace lemon {
     //   Dual       — bounded dual-simplex repair (keeps dual feasibility).
     //   Primal     — bounded primal-pivot repair (restores primal feasibility
     //                on the existing basis; start() then reoptimizes).
+    // costs_changed: pass true when costMap() was re-pushed with different
+    // costs since the last solve.  The stored potentials then price the OLD
+    // costs, so the "repairTreeFlows succeeded => already optimal" fast path
+    // is INVALID (with caps/supplies also unchanged it would return the old
+    // flows priced at the new costs — measurably suboptimal).  Instead the
+    // tree potentials are recomputed for the new costs (restoring the
+    // zero-reduced-cost invariant on tree arcs) and start() reoptimizes from
+    // the reused basis — still warm: the previous basis is typically a few
+    // pivots from the new optimum.
     ProblemType warmRun(PivotRule pivot_rule = BLOCK_SEARCH,
-                        WarmRepair strategy = WarmRepair::Dual) {
+                        WarmRepair strategy = WarmRepair::Dual,
+                        bool costs_changed = false) {
       // Recompute _sum_supply from the (already updated) real-node supplies.
       _sum_supply = 0;
       for (int i = 0; i != _node_num; ++i)
@@ -1504,12 +1514,18 @@ namespace lemon {
       if (_sum_supply == 0) {
         _supply[_root] = 0;
         syncCapsFromUpper();
+        if (costs_changed) recomputeTreePotentials();
         if (repairTreeFlows()) {
+          ++_warm_start_count;
+          if (costs_changed) {
+            // Primal-feasible basis, potentials tree-consistent under the
+            // new costs: ordinary primal simplex finishes the reoptimization.
+            return start(pivot_rule);
+          }
           // Costs are unchanged between solves, so the basis is still dual-
           // feasible; repairTreeFlows() just restored primal feasibility =>
           // already optimal.  start()'s pivot loop would do zero useful work,
           // so finalize directly.
-          ++_warm_start_count;
           return finalizeOptimal();
         }
         // repairTreeFlows() left the basis primal-infeasible but dual-feasible
@@ -1615,6 +1631,20 @@ namespace lemon {
         else if (_flow[i] > _cap[i]) { ++cnt; mass += _flow[i] - _cap[i]; }
       }
       return cnt;
+    }
+
+    // Recompute node potentials from the current spanning tree so that every
+    // tree arc has zero reduced cost under the CURRENT _cost[] — the primal-
+    // simplex invariant.  Needed after costMap() changes costs: the stored
+    // _pi[] still prices the old costs.  _pi[_root] is kept as-is (potentials
+    // are shift-invariant).  O(n) walk in thread (pre)order, so parents are
+    // visited before children.
+    void recomputeTreePotentials() {
+      for (int u = _thread[_root]; u != _root; u = _thread[u]) {
+        const int e = _pred[u];
+        _pi[u] = _pred_dir[u] == DIR_UP ? _pi[_parent[u]] - _cost[e]
+                                        : _pi[_parent[u]] + _cost[e];
+      }
     }
 
     // Sync _cap[i] from _upper[i] for all real arcs (i < _arc_num).
