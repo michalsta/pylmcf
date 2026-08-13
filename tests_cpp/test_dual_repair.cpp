@@ -19,12 +19,27 @@
 //      (complementary slackness via potential()), independent of the reference
 //   5. totalCost() == recomputed Sum(cost*flow)
 //
-// Costs are held fixed across each warm chain (matches production: wnet keeps
-// edge costs fixed across set_point and only mutates caps/supplies — the
-// precondition for dual feasibility of the retained basis).
+// Costs are held fixed across the classic warm chains (matches production:
+// wnet keeps edge costs fixed across set_point and only mutates
+// caps/supplies — the precondition for dual feasibility of the retained
+// basis).  Cost-mutation steps in the random campaigns cover the other
+// production path (update_positions_and_solve, and Graph::solve() after
+// set_edge_costs): costs are re-pushed and warmRun(costs_changed=true) must
+// recompute the tree potentials and reoptimize instead of trusting the
+// stale basis.
+//
+// Additional sections:
+//   * warm/cold policy — setWarmViolationLimit(0) must suppress the simplex
+//     repair (forced cold, recorded in policyColdCount()) without affecting
+//     results; -1 must restore the repair behaviour.
+//   * lower-bounds cold guard — warmRun() must refuse the warm path when
+//     nonzero lower bounds are set (init()/finalizeOptimal() transform
+//     supplies and flows; the warm path re-applies neither transformation).
 //
 // The suite also fails if the dual-repair path is never exercised, so a
 // regression that quietly routes everything through cold init cannot pass.
+// It refuses to run under PYLMCF_WARM_VIOLATION_LIMIT — the env override
+// preempts every per-solver policy and would invalidate those guards.
 //
 // Build (mirrors src/wnet/cpp/wnet/Makefile):
 //   g++ -I$(python -m pylmcf --include) -std=c++20 -O2 -o /tmp/test_dual_repair \
@@ -38,6 +53,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <random>
 #include <vector>
 
@@ -455,7 +471,125 @@ static void random_campaign() {
     }
 }
 
+// ---- warm/cold policy ----------------------------------------------------
+// setWarmViolationLimit(0): whenever repairTreeFlows() fails (>=1 violated
+// basic arc by definition), the simplex repair must be skipped in favour of
+// a cold start, recorded in policyColdCount(), with results unaffected.
+// setWarmViolationLimit(-1): repairs fire again, policyColdCount() frozen.
+static void policy_campaign() {
+    std::printf("warm/cold policy campaign\n");
+    Gen gen(0x9E1D0u);
+    long policy_colds = 0, dual_under_limit0 = 0, dual_under_no_limit = 0;
+    for (int mode = 0; mode < 2; ++mode) {              // 0: limit=0, 1: limit=-1
+        const int instances = 120;
+        for (int t = 0; t < instances; ++t) {
+            int n = gen.uni(3, 14);
+            int m = gen.uni(n, n * 4);
+            Instance in = gen.make(n, m);
+
+            Graph g; build_graph(in, g);
+            Graph::ArcMap<Value> um(g), cm(g); Graph::NodeMap<Value> sm(g);
+            NS ns(g);
+            for (int i = 0; i < m; ++i) {
+                cm[g.arcFromId(i)] = in.cost[i];
+                um[g.arcFromId(i)] = in.cap[i];
+            }
+            for (int v = 0; v < n; ++v) sm[g.nodeFromId(v)] = in.supply[v];
+            ns.upperMap(um).costMap(cm).supplyMap(sm);
+            ns.setWarmViolationLimit(mode == 0 ? 0 : -1);
+            if (ns.run() != NS::OPTIMAL) continue;
+
+            const int steps = gen.uni(4, 10);
+            for (int s = 0; s < steps; ++s) {
+                gen.mutate(in, gen.uni(0, 1) == 1, true);
+                if (!step("policy-step", ns, g, um, sm, in)) {
+                    CHECK(false, "feasible policy chain returned non-OPTIMAL");
+                    break;
+                }
+            }
+            if (mode == 0) {
+                policy_colds      += ns.policyColdCount();
+                dual_under_limit0 += ns.dualRepairCount();
+            } else {
+                dual_under_no_limit += ns.dualRepairCount();
+            }
+        }
+    }
+    CHECK(policy_colds > 0, "limit=0 never forced a cold start (vacuous)");
+    CHECK(dual_under_limit0 == 0, "limit=0 must suppress dual repair entirely");
+    CHECK(dual_under_no_limit > 0, "limit=-1 must let dual repair fire again");
+}
+
+// ---- lower-bounds cold guard ---------------------------------------------
+// With nonzero lower bounds set, warmRun() must take the cold fallback (the
+// retained state is in the wrong coordinate space) and still produce results
+// identical to a fresh cold solver given the same lower bounds.
+static void lower_bounds_force_cold() {
+    std::printf("lower-bounds cold guard\n");
+    Graph g;
+    std::vector<std::pair<int,int>> arcs{{0,1},{0,2},{1,2}};
+    g.build(3, arcs.begin(), arcs.end());
+    // arc ids follow sorted order: 0:(0,1) 1:(0,2) 2:(1,2)
+    const Value lower[3] = {2, 0, 1};
+    const Value cost[3]  = {1, 5, 1};
+    Graph::ArcMap<Value> lm(g), um(g), cm(g); Graph::NodeMap<Value> sm(g);
+    for (int i = 0; i < 3; ++i) {
+        lm[g.arcFromId(i)] = lower[i];
+        cm[g.arcFromId(i)] = cost[i];
+        um[g.arcFromId(i)] = 10;
+    }
+    const Value sup0[3] = {5, 0, -5};
+    for (int v = 0; v < 3; ++v) sm[g.nodeFromId(v)] = sup0[v];
+
+    NS ns(g);
+    ns.lowerMap(lm).upperMap(um).costMap(cm).supplyMap(sm);
+    CHECK(ns.run() == NS::OPTIMAL, "lower-bound cold prime not OPTIMAL");
+
+    // Feasible mutation: tighter caps, larger demand.
+    const Value cap1[3] = {7, 9, 9};
+    const Value sup1[3] = {6, 0, -6};
+    for (int i = 0; i < 3; ++i) um[g.arcFromId(i)] = cap1[i];
+    for (int v = 0; v < 3; ++v) sm[g.nodeFromId(v)] = sup1[v];
+    ns.upperMap(um).supplyMap(sm);
+
+    const int w0 = ns.warmStartCount(), c0 = ns.coldStartCount(),
+              d0 = ns.dualRepairCount(), p0 = ns.primalRepairCount();
+    CHECK(ns.warmRun(NS::BLOCK_SEARCH, NS::WarmRepair::Dual) == NS::OPTIMAL,
+          "warmRun with lower bounds not OPTIMAL");
+    CHECK(ns.coldStartCount() == c0 + 1, "lower bounds must force cold");
+    CHECK(ns.warmStartCount() == w0 && ns.dualRepairCount() == d0 &&
+          ns.primalRepairCount() == p0,
+          "lower bounds must not enter the warm path");
+
+    NS ref(g);
+    ref.lowerMap(lm).upperMap(um).costMap(cm).supplyMap(sm);
+    CHECK(ref.run() == NS::OPTIMAL, "lower-bound reference not OPTIMAL");
+    CHECK(ns.totalCost() == ref.totalCost(), "lower-bound cost mismatch");
+
+    Value bal[3] = {0, 0, 0};
+    Value recomputed = 0;
+    for (int i = 0; i < 3; ++i) {
+        Value f = ns.flow(g.arcFromId(i));
+        CHECK(f >= lower[i] && f <= cap1[i], "flow out of [lower,cap]");
+        recomputed += f * cost[i];
+        bal[arcs[i].first]  -= f;
+        bal[arcs[i].second] += f;
+    }
+    CHECK(recomputed == ns.totalCost(), "lower-bound Sum(c*f) != totalCost()");
+    for (int v = 0; v < 3; ++v)
+        CHECK(bal[v] == -sup1[v], "lower-bound conservation");
+}
+
 int main() {
+    // The env override outranks every per-solver policy; running under it
+    // would silently invalidate the coverage guards, so refuse outright.
+    if (const char* s = std::getenv("PYLMCF_WARM_VIOLATION_LIMIT"); s && *s) {
+        std::printf("ERROR: PYLMCF_WARM_VIOLATION_LIMIT=%s is set; it overrides "
+                    "the warm/cold policy for every solver and invalidates this "
+                    "suite. Unset it and rerun.\n", s);
+        return 1;
+    }
+
     // 0. Hunt a minimal single-step Dual failure first (exits on first hit).
     minimal_dual_repro();
 
@@ -476,6 +610,13 @@ int main() {
     infeasible_agreement();
     random_campaign();
     long dual_fired = g_dual - dual0;
+
+    // 2b. Warm/cold policy and lower-bounds guard (both under the
+    //     production-default Dual strategy).
+    std::printf("\n[warm/cold policy]\n");
+    policy_campaign();
+    std::printf("\n[lower-bounds cold guard]\n");
+    lower_bounds_force_cold();
 
     // 3. Full Primal campaign (independent-cold oracle, same as Dual).
     std::printf("\n[Primal warm-path]\n");
