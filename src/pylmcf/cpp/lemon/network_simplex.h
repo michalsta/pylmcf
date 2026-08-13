@@ -277,6 +277,21 @@ namespace lemon {
 
     // Warm-restart counters (incremented by warmRun() only).
     int _warm_start_count = 0;
+    // P2 work budget: _work_acc accumulates tree-walk steps (findJoinNode /
+    // findLeavingArc / changeFlow), per-pivot entering-arc scan estimates and
+    // repair-side scans; _last_cold_work snapshots the units spent by the most
+    // recent cold init()+start() on this solver, giving the budget a measured
+    // per-instance yardstick.  A repair attempt bails to the (always correct)
+    // cold fallback once it has burned _warm_work_budget x _last_cold_work
+    // units.  The default multiplier is deliberately GENEROUS: on some
+    // workloads (PBTTT) an individual repair costs more than one cold solve
+    // yet keeps the next ~dozen solves on the cheap fast path (the trajectory
+    // effect), so a tight budget would re-create the very regression the
+    // violation-limit experiments already demonstrated.  The budget exists to
+    // cut 10-30x pathological outliers, not to arbitrate close calls.
+    long long _work_acc = 0;
+    long long _last_cold_work = 0;
+    double _warm_work_budget = 8.0;   // multiplier; <= 0 disables the budget
     int _cold_start_count = 0;
     int _dual_repair_count = 0;
     int _primal_repair_count = 0;
@@ -1059,8 +1074,11 @@ namespace lemon {
     /// \see ProblemType, PivotRule
     /// \see resetParams(), reset()
     ProblemType run(PivotRule pivot_rule = BLOCK_SEARCH) {
+      const long long w0 = _work_acc;
       if (!init()) return INFEASIBLE;
-      return start(pivot_rule);
+      auto st = start(pivot_rule);
+      _last_cold_work = _work_acc - w0;      // cold yardstick for the budget
+      return st;
     }
 
     /// \brief Reset all the parameters that have been given before.
@@ -1289,6 +1307,7 @@ namespace lemon {
     // Initialize internal data structures
     bool init() {
       if (_node_num == 0) return false;
+      _work_acc += _node_num + _all_arc_num;   // O(n+m) setup, for the budget
 
       // Check the sum of supply values
       _sum_supply = 0;
@@ -1511,7 +1530,13 @@ namespace lemon {
       for (int i = 0; i != _node_num; ++i)
         _sum_supply += _supply[i];
       // Warm path: EQ supply and tree remains primal-feasible after repair.
-      if (_sum_supply == 0) {
+      // Nonzero lower bounds force cold: init() folds _lower into _supply and
+      // solves in the transformed space, and finalizeOptimal() transforms
+      // _flow back to the original space afterwards.  The warm path re-applies
+      // neither transformation, so repairTreeFlows() would mix original-space
+      // retained flows and raw supplies with transformed-space caps/states —
+      // silently wrong results, not just a slow path.
+      if (_sum_supply == 0 && !_has_lower) {
         _supply[_root] = 0;
         syncCapsFromUpper();
         if (costs_changed) recomputeTreePotentials();
@@ -1574,8 +1599,11 @@ namespace lemon {
       }
       // Cold fallback.
       ++_cold_start_count;
+      const long long w0 = _work_acc;
       if (!init()) return INFEASIBLE;
-      return start(pivot_rule);
+      auto st = start(pivot_rule);
+      _last_cold_work = _work_acc - w0;      // cold yardstick for the budget
+      return st;
     }
 
     int warmStartCount() const { return _warm_start_count; }
@@ -1605,6 +1633,32 @@ namespace lemon {
     //       was tried and reverted for the same reason (it broke PBTTT).
     // The cold fallback is always correct, so every mode is safe.
     void setWarmViolationLimit(long v) { _warm_violation_limit = v; }
+
+    // Work budget for one warm-repair attempt, as a multiple of the last
+    // measured cold solve's work on this solver (<= 0 disables).  In-flight
+    // only: it triggers mid-repair on actual accumulated work, never on a
+    // prediction — but note it is still a per-solve decision, and cutting
+    // repairs that are individually expensive yet trajectory-profitable
+    // (PBTTT) is a real risk: keep it generous (default 8.0).  Env override
+    // PYLMCF_WARM_WORK_BUDGET (read once per process; for A/B timing).
+    void setWarmWorkBudget(double mult) { _warm_work_budget = mult; }
+    double warmWorkBudget() const {
+      static const double env_mult = [] {
+        const char* s = std::getenv("PYLMCF_WARM_WORK_BUDGET");
+        if (!s || !*s) return -1.0;             // -1 = unset
+        return std::strtod(s, nullptr);
+      }();
+      if (env_mult >= 0) return env_mult;
+      return _warm_work_budget;
+    }
+    // Absolute work limit for the current repair attempt; 0 = unlimited
+    // (budget disabled, or no cold reference measured yet on this solver).
+    long long warmWorkLimit() const {
+      const double mult = warmWorkBudget();
+      if (mult <= 0 || _last_cold_work <= 0) return 0;
+      return (long long)(mult * (double)_last_cold_work);
+    }
+    long long lastColdWork() const { return _last_cold_work; }
 
     // Effective policy mode.  Priority: PYLMCF_WARM_VIOLATION_LIMIT
     // environment variable (read once per process; intended for A/B timing
@@ -1772,8 +1826,13 @@ namespace lemon {
         _repair_in_sub.resize(_node_num + 1, 0);
       std::vector<int>& in_sub = _repair_in_sub;
       if (_inc_built_for != _all_arc_num) buildIncidenceCsr();
+      const long long work_limit = warmWorkLimit();
+      const long long work_start = _work_acc;
 
       for (int iter = 0; iter < max_pivots; ++iter) {
+        _work_acc += _node_num;                 // leaving-arc scan below
+        if (work_limit > 0 && _work_acc - work_start > work_limit)
+          return false;                         // budget burned -> cold fallback
         // --- Select leaving arc: most-violated basic arc, via its child node.
         int q = -1;
         Value worst = 0;
@@ -1893,8 +1952,13 @@ namespace lemon {
       std::vector<int>& in_sub = _repair_in_sub;
       if (_inc_built_for != _all_arc_num) buildIncidenceCsr();
       auto& cand = _ratio_cand;
+      const long long work_limit = warmWorkLimit();
+      const long long work_start = _work_acc;
 
       for (int iter = 0; iter < max_pivots; ++iter) {
+        _work_acc += _node_num;                 // leaving-arc scan below
+        if (work_limit > 0 && _work_acc - work_start > work_limit)
+          return false;                         // budget burned -> cold fallback
         // Leaving arc: most-violated basic arc, via its child node q.
         int q = -1;
         Value worst = 0;
@@ -1953,6 +2017,7 @@ namespace lemon {
               consider(_inc_arc[p]);
           }
         }
+        _work_acc += _succ_num[q] + (long long)cand.size();  // mark + enumerate
         if (cand.empty()) return false;                   // no candidate -> cold.
 
         // Min-heap by (|rc|, arc_index): pop cheapest first without sorting
@@ -2019,8 +2084,13 @@ namespace lemon {
       std::vector<int>& in_sub = _repair_in_sub;
       if (_inc_built_for != _all_arc_num) buildIncidenceCsr();
       auto& cand = _ratio_cand;
+      const long long work_limit = warmWorkLimit();
+      const long long work_start = _work_acc;
 
       for (int iter = 0; iter < max_pivots; ++iter) {
+        _work_acc += _node_num;                 // leaving-arc scan below
+        if (work_limit > 0 && _work_acc - work_start > work_limit)
+          return false;                         // budget burned -> cold fallback
         // Leaving arc: most-violated basic arc, via its child node q.
         int q = -1;
         Value worst = 0;
@@ -2158,8 +2228,13 @@ namespace lemon {
         _repair_in_sub.resize(_node_num + 1, 0);
       std::vector<int>& in_sub = _repair_in_sub;
       if (_inc_built_for != _all_arc_num) buildIncidenceCsr();
+      const long long work_limit = warmWorkLimit();
+      const long long work_start = _work_acc;
 
       for (int iter = 0; iter < max_pivots; ++iter) {
+        _work_acc += _node_num;                 // leaving-arc scan below
+        if (work_limit > 0 && _work_acc - work_start > work_limit)
+          return false;                         // budget burned -> cold fallback
         // --- Select leaving arc: most-violated basic arc, via its child node.
         int q = -1;
         Value worst = 0;
@@ -2189,6 +2264,7 @@ namespace lemon {
             w = _thread[w];
           }
         }
+        _work_acc += _succ_num[q];
 
         // --- Primal entering rule (cheapest min signed reduced cost),
         //     restricted to arcs INCIDENT to the smaller cut side (every
@@ -2259,13 +2335,16 @@ namespace lemon {
     void findJoinNode() {
       int u = _source[in_arc];
       int v = _target[in_arc];
+      long long steps = 0;
       while (u != v) {
+        ++steps;
         if (_succ_num[u] < _succ_num[v]) {
           u = _parent[u];
         } else {
           v = _parent[v];
         }
       }
+      _work_acc += steps;
       join = u;
     }
 
@@ -2288,7 +2367,9 @@ namespace lemon {
       int e;
 
       // Search the cycle form the first node to the join node
+      long long steps = 0;
       for (int u = first; u != join; u = _parent[u]) {
+        ++steps;
         e = _pred[u];
         d = _flow[e];
         if (_pred_dir[u] == DIR_DOWN) {
@@ -2304,6 +2385,7 @@ namespace lemon {
 
       // Search the cycle form the second node to the join node
       for (int u = second; u != join; u = _parent[u]) {
+        ++steps;
         e = _pred[u];
         d = _flow[e];
         if (_pred_dir[u] == DIR_UP) {
@@ -2316,6 +2398,7 @@ namespace lemon {
           result = 2;
         }
       }
+      _work_acc += steps;
 
       if (result == 1) {
         u_in = first;
@@ -2332,13 +2415,17 @@ namespace lemon {
       // Augment along the cycle
       if (delta > 0) {
         Value val = _state[in_arc] * delta;
+        long long steps = 0;
         _flow[in_arc] += val;
         for (int u = _source[in_arc]; u != join; u = _parent[u]) {
+          ++steps;
           _flow[_pred[u]] -= _pred_dir[u] * val;
         }
         for (int u = _target[in_arc]; u != join; u = _parent[u]) {
+          ++steps;
           _flow[_pred[u]] += _pred_dir[u] * val;
         }
+        _work_acc += steps;
       }
       // Update the state of the entering and leaving arcs
       if (change) {
@@ -2607,8 +2694,15 @@ namespace lemon {
       // Perform heuristic initial pivots
       if (!initialPivots()) return UNBOUNDED;
 
+      // Per-pivot estimate of the entering-arc scan cost (block search scans
+      // ~sqrt(m) arcs per call); keeps the work accounting honest without
+      // touching the hot scan loop itself.
+      const long long scan_est =
+          std::max(10, int(std::sqrt(double(_search_arc_num))));
+
       // Execute the Network Simplex algorithm
       while (pivot.findEnteringArc()) {
+        _work_acc += scan_est;
         findJoinNode();
         bool change = findLeavingArc();
         if (delta >= MAX) return UNBOUNDED;
