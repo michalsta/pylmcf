@@ -115,15 +115,16 @@ class Graph(CGraph):
         sorted_edges = sorted(nx_graph.edges(), key=lambda edge: (edge[0], edge[1]))
         no_edges = len(sorted_edges)
 
-        edge_starts  = np.empty(no_edges, dtype=np.int64)
-        edge_ends    = np.empty(no_edges, dtype=np.int64)
+        # Edge-index arrays are built as int32 (LEMON's index type) so the
+        # C++ constructor takes them without a conversion copy.
+        edge_array = np.array(sorted_edges, dtype=np.int32).reshape(no_edges, 2)
+        edge_starts = np.ascontiguousarray(edge_array[:, 0])
+        edge_ends   = np.ascontiguousarray(edge_array[:, 1])
         capacities   = np.zeros(no_edges, dtype=np.int64) if capacity    is not None else None
         minimums     = np.zeros(no_edges, dtype=np.int64) if lower_bound is not None else None
         costs        = np.zeros(no_edges, dtype=np.int64) if weight      is not None else None
 
         for i, (u, v) in enumerate(sorted_edges):
-            edge_starts[i] = u
-            edge_ends[i]   = v
             attrs = nx_graph[u][v]
             if capacities is not None:
                 capacities[i] = attrs.get(capacity,    0)

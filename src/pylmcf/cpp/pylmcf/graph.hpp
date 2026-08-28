@@ -137,7 +137,11 @@ public:
             throw std::invalid_argument("Capacities must have the same size as the number of edges");
 
         for (LEMON_INT ii = 0; ii < no_edges(); ii++)
+        {
+            if (capacities[ii] < 0)
+                throw std::invalid_argument("Capacities must be non-negative");
             capacities_map[lemon_graph.arcFromId(ii)] = capacities[ii];
+        }
 
         solver.upperMap(capacities_map);
         _solved = false;
@@ -273,6 +277,34 @@ public:
     Graph(LEMON_INDEX no_nodes, const ndarray_1d<LEMON_INDEX> &edge_starts,
         const ndarray_1d<LEMON_INDEX> &edge_ends):
         Graph(no_nodes, numpy_to_span(edge_starts), numpy_to_span<LEMON_INDEX>(edge_ends)) {};
+
+    // int64 edge-index arrays (numpy's default integer dtype on Linux) are
+    // accepted via an explicit checked narrowing to LEMON_INDEX.  This is a
+    // deliberate exact-dtype overload, NOT nanobind implicit conversion —
+    // conversions are disabled (noconvert) module-wide to prevent silent
+    // dtype truncation.
+    static std::vector<LEMON_INDEX> checked_index_vector(const ndarray_1d<std::int64_t> &a) {
+        auto s = numpy_to_span<std::int64_t>(a);
+        std::vector<LEMON_INDEX> v(s.size());
+        for (size_t i = 0; i < s.size(); i++) {
+            if (s[i] < std::numeric_limits<LEMON_INDEX>::min() ||
+                s[i] > std::numeric_limits<LEMON_INDEX>::max())
+                throw std::invalid_argument(
+                    "Edge index does not fit LEMON's 32-bit node index: " + std::to_string(s[i]));
+            v[i] = static_cast<LEMON_INDEX>(s[i]);
+        }
+        return v;
+    }
+
+    Graph(LEMON_INDEX no_nodes, std::vector<LEMON_INDEX> edge_starts,
+        std::vector<LEMON_INDEX> edge_ends):
+        Graph(no_nodes,
+              std::span<LEMON_INDEX>(edge_starts.data(), edge_starts.size()),
+              std::span<LEMON_INDEX>(edge_ends.data(), edge_ends.size())) {};
+
+    Graph(LEMON_INDEX no_nodes, const ndarray_1d<std::int64_t> &edge_starts,
+        const ndarray_1d<std::int64_t> &edge_ends):
+        Graph(no_nodes, checked_index_vector(edge_starts), checked_index_vector(edge_ends)) {};
 
     void set_node_supply_py(const ndarray_1d<T> &node_supply) {
         set_node_supply(numpy_to_span(node_supply));

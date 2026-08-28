@@ -284,8 +284,10 @@ class LinkCutTree {
   }
 
   void splay(int x) {
-    // Push down lazies along the splay path root..x first.
-    static std::vector<int> stk;
+    // Push down lazies along the splay path root..x first.  (_stk is a
+    // reused member buffer — a function-local `static` here would be shared
+    // across instances and threads.)
+    std::vector<int>& stk = _stk;
     stk.clear();
     int t = x;
     stk.push_back(t);
@@ -321,6 +323,7 @@ class LinkCutTree {
   }
 
   int _n;
+  std::vector<int> _stk;  // splay-path scratch (see splay())
   std::vector<int> _ch0, _ch1, _fa;
   std::vector<char> _rev;
   std::vector<Val> _val, _add, _sum, _mn;
