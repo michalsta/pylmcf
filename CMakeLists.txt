@@ -44,6 +44,21 @@ elseif (NOT Python_INTERPRETER_ID STREQUAL "Python")
 elseif (NB_ABI MATCHES "[0-9]t" AND Python_VERSION VERSION_LESS 3.15)
     set(NB_MODE NB_STATIC)
     set(NB_MODE_DESC "linked (free-threaded Python ${Python_VERSION} predates abi3t)")
+elseif (NB_ABI MATCHES "[0-9]t")
+    # Free-threaded 3.15+. Split mode here is abi3t-only -- the classic Stable
+    # ABI does not exist for a free-threaded interpreter -- and nanobind makes
+    # FREE_THREADED mandatory for it, refusing to configure otherwise. That
+    # option declares Py_MOD_GIL_NOT_USED, so the module must not depend on the
+    # GIL for its own internal state: it does not. The extension has no mutable
+    # globals at all (every symbol in .data/.bss is a vtable, typeinfo or
+    # libstdc++ fixture), the optional PYLMCF_PIVOT_STATS counters are
+    # thread_local, and all solver state is per-Graph. What this does NOT
+    # promise is that one CGraph may be driven from two threads at once --
+    # solve() mutates the instance and takes no lock, so concurrent use of a
+    # *shared* object is the caller's business, as with any other free-threaded
+    # extension.
+    set(NB_MODE BACKEND_MODULE nanobind_backend BACKEND_PYPI nanobind-backend FREE_THREADED)
+    set(NB_MODE_DESC "split, free-threaded abi3t (backend module: nanobind_backend)")
 else()
     set(NB_MODE BACKEND_MODULE nanobind_backend BACKEND_PYPI nanobind-backend)
     set(NB_MODE_DESC "split (backend module: nanobind_backend)")

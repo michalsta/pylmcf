@@ -41,6 +41,16 @@ pytest = ["pytest", "networkx"]
 # build.
 wheel.py-api = "cp310"
 
+# A free-threaded interpreter has no classic Stable ABI, so the cp310 request
+# above is simply ignored there and the build would fall out as a version-locked
+# cp315t wheel. abi3t (PEP 803, 3.15+) is the free-threaded equivalent; ask for
+# it explicitly so that lane gets its own portable wheel. Deliberately *not*
+# "cp310.cp315t", which would emit a combined cp315-abi3.abi3t tag that a
+# GIL-enabled 3.15 would also match, quietly outranking the cp310-abi3 wheel.
+[[tool.scikit-build.overrides]]
+if.abi-flags = "t"
+wheel.py-api = "cp315t"
+
 [tool.scikit-build.sdist]
 exclude = [
     "experiments/**",

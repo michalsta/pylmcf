@@ -45,7 +45,15 @@ jobs:
           # win_arm64 is the exception -- nanobind-backend publishes no cp310
           # wheel for it, so that platform is built from cp311 (the resulting
           # wheel is still tagged cp310-abi3 and installs on 3.11+).
-          CIBW_BUILD: "cp310-* cp311-win_arm64"
+          # cp315t is the free-threaded lane: split mode there is abi3t-only
+          # (PEP 803, 3.15+), so it cannot ride the cp310-abi3 wheel and needs a
+          # build of its own. nanobind-backend publishes a cp315/abi3t wheel for
+          # every platform built here, musllinux excepted below.
+          CIBW_BUILD: "cp310-* cp311-win_arm64 cp315t-*"
+          # cp315t needs both: it is free-threaded *and*, until 3.15 goes GA, a
+          # prerelease. Neither flag widens the build on its own -- CIBW_BUILD
+          # still decides what is built.
+          CIBW_ENABLE: "cpython-freethreading cpython-prerelease"
           # No musllinux: there are no musllinux backend wheels, because
           # auditwheel bundles a private libstdc++ and split mode needs the C++
           # runtime shared for exceptions to propagate. Alpine installs from sdist,
@@ -124,6 +132,60 @@ jobs:
         run: |
           python -m pip install pytest networkx
           python -m pytest tests/ -q
+
+  # The abi3t wheel is the only artifact whose whole point is that the GIL stays
+  # off. Installing it and running the suite is not enough to show that: every
+  # test passes just as well with the GIL silently re-enabled, which is exactly
+  # what happens if the FREE_THREADED option is ever dropped. tests/ has a
+  # dedicated module that refuses to be fooled, but it self-skips when the GIL
+  # is on, so assert here that it actually ran.
+  test_wheel_freethreaded:
+    name: Test the abi3t wheel on Python 3.15t
+    if: github.repository_owner == 'michalsta'
+    needs: [build_wheels]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: cibw-wheels-ubuntu-latest-*
+          path: dist
+          merge-multiple: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.15"
+          allow-prereleases: true
+          freethreaded: true
+
+      - name: Check an abi3t wheel was built
+        run: |
+          ls -l dist
+          ls dist | grep -q 'abi3t' || { echo "no abi3t wheel built"; exit 1; }
+
+      - name: Install the wheel (no build -- must install as-is)
+        run: |
+          python -VV
+          python -m pip install --upgrade pip
+          python -m pip install --only-binary=:all: dist/*abi3t*.whl
+
+      - name: The GIL must still be off once the extension is imported
+        run: |
+          cd "$(mktemp -d)"
+          python -c "import pylmcf, sys; from pylmcf.pylmcf_cpp import CGraph; assert not sys._is_gil_enabled(), 'importing pylmcf re-enabled the GIL'; print('GIL off, pylmcf OK', CGraph)"
+
+      - name: Run the test suite, and prove the free-threading tests ran
+        run: |
+          python -m pip install pytest networkx
+          python -m pytest tests/ -q
+          python -m pytest tests/test_free_threading.py -q --no-header -rN \
+            | tee /tmp/ft.log
+          grep -qE '[0-9]+ passed' /tmp/ft.log || { echo "free-threading tests did not run"; exit 1; }
+          grep -q 'skipped' /tmp/ft.log && { echo "free-threading tests skipped -- GIL was on"; exit 1; }
+          echo "free-threading tests ran with the GIL off"
 
   # Free-threaded CPython before 3.15 predates nanobind-backend's abi3t wheels,
   # so it gets no wheel from cibuildwheel and no backend requirement from
