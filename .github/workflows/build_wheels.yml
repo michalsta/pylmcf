@@ -77,6 +77,54 @@ jobs:
           name: cibw-sdist
           path: dist/*.tar.gz
 
+  # Free-threaded CPython before 3.15 predates nanobind-backend's abi3t wheels,
+  # so it gets no wheel from cibuildwheel and no backend requirement from
+  # _pylmcf_metadata.py -- it must build from the sdist in linked mode with
+  # nothing but numpy. This job is the guard on that: declaring the backend
+  # statically used to make the resolve fail here before a compiler was reached,
+  # and nothing else in CI installs on a free-threaded interpreter.
+  test_sdist_freethreaded:
+    name: Build from sdist on free-threaded CPython
+    if: github.repository_owner == 'michalsta'
+    needs: [build_sdist]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: cibw-sdist
+          path: dist
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14t"
+
+      - name: Install from sdist (compiles the extension in linked mode)
+        run: |
+          python -VV
+          python -m pip install --upgrade pip
+          python -m pip install -v dist/*.tar.gz
+
+      - name: Assert the backend was not required
+        # A linked build embeds nanobind; pulling nanobind-backend in here would
+        # mean _pylmcf_metadata.py had mis-detected the interpreter.
+        run: |
+          python -c "import importlib.metadata as m; d = m.metadata('pylmcf').get_all('Requires-Dist'); print(d); assert not any('nanobind-backend' in r for r in d), d"
+          python -c "import importlib.util as u; assert u.find_spec('nanobind_backend') is None, 'backend unexpectedly installed'"
+
+      - name: Smoke-test the compiled extension
+        run: |
+          cd "$(mktemp -d)"
+          python -c "import pylmcf; from pylmcf.pylmcf_cpp import CGraph; print('pylmcf OK', CGraph)"
+
+      - name: Run the test suite
+        run: |
+          python -m pip install pytest
+          python -m pytest tests/ -q
+
   # Split mode is CPython-only, so PyPy gets no wheel. It must still be able to
   # build pylmcf from the sdist, which is the only path that exercises the
   # NB_STATIC fallback in CMakeLists.txt. Without this job that fallback would

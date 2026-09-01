@@ -10,7 +10,9 @@ authors = [{ name="Michał Startek", email="michal.startek@mimuw.edu.pl" }]
 maintainers = [{ name="Michał Startek", email="michal.startek@mimuw.edu.pl" }]
 license = "BSL-1.0"
 license-files = ["LICENCE"]
-dependencies = ["numpy", "nanobind-backend>=1.0; implementation_name == 'cpython'"]
+# Resolved per-build by _pylmcf_metadata.py: nanobind-backend is required only
+# by a split-mode build, and no PEP 508 marker can see which mode CMake picked.
+dynamic = ["dependencies"]
 readme = "README.md"
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -50,4 +52,8 @@ exclude = [
     "reinstall.sh",
     ".github/**",
     ".vscode/**",
+    "CLAUDE.md",
 ]
+
+[[tool.dynamic-metadata]]
+provider = { path = ".", module = "_pylmcf_metadata" }
