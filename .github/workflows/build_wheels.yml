@@ -77,6 +77,54 @@ jobs:
           name: cibw-sdist
           path: dist/*.tar.gz
 
+  # One cp310-abi3 wheel is supposed to cover every CPython from 3.10 up, which
+  # includes Pythons that did not exist when it was built. Nothing else checks
+  # that: the test matrix builds from source, and cibuildwheel builds on 3.10
+  # only. So install the *built artifact* on the newest interpreter there is and
+  # run the suite against it. 3.15 is a prerelease; when it goes GA this job
+  # keeps working unchanged, and the version should be bumped to the next one.
+  test_wheel_newest:
+    name: Test the abi3 wheel on Python 3.15
+    if: github.repository_owner == 'michalsta'
+    needs: [build_wheels]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: cibw-wheels-ubuntu-latest-*
+          path: dist
+          merge-multiple: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.15"
+          allow-prereleases: true
+
+      - name: Check the artifact is the abi3 wheel
+        run: |
+          ls -l dist
+          ls dist | grep -q 'cp310-abi3' || { echo "no cp310-abi3 wheel built"; exit 1; }
+
+      - name: Install the wheel (no build -- must install as-is)
+        run: |
+          python -VV
+          python -m pip install --upgrade pip
+          python -m pip install --only-binary=:all: dist/*cp310-abi3*.whl
+
+      - name: Smoke-test the prebuilt extension
+        run: |
+          cd "$(mktemp -d)"
+          python -c "import pylmcf; from pylmcf.pylmcf_cpp import CGraph; print('pylmcf OK', CGraph)"
+
+      - name: Run the test suite
+        run: |
+          python -m pip install pytest networkx
+          python -m pytest tests/ -q
+
   # Free-threaded CPython before 3.15 predates nanobind-backend's abi3t wheels,
   # so it gets no wheel from cibuildwheel and no backend requirement from
   # _pylmcf_metadata.py -- it must build from the sdist in linked mode with

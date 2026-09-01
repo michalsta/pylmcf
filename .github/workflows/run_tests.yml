@@ -24,7 +24,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [linux-amd64, linux-arm64, windows-latest, macos-15-intel, macos-latest, windows-11-arm]
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
         compiler: [default, clang]
         include:
         - os: linux-amd64
@@ -53,12 +53,12 @@ jobs:
           compiler: clang
         - os: macos-15-intel
           compiler: clang
-        # arm64 linux: every other Python version (keep newer)
+        # arm64 linux: every other Python version, plus the newest two
         - os: linux-arm64
           python-version: "3.11"
         - os: linux-arm64
           python-version: "3.13"
-        # mac: only newest Python
+        # mac: newest stable only, plus the 3.15 prerelease
         - os: macos-latest
           python-version: "3.10"
         - os: macos-latest
@@ -82,6 +82,10 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
+          # 3.15 has no GA release yet; without this it cannot be resolved. The
+          # flag only matters while a version is prerelease -- for every other
+          # entry in the matrix a GA release exists and still wins.
+          allow-prereleases: true
       - name: Create isolated venv (POSIX)
         if: runner.os != 'Windows'
         shell: bash
@@ -131,7 +135,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [linux-amd64, linux-arm64, windows-latest, macos-latest]
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
         compiler: [default, clang]
         include:
         - os: linux-amd64
@@ -145,12 +149,12 @@ jobs:
         - os: macos-latest
           runner: macos-latest
         exclude:
-        # arm64 linux: every other Python version (keep newer)
+        # arm64 linux: every other Python version, plus the newest two
         - os: linux-arm64
           python-version: "3.11"
         - os: linux-arm64
           python-version: "3.13"
-        # On main, only run 3.14 for Windows/macOS
+        # On main, Windows/macOS run the newest stable only, plus 3.15
         - os: windows-latest
           python-version: "3.10"
         - os: windows-latest
@@ -179,6 +183,10 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
+          # 3.15 has no GA release yet; without this it cannot be resolved. The
+          # flag only matters while a version is prerelease -- for every other
+          # entry in the matrix a GA release exists and still wins.
+          allow-prereleases: true
       - name: Create isolated venv (POSIX)
         if: runner.os != 'Windows'
         shell: bash
