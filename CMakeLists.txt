@@ -45,22 +45,11 @@ endif()
 
 if (WNET_NB_LINKED)
     set(NB_MODE NB_STATIC)
+    set(NB_LINKED TRUE)
     set(NB_MODE_DESC "linked (WNET_NB_LINKED=ON)")
-    # A linked nanobind cannot target the 3.10/3.11 stable ABI -- that is what
-    # split mode is for -- and nanobind turns the combination into a hard
-    # configure error. WNET_NB_LINKED exists for local sanitizer and debug
-    # builds, not for producing distributable wheels, so drop the abi3 request
-    # rather than making the caller pass a second incantation.
-    if (DEFINED SKBUILD_SABI_VERSION AND NOT SKBUILD_SABI_VERSION STREQUAL ""
-        AND SKBUILD_SABI_VERSION VERSION_LESS "3.12")
-        message(WARNING
-            "WNET_NB_LINKED=ON overrides wheel.py-api=${SKBUILD_SABI_VERSION}: "
-            "a linked build is specific to Python ${Python_VERSION}. Any wheel "
-            "produced from this build is NOT abi3 and must not be published.")
-        set(SKBUILD_SABI_VERSION "")
-    endif()
 elseif (NOT Python_INTERPRETER_ID STREQUAL "Python")
     set(NB_MODE NB_STATIC)
+    set(NB_LINKED TRUE)
     set(NB_MODE_DESC "linked (${Python_INTERPRETER_ID} is not CPython)")
 elseif (PYLMCF_IS_MUSL)
     # nanobind-backend ships manylinux, macOS and Windows wheels only -- no
@@ -70,9 +59,11 @@ elseif (PYLMCF_IS_MUSL)
     # route, and this branch must be tested before the free-threaded ones: a
     # free-threaded musl interpreter has no backend to reach either.
     set(NB_MODE NB_STATIC)
+    set(NB_LINKED TRUE)
     set(NB_MODE_DESC "linked (musl libc: nanobind-backend publishes no musllinux wheel)")
 elseif (NB_ABI MATCHES "[0-9]t" AND Python_VERSION VERSION_LESS 3.15)
     set(NB_MODE NB_STATIC)
+    set(NB_LINKED TRUE)
     set(NB_MODE_DESC "linked (free-threaded Python ${Python_VERSION} predates abi3t)")
 elseif (NB_ABI MATCHES "[0-9]t")
     # Free-threaded 3.15+. Split mode here is abi3t-only -- the classic Stable
@@ -88,12 +79,33 @@ elseif (NB_ABI MATCHES "[0-9]t")
     # *shared* object is the caller's business, as with any other free-threaded
     # extension.
     set(NB_MODE BACKEND_MODULE nanobind_backend BACKEND_PYPI nanobind-backend FREE_THREADED)
+    set(NB_LINKED FALSE)
     set(NB_MODE_DESC "split, free-threaded abi3t (backend module: nanobind_backend)")
 else()
     set(NB_MODE BACKEND_MODULE nanobind_backend BACKEND_PYPI nanobind-backend)
+    set(NB_LINKED FALSE)
     set(NB_MODE_DESC "split (backend module: nanobind_backend)")
 endif()
 message(STATUS "pylmcf: nanobind build mode: ${NB_MODE_DESC}")
+
+# A linked nanobind cannot target the classic 3.10/3.11 stable ABI -- that is
+# precisely what split mode is for -- and nanobind turns the combination into a
+# hard configure error. Every linked path above can walk into it, not just
+# WNET_NB_LINKED: musl is the one that bites in practice, because there
+# wheel.py-api is honoured. (PyPy and free-threaded builds escape only because
+# scikit-build-core discards the classic abi3 request for them anyway.) Drop the
+# request rather than making the platform pass a second incantation.
+if (NB_LINKED AND DEFINED SKBUILD_SABI_VERSION
+    AND NOT SKBUILD_SABI_VERSION STREQUAL ""
+    AND SKBUILD_SABI_VERSION VERSION_LESS "3.12")
+    message(WARNING
+        "pylmcf: dropping the wheel.py-api=${SKBUILD_SABI_VERSION} stable-ABI "
+        "request -- this is a ${NB_MODE_DESC} build, which is specific to "
+        "Python ${Python_VERSION}. scikit-build-core still tags the wheel abi3, "
+        "so the wheel produced here is NOT portable across Python versions: "
+        "install it and discard it, never publish or reuse it.")
+    set(SKBUILD_SABI_VERSION "")
+endif()
 
 
 set(CMAKE_CXX_STANDARD 20)

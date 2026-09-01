@@ -59,10 +59,13 @@ jobs:
           # build of its own. nanobind-backend publishes a cp315/abi3t wheel for
           # every platform built here, musllinux excepted below.
           CIBW_BUILD: "cp310-* cp311-win_arm64 cp315t-*"
-          # cp315t needs both: it is free-threaded *and*, until 3.15 goes GA, a
-          # prerelease. Neither flag widens the build on its own -- CIBW_BUILD
-          # still decides what is built.
-          CIBW_ENABLE: "cpython-freethreading cpython-prerelease"
+          # cp315t needs this because 3.15 is still a prerelease. It does NOT
+          # need a free-threading group: current cibuildwheel builds free-threaded
+          # identifiers by default and rejects "cpython-freethreading" outright
+          # (valid groups: cpython-prerelease, graalpy, pypy, pypy-eol,
+          # pyodide-eol, pyodide-prerelease). This does not widen the build on its
+          # own -- CIBW_BUILD still decides what is built.
+          CIBW_ENABLE: "cpython-prerelease"
           # No musllinux: there are no musllinux backend wheels, because
           # auditwheel bundles a private libstdc++ and split mode needs the C++
           # runtime shared for exceptions to propagate -- and no backend sdist
@@ -317,7 +320,7 @@ jobs:
 
       - name: Run the test suite
         run: |
-          python -m pip install pytest
+          python -m pip install pytest networkx
           python -m pytest tests/ -q
 
   # Split mode is CPython-only, so PyPy gets no wheel. It must still be able to
@@ -358,5 +361,5 @@ jobs:
 
       - name: Run the test suite
         run: |
-          python -m pip install pytest
+          python -m pip install pytest networkx
           python -m pytest tests/ -q
