@@ -1,16 +1,16 @@
 [build-system]
-requires = ["scikit-build-core", "nanobind"]
+requires = ["scikit-build-core", "nanobind>=3.0.1"]
 build-backend = "scikit_build_core.build"
 
 [project]
 name = "pylmcf"
-version = "1.1.0"
+version = "1.2.0"
 description = "Python bindings for Network Simplex algorithm from LEMON library"
 authors = [{ name="Michał Startek", email="michal.startek@mimuw.edu.pl" }]
 maintainers = [{ name="Michał Startek", email="michal.startek@mimuw.edu.pl" }]
 license = "BSL-1.0"
 license-files = ["LICENCE"]
-dependencies = ["numpy"]
+dependencies = ["numpy", "nanobind-backend>=1.0; implementation_name == 'cpython'"]
 readme = "README.md"
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -20,7 +20,7 @@ classifiers = [
     "Development Status :: 5 - Production/Stable",
 ]
 keywords = ["network simplex", "minimum cost flow", "lemon", "graph algorithms"]
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 
 [project.urls]
 "Homepage" = "https://github.com/michalsta/pylmcf"
@@ -29,6 +29,15 @@ requires-python = ">=3.9"
 [project.optional-dependencies]
 extras = ["networkx", "matplotlib"]
 pytest = ["pytest", "networkx"]
+
+[tool.scikit-build]
+# Split-mode extensions are stable-ABI builds. Declaring the target here gets the
+# wheel an `abi3` tag, and nanobind reads it back as SKBUILD_SABI_VERSION to set
+# the stable ABI floor, so the two can never drift apart. One wheel per platform
+# then covers every Python from 3.10 up. Ignored automatically on PyPy and on
+# free-threaded interpreters, which is exactly when CMake falls back to a linked
+# build.
+wheel.py-api = "cp310"
 
 [tool.scikit-build.sdist]
 exclude = [

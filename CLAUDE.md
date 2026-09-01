@@ -135,7 +135,7 @@ When touching any solver header, run the corresponding `tests_cpp` suite — not
 
 ## CI
 
-`run_tests.yml` has two near-identical jobs gated on branch: `run_pytest` (non-`main`, wide matrix incl. `macos-15-intel` and `windows-11-arm`) and `run_pytest_main` (`main` only, narrower — Windows/macOS restricted to py3.14). Both run on `michalsta`-owned repos only, across Linux amd64/arm64 (self-hosted `wloczykij` runners in a local-registry Ubuntu 24.04 container) × Python 3.9–3.14 × {default, clang}, with pip's HTTP/wheel cache disabled because `$HOME` is a persistent bind mount on the self-hosted runners. Wheels: `cibuildwheel` (`build_wheels.yml`) on the `ci_wheels` branch. Publishing (`publish.yml`) requires the git tag to match `pyproject.toml` exactly.
+`run_tests.yml` has two near-identical jobs gated on branch: `run_pytest` (non-`main`, wide matrix incl. `macos-15-intel` and `windows-11-arm`) and `run_pytest_main` (`main` only, narrower — Windows/macOS restricted to py3.14). Both run on `michalsta`-owned repos only, across Linux amd64/arm64 (self-hosted `wloczykij` runners in a local-registry Ubuntu 24.04 container) × Python 3.10–3.14 × {default, clang}, with pip's HTTP/wheel cache disabled because `$HOME` is a persistent bind mount on the self-hosted runners. Wheels: `cibuildwheel` (`build_wheels.yml`) on the `ci_wheels` branch. Publishing (`publish.yml`) requires the git tag to match `pyproject.toml` exactly.
 
 # Persona
 

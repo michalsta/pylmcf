@@ -24,7 +24,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [linux-amd64, linux-arm64, windows-latest, macos-15-intel, macos-latest, windows-11-arm]
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
         compiler: [default, clang]
         include:
         - os: linux-amd64
@@ -44,8 +44,6 @@ jobs:
         exclude:
         - os: windows-11-arm
           python-version: "3.10"
-        - os: windows-11-arm
-          python-version: "3.9"
         # clang only on Linux
         - os: windows-latest
           compiler: clang
@@ -57,14 +55,10 @@ jobs:
           compiler: clang
         # arm64 linux: every other Python version (keep newer)
         - os: linux-arm64
-          python-version: "3.9"
-        - os: linux-arm64
           python-version: "3.11"
         - os: linux-arm64
           python-version: "3.13"
         # mac: only newest Python
-        - os: macos-latest
-          python-version: "3.9"
         - os: macos-latest
           python-version: "3.10"
         - os: macos-latest
@@ -73,8 +67,6 @@ jobs:
           python-version: "3.12"
         - os: macos-latest
           python-version: "3.13"
-        - os: macos-15-intel
-          python-version: "3.9"
         - os: macos-15-intel
           python-version: "3.10"
         - os: macos-15-intel
@@ -139,7 +131,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [linux-amd64, linux-arm64, windows-latest, macos-latest]
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
         compiler: [default, clang]
         include:
         - os: linux-amd64
@@ -155,14 +147,10 @@ jobs:
         exclude:
         # arm64 linux: every other Python version (keep newer)
         - os: linux-arm64
-          python-version: "3.9"
-        - os: linux-arm64
           python-version: "3.11"
         - os: linux-arm64
           python-version: "3.13"
         # On main, only run 3.14 for Windows/macOS
-        - os: windows-latest
-          python-version: "3.9"
         - os: windows-latest
           python-version: "3.10"
         - os: windows-latest
@@ -171,8 +159,6 @@ jobs:
           python-version: "3.12"
         - os: windows-latest
           python-version: "3.13"
-        - os: macos-latest
-          python-version: "3.9"
         - os: macos-latest
           python-version: "3.10"
         - os: macos-latest

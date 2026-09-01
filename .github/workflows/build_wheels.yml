@@ -36,10 +36,21 @@ jobs:
         env:
           GITHUB_BUILDING_WHEELS: 1
           VERBOSE: 1
-          MACOSX_DEPLOYMENT_TARGET: "10.13"
-          CIBW_ENABLE: "pypy"
-          CIBW_BUILD: "cp* pp*"
-          CIBW_SKIP: "cp38-* cp39-win_arm64 cp310-win_arm64"
+          # Raised from 10.13: the nanobind-backend x86_64 wheels this extension
+          # resolves at import are macosx_10_14 (cp310-cp313) and macosx_10_15
+          # (cp314+). Advertising 10.13 would promise platforms where the backend
+          # cannot be installed.
+          MACOSX_DEPLOYMENT_TARGET: "10.15"
+          # Split mode: one cp310-abi3 wheel per platform covers Python 3.10+.
+          # win_arm64 is the exception -- nanobind-backend publishes no cp310
+          # wheel for it, so that platform is built from cp311 (the resulting
+          # wheel is still tagged cp310-abi3 and installs on 3.11+).
+          CIBW_BUILD: "cp310-* cp311-win_arm64"
+          # No musllinux: there are no musllinux backend wheels, because
+          # auditwheel bundles a private libstdc++ and split mode needs the C++
+          # runtime shared for exceptions to propagate. Alpine installs from sdist,
+          # where CMake falls back to a linked build.
+          CIBW_SKIP: "*-musllinux_*"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -65,3 +76,44 @@ jobs:
         with:
           name: cibw-sdist
           path: dist/*.tar.gz
+
+  # Split mode is CPython-only, so PyPy gets no wheel. It must still be able to
+  # build pylmcf from the sdist, which is the only path that exercises the
+  # NB_STATIC fallback in CMakeLists.txt. Without this job that fallback would
+  # rot unnoticed until somebody on PyPy or Alpine tried to install.
+  test_sdist_pypy:
+    name: Build from sdist on PyPy
+    if: github.repository_owner == 'michalsta'
+    needs: [build_sdist]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: cibw-sdist
+          path: dist
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "pypy3.11"
+
+      - name: Install from sdist (compiles the extension in linked mode)
+        run: |
+          python -VV
+          python -m pip install --upgrade pip
+          python -m pip install -v dist/*.tar.gz
+
+      - name: Smoke-test the compiled extension
+        # Run from a scratch directory so the import resolves to the installed
+        # package rather than the source tree next to it.
+        run: |
+          cd "$(mktemp -d)"
+          python -c "import pylmcf; from pylmcf.pylmcf_cpp import CGraph; print('pylmcf OK', CGraph)"
+
+      - name: Run the test suite
+        run: |
+          python -m pip install pytest
+          python -m pytest tests/ -q
