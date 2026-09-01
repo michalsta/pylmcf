@@ -22,6 +22,27 @@ find_package(nanobind REQUIRED CONFIG)
 # frontend/backend pair must agree on compiler, C++ runtime and debug mode.
 option(WNET_NB_LINKED "Force a linked (NB_STATIC) nanobind build instead of split mode" OFF)
 
+# Is this a musl target? Ask _pylmcf_metadata.is_musl() -- the very predicate the
+# metadata provider uses to decide whether to declare nanobind-backend -- rather
+# than reimplementing the test here, so the build mode and the declared
+# dependency can never disagree about the platform. A failure is fatal on
+# purpose: guessing would mean silently building a mode that cannot be
+# installed, and the module ships in the sdist right beside this file, so it
+# being unimportable means the build is already broken.
+execute_process(
+    COMMAND "${Python_EXECUTABLE}" -c
+            "import sys;sys.path.insert(0,sys.argv[1]);import _pylmcf_metadata as m;print(int(m.is_musl()))"
+            "${CMAKE_CURRENT_SOURCE_DIR}"
+    RESULT_VARIABLE PYLMCF_MUSL_RESULT
+    OUTPUT_VARIABLE PYLMCF_IS_MUSL
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_VARIABLE PYLMCF_MUSL_ERROR)
+if (NOT PYLMCF_MUSL_RESULT EQUAL 0)
+    message(FATAL_ERROR
+        "pylmcf: could not determine the target C library via "
+        "_pylmcf_metadata.is_musl(): ${PYLMCF_MUSL_ERROR}")
+endif()
+
 if (WNET_NB_LINKED)
     set(NB_MODE NB_STATIC)
     set(NB_MODE_DESC "linked (WNET_NB_LINKED=ON)")
@@ -41,6 +62,15 @@ if (WNET_NB_LINKED)
 elseif (NOT Python_INTERPRETER_ID STREQUAL "Python")
     set(NB_MODE NB_STATIC)
     set(NB_MODE_DESC "linked (${Python_INTERPRETER_ID} is not CPython)")
+elseif (PYLMCF_IS_MUSL)
+    # nanobind-backend ships manylinux, macOS and Windows wheels only -- no
+    # musllinux wheel, and no sdist to build one from -- because auditwheel
+    # bundles a private libstdc++ while split mode needs the C++ runtime shared
+    # for exceptions to propagate. So split mode is unsatisfiable on musl by any
+    # route, and this branch must be tested before the free-threaded ones: a
+    # free-threaded musl interpreter has no backend to reach either.
+    set(NB_MODE NB_STATIC)
+    set(NB_MODE_DESC "linked (musl libc: nanobind-backend publishes no musllinux wheel)")
 elseif (NB_ABI MATCHES "[0-9]t" AND Python_VERSION VERSION_LESS 3.15)
     set(NB_MODE NB_STATIC)
     set(NB_MODE_DESC "linked (free-threaded Python ${Python_VERSION} predates abi3t)")

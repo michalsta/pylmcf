@@ -56,8 +56,10 @@ jobs:
           CIBW_ENABLE: "cpython-freethreading cpython-prerelease"
           # No musllinux: there are no musllinux backend wheels, because
           # auditwheel bundles a private libstdc++ and split mode needs the C++
-          # runtime shared for exceptions to propagate. Alpine installs from sdist,
-          # where CMake falls back to a linked build.
+          # runtime shared for exceptions to propagate -- and no backend sdist
+          # either, so split mode is unreachable there by any route. Alpine
+          # installs from sdist, where the musl branch in CMakeLists.txt falls
+          # back to a linked build; test_sdist_musl below is the guard on it.
           CIBW_SKIP: "*-musllinux_*"
 
       - uses: actions/upload-artifact@v4
@@ -186,6 +188,56 @@ jobs:
           grep -qE '[0-9]+ passed' /tmp/ft.log || { echo "free-threading tests did not run"; exit 1; }
           grep -q 'skipped' /tmp/ft.log && { echo "free-threading tests skipped -- GIL was on"; exit 1; }
           echo "free-threading tests ran with the GIL off"
+
+  # musl gets no wheel (CIBW_SKIP above), and nanobind-backend publishes neither
+  # a musllinux wheel nor an sdist, so Alpine has exactly one install path: build
+  # from the sdist in linked mode. Until this job existed nothing tested musl at
+  # all, and the fallback the comment above promised did not exist -- CMakeLists
+  # had no musl branch and chose split mode, so the install failed to resolve
+  # nanobind-backend, and forcing past that only bought an import-time error
+  # about the missing backend module.
+  test_sdist_musl:
+    name: Build from sdist on Alpine (musl)
+    if: github.repository_owner == 'michalsta'
+    needs: [build_sdist]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: cibw-sdist
+          path: dist
+
+      # Only the build runs inside Alpine; checkout and download stay on the
+      # glibc host, so this does not depend on the runner's musl Node support.
+      - name: Write the in-container script
+        run: |
+          cat > alpine-test.sh <<'SCRIPT'
+          #!/bin/sh
+          set -eux
+          apk add --no-cache python3 python3-dev py3-pip build-base cmake ninja
+          python3 -m venv /venv
+          /venv/bin/python -VV
+          /venv/bin/python -m pip install --upgrade pip
+          /venv/bin/python -m pip install -v dist/*.tar.gz
+          # The provider must have detected musl and dropped the backend; if it
+          # did not, the install above would already have failed to resolve.
+          /venv/bin/python -c 'import importlib.metadata as md, importlib.util as iu, sysconfig; soabi = sysconfig.get_config_var("SOABI") or ""; assert "musl" in soabi, soabi; deps = md.metadata("pylmcf").get_all("Requires-Dist"); print("Requires-Dist:", deps); assert not any("nanobind-backend" in d for d in deps), deps; assert iu.find_spec("nanobind_backend") is None, "backend unexpectedly installed"'
+          # From a scratch directory, so the import resolves to the installed
+          # package rather than the source tree next to it.
+          cd /tmp
+          /venv/bin/python -c 'import pylmcf; from pylmcf.pylmcf_cpp import CGraph; print("pylmcf OK", CGraph)'
+          cd /w
+          /venv/bin/python -m pip install pytest networkx
+          /venv/bin/python -m pytest tests/ -q
+          SCRIPT
+          chmod +x alpine-test.sh
+
+      - name: Build and test in Alpine
+        run: docker run --rm -v "$PWD:/w" -w /w alpine:3.21 /w/alpine-test.sh
 
   # Free-threaded CPython before 3.15 predates nanobind-backend's abi3t wheels,
   # so it gets no wheel from cibuildwheel and no backend requirement from
