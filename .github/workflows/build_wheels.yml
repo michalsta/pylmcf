@@ -150,6 +150,7 @@ jobs:
         run: |
           cd "$(mktemp -d)"
           python -c "import pylmcf; from pylmcf.pylmcf_cpp import CGraph; print('pylmcf OK', CGraph)"
+          python -c "import pylmcf; assert pylmcf.is_nanobind_split(), 'a published wheel must be a split build'"
 
       - name: Run the test suite
         run: |
@@ -269,6 +270,7 @@ jobs:
         run: |
           cd "$(mktemp -d)"
           /venv/bin/python -c 'import pylmcf; from pylmcf.pylmcf_cpp import CGraph; print("pylmcf OK", CGraph)'
+          /venv/bin/python -c 'import pylmcf; assert not pylmcf.is_nanobind_split(), "musl must fall back to a linked build"'
 
       - name: Run the test suite
         run: |
@@ -317,6 +319,7 @@ jobs:
         run: |
           cd "$(mktemp -d)"
           python -c "import pylmcf; from pylmcf.pylmcf_cpp import CGraph; print('pylmcf OK', CGraph)"
+          python -c "import pylmcf; assert not pylmcf.is_nanobind_split(), 'this lane must fall back to a linked build'"
 
       - name: Run the test suite
         run: |
@@ -358,6 +361,7 @@ jobs:
         run: |
           cd "$(mktemp -d)"
           python -c "import pylmcf; from pylmcf.pylmcf_cpp import CGraph; print('pylmcf OK', CGraph)"
+          python -c "import pylmcf; assert not pylmcf.is_nanobind_split(), 'this lane must fall back to a linked build'"
 
       - name: Run the test suite
         run: |

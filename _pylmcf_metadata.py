@@ -77,16 +77,34 @@ def _split_mode() -> bool:
 
 
 def dynamic_metadata(
-    settings: "Mapping[str, Any]", project: "Mapping[str, Any]"
-) -> dict[str, Any]:
+    field: str,
+    settings: "Mapping[str, Any] | None" = None,
+    project: "Mapping[str, Any] | None" = None,
+) -> list[str]:
+    """Return the value of *field* itself -- scikit-build-core assigns it directly.
+
+    The signature is the one scikit-build-core calls: ``(field, settings,
+    project)``. Returning a ``{field: value}`` dict instead, or taking only
+    ``(settings, project)``, silently yields nonsense -- the loader passes the
+    field *name* as the first positional argument.
+    """
+    if field != "dependencies":
+        msg = f"This provider only supplies 'dependencies', got {field!r}"
+        raise RuntimeError(msg)
     if settings:
         msg = f"This provider takes no settings, got {sorted(settings)}"
         raise RuntimeError(msg)
     dependencies = list(BASE_DEPENDENCIES)
     if _split_mode():
         dependencies.append(BACKEND_REQUIREMENT)
-    return {"dependencies": dependencies}
+    return dependencies
 
 
-def dynamic_wheel(settings: "Mapping[str, Any]") -> dict[str, bool]:
-    return {"dependencies": True}
+def dynamic_wheel(field: str, settings: "Mapping[str, Any] | None" = None) -> bool:
+    """Recompute this field for the wheel rather than trusting the sdist PKG-INFO.
+
+    Not called by scikit-build-core 0.12 (it declares the hook but never invokes
+    it), so the sdist's Requires-Dist is whatever the sdist-building interpreter
+    resolved. Kept because it is the documented protocol and costs nothing.
+    """
+    return field == "dependencies"

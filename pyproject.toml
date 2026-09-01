@@ -33,6 +33,12 @@ extras = ["networkx", "matplotlib"]
 pytest = ["pytest", "networkx"]
 
 [tool.scikit-build]
+# scikit-build-core refuses dynamic-metadata plugins it did not ship itself
+# unless experimental mode is on ("experimental must be enabled currently to use
+# plugins not provided by scikit-build-core"). Needed for the
+# [tool.scikit-build.metadata.dependencies] provider at the end of this file.
+experimental = true
+
 # Split-mode extensions are stable-ABI builds. Declaring the target here gets the
 # wheel an `abi3` tag, and nanobind reads it back as SKBUILD_SABI_VERSION to set
 # the stable ABI floor, so the two can never drift apart. One wheel per platform
@@ -65,5 +71,10 @@ exclude = [
     "CLAUDE.md",
 ]
 
-[[tool.dynamic-metadata]]
-provider = { path = ".", module = "_pylmcf_metadata" }
+# scikit-build-core reads dynamic-metadata providers from its own namespace,
+# keyed by the field they supply; a top-level [[tool.dynamic-metadata]] table is
+# silently ignored, which leaves `dynamic = ["dependencies"]` resolving to
+# nothing at all and ships a wheel that requires neither numpy nor the backend.
+[tool.scikit-build.metadata.dependencies]
+provider = "_pylmcf_metadata"
+provider-path = "."

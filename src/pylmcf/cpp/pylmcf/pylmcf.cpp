@@ -194,6 +194,18 @@ nb::ndarray<T, nb::numpy, nb::shape<-1>> py_lmcf_capacity_scaling_no_minimums(
 }
 
 NB_MODULE(pylmcf_cpp, m) {
+    // Build mode of *this* extension, read by is_nanobind_split() and by the
+    // import-time consistency check. NB_BACKEND_MODULE is defined only when
+    // nanobind_add_module() was given BACKEND_MODULE, i.e. only in split mode.
+    // Extensions in different modes carry different nanobind internals and
+    // silently lose sight of each other's registered types, so the mode has to
+    // be observable from Python rather than inferred from a filename.
+#if defined(NB_BACKEND_MODULE)
+    m.attr("nanobind_split") = true;
+#else
+    m.attr("nanobind_split") = false;
+#endif
+
     m.doc() = "Python binding for the LEMON min cost flow solver";
 
     using nb::arg;
