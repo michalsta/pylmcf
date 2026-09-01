@@ -25,6 +25,15 @@ jobs:
       - uses: actions/setup-python@v5
 
       - name: Check version
+        # Only meaningful on a tag: check_version.py compares pyproject against
+        # `git describe --tags --abbrev=0`, which on a branch returns the most
+        # recent *reachable* tag rather than one on HEAD -- so it fails on any
+        # untagged branch whose version has been bumped, taking every job that
+        # needs this one down with it. That made a ci_wheels push, the only way
+        # to exercise the wheel pipeline without publishing, permanently red.
+        # Reusable workflows see the caller's github context, so a tag push
+        # through publish.yml still runs this.
+        if: startsWith(github.ref, 'refs/tags/')
         run: python .github/scripts/check_version.py
 
       - name: Install cibuildwheel
@@ -77,6 +86,15 @@ jobs:
           fetch-depth: 0
 
       - name: Check version
+        # Only meaningful on a tag: check_version.py compares pyproject against
+        # `git describe --tags --abbrev=0`, which on a branch returns the most
+        # recent *reachable* tag rather than one on HEAD -- so it fails on any
+        # untagged branch whose version has been bumped, taking every job that
+        # needs this one down with it. That made a ci_wheels push, the only way
+        # to exercise the wheel pipeline without publishing, permanently red.
+        # Reusable workflows see the caller's github context, so a tag push
+        # through publish.yml still runs this.
+        if: startsWith(github.ref, 'refs/tags/')
         run: python .github/scripts/check_version.py
 
       - name: Build sdist
