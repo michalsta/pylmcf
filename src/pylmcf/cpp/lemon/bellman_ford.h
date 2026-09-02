@@ -32,6 +32,7 @@
 #include <lemon/bits/stl_iterators.h>
 
 #include <limits>
+#include <memory>
 
 namespace lemon {
 
@@ -221,13 +222,40 @@ namespace lemon {
     // Pointer to the length map
     const LengthMap *_length;
     // Pointer to the map of predecessors arcs.
+    // Local divergence from upstream LEMON. The two maps below used to be a
+    // single owning-or-borrowed raw pointer each, guarded by a _local_* bool.
+    // That is correct but unprovable to GCC: after ~BellmanFord is inlined into
+    // CycleCanceling::startSimpleCycleCanceling(), the optimiser loses the
+    // correlation between the flag and the pointer, sees `delete` reachable
+    // with the address of a caller-owned stack object, and emits
+    // -Wfree-nonheap-object. 46 of them per wnet build, and no placement of
+    // #pragma GCC diagnostic suppresses it -- measured at the delete site,
+    // around the whole calling function, and absent: 46 every time.
+    //
+    // Splitting the two roles is what fixes it, not the smart pointer per se.
+    // A borrowed address now only ever reaches _pred, which is never deleted;
+    // an owning pointer only ever reaches _owned_pred, which only ever holds
+    // the result of a new. The false positive is not suppressed, it is
+    // unconstructible. (_mask below is the control that showed the way: it is
+    // deleted in the same destructor under the same kind of guard and never
+    // warns, because it can only ever hold a heap pointer. It is deliberately
+    // left alone.)
+    //
+    // Consequence: unique_ptr members make BellmanFord non-copyable. It was
+    // never safely copyable -- a raw owning pointer with a manual delete and no
+    // declared copy constructor is a double free waiting for its first caller
+    // -- and nothing in this tree copies it; cost_scaling.h and
+    // cycle_canceling.h use it only through typedefs.
+
+    // Borrowed view of the predecessor map: the caller's when predMap() was
+    // used, otherwise _owned_pred.get(). Never deleted through this pointer.
     PredMap *_pred;
-    // Indicates if _pred is locally allocated (true) or not.
-    bool _local_pred;
-    // Pointer to the map of distances.
+    // Owns the predecessor map iff create_maps() allocated it; empty otherwise.
+    std::unique_ptr<PredMap> _owned_pred;
+    // Borrowed view of the distance map; same contract as _pred.
     DistMap *_dist;
-    // Indicates if _dist is locally allocated (true) or not.
-    bool _local_dist;
+    // Owns the distance map iff create_maps() allocated it; empty otherwise.
+    std::unique_ptr<DistMap> _owned_dist;
 
     typedef typename Digraph::template NodeMap<bool> MaskMap;
     MaskMap *_mask;
@@ -237,12 +265,12 @@ namespace lemon {
     // Creates the maps if necessary.
     void create_maps() {
       if(!_pred) {
-        _local_pred = true;
-        _pred = Traits::createPredMap(*_gr);
+        _owned_pred.reset(Traits::createPredMap(*_gr));
+        _pred = _owned_pred.get();
       }
       if(!_dist) {
-        _local_dist = true;
-        _dist = Traits::createDistMap(*_gr);
+        _owned_dist.reset(Traits::createDistMap(*_gr));
+        _dist = _owned_dist.get();
       }
       if(!_mask) {
         _mask = new MaskMap(*_gr);
@@ -332,21 +360,12 @@ namespace lemon {
     /// \param length The length map used by the algorithm.
     BellmanFord(const Digraph& g, const LengthMap& length) :
       _gr(&g), _length(&length),
-      _pred(0), _local_pred(false),
-      _dist(0), _local_dist(false), _mask(0) {}
+      _pred(0), _dist(0), _mask(0) {}
 
     ///Destructor.
     ~BellmanFord() {
-      // _local_pred/_local_dist are false when maps are externally provided
-      // (e.g. via SetPredMap/SetDistMap traits + predMap()/distMap() calls).
-      // GCC's -Wfree-nonheap-object fires as a false positive after inlining
-      // because it loses track of the _local_* guard. Clang accepts GCC
-      // pragmas; MSVC silently ignores unknown pragmas.
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wfree-nonheap-object"
-      if(_local_pred) delete _pred;
-      if(_local_dist) delete _dist;
-#pragma GCC diagnostic pop
+      // _owned_pred / _owned_dist release themselves; _pred and _dist may point
+      // at a caller's map and are never deleted. See the note on the members.
       if(_mask) delete _mask;
     }
 
@@ -368,10 +387,7 @@ namespace lemon {
     /// of course.
     /// \return <tt>(*this)</tt>
     BellmanFord &predMap(PredMap &map) {
-      if(_local_pred) {
-        delete _pred;
-        _local_pred=false;
-      }
+      _owned_pred.reset();
       _pred = &map;
       return *this;
     }
@@ -386,10 +402,7 @@ namespace lemon {
     /// of course.
     /// \return <tt>(*this)</tt>
     BellmanFord &distMap(DistMap &map) {
-      if(_local_dist) {
-        delete _dist;
-        _local_dist=false;
-      }
+      _owned_dist.reset();
       _dist = &map;
       return *this;
     }
