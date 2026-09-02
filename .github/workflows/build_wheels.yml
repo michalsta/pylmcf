@@ -6,6 +6,13 @@ on:
       - ci_wheels
   workflow_call:
 
+concurrency:
+  # Superseded wheel builds on a branch get cancelled; a release build never
+  # does. A group name distinct from run-tests-* matters: publish.yml calls both
+  # workflows, and a shared group would serialise them behind each other.
+  group: build-wheels-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
 jobs:
   build_wheels:
     name: Build wheels on ${{ matrix.os }}

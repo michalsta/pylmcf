@@ -143,7 +143,53 @@ When touching any solver header, run the corresponding `tests_cpp` suite — not
 
 ## CI
 
-`run_tests.yml` has two near-identical jobs gated on branch: `run_pytest` (non-`main`, wide matrix incl. `macos-15-intel` and `windows-11-arm`, 35 jobs) and `run_pytest_main` (`main` only, narrower — Windows/macOS restricted to py3.14 and py3.15, 24 jobs). Both run on `michalsta`-owned repos only, across Linux amd64/arm64 (self-hosted `wloczykij` runners in a local-registry Ubuntu 24.04 container) × Python 3.10–3.15 × {default, clang}, with pip's HTTP/wheel cache disabled because `$HOME` is a persistent bind mount on the self-hosted runners. **3.15 has no GA release yet**, so both `setup-python` steps pass `allow-prereleases: true`; every per-OS `exclude` in the matrices names an explicit version, so 3.15 runs everywhere until one is added.
+`run_tests.yml` no longer contains a matrix. Which combinations run is decided by
+`.github/scripts/ci_matrix.py`, which emits an `{"include": [...]}` object that a
+`select` job hands to `strategy: matrix: ${{ fromJson(...) }}`. That replaced a
+`6 os x 6 python x 2 compiler` cross-product plus ~24 `exclude:` rules duplicated
+across two near-identical jobs — a shape in which coverage was an emergent
+property of two dozen subtraction rules, and in which the four sibling repos had
+silently drifted to different exclude lists.
+
+The design is a **covering array, not a cross-product**: every level of every
+factor runs, but pairs are only covered where the pair actually interacts.
+`compiler x platform` interacts on Linux only (gcc/clang is the one free choice;
+MSVC and AppleClang are 1:1 with their OS). `python x platform` interacts at the
+edges only — 3.10 is the abi3 floor, 3.15 the prerelease/free-threading frontier
+— so 3.11–3.13 rotate one platform each. `python x compiler` does not interact:
+codegen does not know which interpreter will `dlopen` it.
+
+Three tiers, each a superset of the last (asserted in the script):
+
+| tier | when | size |
+|---|---|---|
+| A | push to a work branch | 4 lanes, all self-hosted `linux-amd64`, ~20 min wall |
+| B | `main`, the nightly cron, leaf-package tags | 14 lanes: all 6 platforms, all 6 Pythons, all 4 toolchains, both arches |
+| C | `v*` tags on pylmcf and wnet | 35 lanes, the wide matrix |
+
+`workflow_dispatch` carries a `tier` input, so any tier can be run by hand
+without tagging something.
+
+**The number that drove all of it**: `linux-arm64` is a self-hosted runner on
+wloczykij, which is an *Opteron 6380*. There is no ARM in that machine — the lane
+is qemu, and it measures 65–85 min against 8–16 min for every other platform.
+Twelve arm64 legs were 900 of the 1166 job-minutes in a full run: 77% of CI spent
+asking one emulated architecture the same question twelve times. Tier B asks it
+twice (both ends of the supported range, one compiler each); Tier C six times
+(each Python once, alternating compiler). Do not add arm64 lanes without a reason
+that names a specific arch-dependent failure.
+
+`ci_matrix.py` ends in a coverage audit that fails the `select` job if a deleted
+lane breaks 1-coverage of any platform, Python, toolchain or architecture, if the
+A ⊆ B ⊆ C nesting stops holding, or if some Python ends up covered only under
+MSVC. The four copies are meant to stay byte-identical except for two constants
+at the top: `RELEASE_TIER` (`C` for pylmcf and wnet, `B` for the leaves — a leaf
+release rides on its dependencies having passed their own Tier C) and
+`HAS_SANITIZE`. Diff them when in doubt.
+
+`run_tests.yml` and `build_wheels.yml` each declare a `concurrency:` group that
+cancels superseded branch runs but never a tag run, under *distinct* group names
+— `publish.yml` calls both, and a shared group would serialise them.
 
 Wheels: `cibuildwheel` (`build_wheels.yml`) on the `ci_wheels` branch. `CIBW_BUILD` deliberately stays at `cp310-*` — the single `cp310-abi3` wheel already covers 3.15 (verified: a wheel built on 3.14 passes the full suite on 3.15.0rc1), so adding a `cp315` build would only re-emit the same tag. `test_wheel_newest` is what backs that claim, installing the built artifact on 3.15 with `--only-binary` and running the suite. `CIBW_BUILD` also builds `cp315t-*` (with `CIBW_ENABLE: cpython-prerelease`, needed because 3.15 has no GA release; there is deliberately **no** free-threading group — current cibuildwheel builds free-threaded identifiers by default and rejects `cpython-freethreading` as an unknown group), giving a second, separate `cp315-abi3t` wheel — `nanobind-backend` publishes a `cp315`/`abi3t` wheel for every platform built here. `test_wheel_freethreaded` installs it on 3.15t and fails if importing pylmcf re-enables the GIL, or if `tests/test_free_threading.py` self-skips instead of running. Free-threaded 3.14 and below still get no wheel and build from the sdist in linked mode (`test_sdist_freethreaded`), as does musl — `CIBW_SKIP: *-musllinux_*`, guarded by `test_sdist_musl`. There is no Alpine runner image, so that job runs entirely in an `alpine:3.21` **container** on an `ubuntu-latest` host; the JS actions work there because the runner ships musl Node builds (`node20_alpine`/`node24_alpine`) and picks them off `Container.IsAlpine`. Those externals are **linux-x64 only**, so the job must stay on an x64 runner. Alpine has neither `bash` nor `git`, hence `defaults.run.shell: sh` and an `apk add` step *before* `actions/checkout` (which needs git); `fetch-depth: 0` is omitted because nothing in the job reads tags. It asserts `SOABI` really says musl and that the backend is neither declared nor installed. Publishing (`publish.yml`) requires the git tag to match `pyproject.toml` exactly; that `check_version.py` step is gated on `startsWith(github.ref, 'refs/tags/')`, because `git describe --tags --abbrev=0` returns the most recent *reachable* tag and so fails on any untagged branch whose version has been bumped — which used to make a `ci_wheels` push (the only way to run the wheel pipeline without publishing) permanently red. A reusable workflow sees the caller's `github` context, so a tag push through `publish.yml` still runs it.
 
