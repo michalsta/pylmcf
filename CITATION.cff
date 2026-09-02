@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 type: software
 title: pylmcf
-version: 1.2.0
+version: 1.2.1
 repository-code: "https://github.com/michalsta/pylmcf"
 license: BSL-1.0
 authors:
