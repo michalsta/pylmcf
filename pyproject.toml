@@ -1,5 +1,9 @@
 [build-system]
-requires = ["scikit-build-core", "nanobind>=3.0.1"]
+# scikit-build-core>=1.0: the [[tool.dynamic-metadata]] table below is the 0.3
+# spec, which older backends do not read. They would not fail -- they would
+# ignore it, leaving `dynamic = ["dependencies"]` unresolved and shipping a
+# wheel that declares no dependencies at all.
+requires = ["scikit-build-core>=1.0", "nanobind>=3.0.1"]
 build-backend = "scikit_build_core.build"
 
 [project]
@@ -33,12 +37,6 @@ extras = ["networkx", "matplotlib"]
 pytest = ["pytest", "networkx"]
 
 [tool.scikit-build]
-# scikit-build-core refuses dynamic-metadata plugins it did not ship itself
-# unless experimental mode is on ("experimental must be enabled currently to use
-# plugins not provided by scikit-build-core"). Needed for the
-# [tool.scikit-build.metadata.dependencies] provider at the end of this file.
-experimental = true
-
 # Split-mode extensions are stable-ABI builds. Declaring the target here gets the
 # wheel an `abi3` tag, and nanobind reads it back as SKBUILD_SABI_VERSION to set
 # the stable ABI floor, so the two can never drift apart. One wheel per platform
@@ -75,6 +73,12 @@ exclude = [
 # keyed by the field they supply; a top-level [[tool.dynamic-metadata]] table is
 # silently ignored, which leaves `dynamic = ["dependencies"]` resolving to
 # nothing at all and ships a wheel that requires neither numpy nor the backend.
-[tool.scikit-build.metadata.dependencies]
-provider = "_pylmcf_metadata"
-provider-path = "."
+# The standard top-level dynamic-metadata table (0.3 spec). The previous
+# [tool.scikit-build.metadata.dependencies] form was deprecated in
+# scikit-build-core 1.0 and warns on every build; the two cannot be combined.
+# The inline {path, module} value is how a local, in-project provider is named --
+# a bare import string here would be looked up in the dynamic_metadata.provider
+# entry-point group instead, and not found. _pylmcf_metadata.py is kept in the
+# sdist for exactly this reason.
+[[tool.dynamic-metadata]]
+provider = { path = ".", module = "_pylmcf_metadata" }

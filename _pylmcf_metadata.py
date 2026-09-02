@@ -21,6 +21,24 @@ re-evaluates it for each wheel instead of trusting the sdist's PKG-INFO.
 considered here: it exists for local sanitizer and debug builds, never for
 distributable wheels, and an unused requirement on an interpreter the backend
 does support is harmless.
+
+Wired up in pyproject.toml as::
+
+    [[tool.dynamic-metadata]]
+    provider = { path = ".", module = "_pylmcf_metadata" }
+
+That is the standard top-level table (the dynamic-metadata 0.3 spec), not the
+``[tool.scikit-build.metadata.<field>]`` one this used to use: scikit-build-core
+deprecated that in 1.0 and warns on every build that uses it. The inline
+``{path, module}`` form is how a *local* in-project provider is named here -- a
+bare import string is only accepted for a plugin registered under the
+``dynamic_metadata.provider`` entry-point group. ``experimental`` is no longer
+required either; that gate only ever covered the deprecated table.
+
+The two forms cannot both be present (scikit-build-core errors out), and
+``scikit-build-core>=1.0`` is pinned in ``[build-system] requires`` because an
+older backend would ignore this table and silently ship a wheel that declares no
+dependencies at all.
 """
 
 from __future__ import annotations
@@ -100,34 +118,43 @@ def _split_mode() -> bool:
 
 
 def dynamic_metadata(
-    field: str,
-    settings: "Mapping[str, Any] | None" = None,
-    project: "Mapping[str, Any] | None" = None,
-) -> list[str]:
-    """Return the value of *field* itself -- scikit-build-core assigns it directly.
+    settings: "Mapping[str, Any]",
+    project: "Mapping[str, Any]",
+) -> "dict[str, Any]":
+    """Return a fragment of ``[project]`` for scikit-build-core to merge in.
 
-    The signature is the one scikit-build-core calls: ``(field, settings,
-    project)``. Returning a ``{field: value}`` dict instead, or taking only
-    ``(settings, project)``, silently yields nonsense -- the loader passes the
-    field *name* as the first positional argument.
+    This is the dynamic-metadata 0.3 signature -- ``(settings, project)``,
+    returning a ``{field: value}`` mapping. It is *not* interchangeable with the
+    deprecated ``tool.scikit-build.metadata`` hook, which took the field name as
+    a third leading argument and returned the bare value. Getting the two
+    confused does not raise: the wrong shape resolves to nothing and ships a
+    wheel that declares no dependencies at all.
+
+    Every field returned here must also appear in ``project.dynamic``, or
+    scikit-build-core raises ``KeyError``.
     """
-    if field != "dependencies":
-        msg = f"This provider only supplies 'dependencies', got {field!r}"
-        raise RuntimeError(msg)
     if settings:
         msg = f"This provider takes no settings, got {sorted(settings)}"
         raise RuntimeError(msg)
     dependencies = list(BASE_DEPENDENCIES)
     if _split_mode():
         dependencies.append(BACKEND_REQUIREMENT)
-    return dependencies
+    return {"dependencies": dependencies}
 
 
-def dynamic_wheel(field: str, settings: "Mapping[str, Any] | None" = None) -> bool:
-    """Recompute this field for the wheel rather than trusting the sdist PKG-INFO.
+def dynamic_wheel(settings: "Mapping[str, Any]") -> "dict[str, bool]":
+    """Report which fields may differ between the SDist and a wheel built from it.
 
-    Not called by scikit-build-core 0.12 (it declares the hook but never invokes
-    it), so the sdist's Requires-Dist is whatever the sdist-building interpreter
-    resolved. Kept because it is the documented protocol and costs nothing.
+    True here marks ``Requires-Dist`` as ``Dynamic`` in the SDist's PKG-INFO
+    (METADATA 2.2), which is exactly right: whether ``nanobind-backend`` is
+    required depends on the interpreter and platform doing the build, so the
+    SDist's own answer must not be taken as binding for a wheel built from it.
+
+    The 0.3 signature takes only ``settings`` and returns a field -> bool map;
+    the deprecated table's hook took ``(field, settings)`` and returned a bare
+    bool, and was never invoked at all.
     """
-    return field == "dependencies"
+    if settings:
+        msg = f"This provider takes no settings, got {sorted(settings)}"
+        raise RuntimeError(msg)
+    return {"dependencies": True}
