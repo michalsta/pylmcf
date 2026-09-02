@@ -72,7 +72,16 @@ jobs:
           # either, so split mode is unreachable there by any route. Alpine
           # installs from sdist, where the musl branch in CMakeLists.txt falls
           # back to a linked build; test_sdist_musl below is the guard on it.
-          CIBW_SKIP: "*-musllinux_*"
+          #
+          # No win32 either, and this one already got away from us: the backend
+          # publishes win_amd64 and win_arm64 and nothing 32-bit, at any Python
+          # version, so a split-mode win32 wheel builds cleanly and is then
+          # uninstallable on its own platform -- it declares a distribution that
+          # does not exist there. pylmcf 1.2.0 shipped such a wheel; it is still
+          # on PyPI, and pip pulling it into a build environment is what broke
+          # wnet's windows-latest wheel job. 32-bit Windows installs from sdist,
+          # where the win32 branch in CMakeLists.txt falls back to linked.
+          CIBW_SKIP: "*-musllinux_* *-win32"
 
       - uses: actions/upload-artifact@v4
         with:

@@ -4,9 +4,9 @@
 CMakeLists.txt selects split mode for the CPython interpreters and platforms
 the backend actually publishes wheels for, and falls back to a linked
 (``NB_STATIC``) build everywhere else: PyPy, musl targets (the backend has no
-musllinux wheel *and* no sdist), and free-threaded CPython before 3.15, which
-predates the backend's ``abi3t`` wheels. A linked build embeds nanobind and needs nothing
-extra at run time.
+musllinux wheel *and* no sdist), 32-bit Windows (it has no win32 wheel either),
+and free-threaded CPython before 3.15, which predates the backend's ``abi3t``
+wheels. A linked build embeds nanobind and needs nothing extra at run time.
 
 No PEP 508 marker can express "not a free-threaded interpreter", so this
 requirement cannot live in a static ``[project.dependencies]``. Declaring it
@@ -34,7 +34,7 @@ TYPE_CHECKING = False
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-__all__ = ["dynamic_metadata", "dynamic_wheel", "is_musl"]
+__all__ = ["dynamic_metadata", "dynamic_wheel", "is_musl", "is_win32"]
 
 # Matches the floor nanobind reports at configure time ("split-mode extensions
 # require 'nanobind-backend>=X.Y' at runtime"); keep the two in step.
@@ -63,6 +63,26 @@ def is_musl() -> bool:
     )
 
 
+def is_win32() -> bool:
+    """True when the target interpreter is 32-bit Windows.
+
+    nanobind-backend publishes ``win_amd64`` and ``win_arm64`` wheels and nothing
+    32-bit, at any Python version, so split mode is as unsatisfiable here as it
+    is on musl -- and it fails later and far more confusingly, because a
+    split-mode win32 wheel *builds* and only refuses to install, on the very
+    platform it was built for. pylmcf 1.2.0 published one: it declares
+    nanobind-backend, no win32 backend exists, and pip pulling that wheel into a
+    build environment is what broke wnet's own windows-latest wheel job.
+
+    Note this is deliberately not ``sys.platform == "win32"``, which is true on
+    64-bit Windows as well and would drop every Windows build out of split mode.
+    ``sysconfig.get_platform()`` is where the wheel's platform tag comes from,
+    and it separates ``win32`` from ``win-amd64`` and ``win-arm64``. Like
+    is_musl() the test is one-sided: no non-Windows platform reports ``win32``.
+    """
+    return sysconfig.get_platform() == "win32"
+
+
 def _split_mode() -> bool:
     """Mirror the NB_MODE selection in CMakeLists.txt, in the same order."""
     if sys.implementation.name != "cpython":
@@ -70,6 +90,9 @@ def _split_mode() -> bool:
     if is_musl():
         # nanobind-backend publishes no musllinux wheel and no sdist at all, so
         # split mode is unsatisfiable here however the install is attempted.
+        return False
+    if is_win32():
+        # No 32-bit Windows backend wheel exists, so the same applies.
         return False
     if sysconfig.get_config_var("Py_GIL_DISABLED") and sys.version_info < (3, 15):
         return False
