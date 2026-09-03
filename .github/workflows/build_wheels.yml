@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - ci_wheels
+  # Called by publish.yml on a v* tag. The tag no longer triggers this workflow
+  # directly: it must go through publish.yml, so that the upload can depend on
+  # the test suite as well as on the wheels.
   workflow_call:
 
 concurrency:
