@@ -230,6 +230,7 @@ jobs:
         run: |
           cd "$(mktemp -d)"
           python -c "import pylmcf, sys; from pylmcf.pylmcf_cpp import CGraph; assert not sys._is_gil_enabled(), 'importing pylmcf re-enabled the GIL'; print('GIL off, pylmcf OK', CGraph)"
+          python -c "import pylmcf; assert pylmcf.is_nanobind_split(), 'an abi3t wheel is a split build by construction -- abi3t exists only in split mode'"
 
       - name: Run the test suite, and prove the free-threading tests ran
         run: |
