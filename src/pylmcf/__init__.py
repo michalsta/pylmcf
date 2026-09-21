@@ -4,6 +4,8 @@ from .__version__ import __version__, include
 
 from .graph import Graph
 
+__all__ = ["Graph", "__version__", "include", "is_nanobind_split"]
+
 
 def is_nanobind_split() -> bool:
     """True when pylmcf_cpp was built in nanobind split mode.

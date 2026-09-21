@@ -22,7 +22,10 @@ SOLVERS = {
 def solve(solver_name, supply, starts, ends, caps, costs, mins=None):
     """Call the named solver; return (flows, total_cost)."""
     fn = SOLVERS[solver_name]
-    a = lambda x: np.asarray(x, dtype=np.int64)
+
+    def a(x):
+        return np.asarray(x, dtype=np.int64)
+
     if mins is not None:
         flows = fn(a(supply), a(starts), a(ends), a(caps), a(mins), a(costs))
     else:
@@ -118,7 +121,10 @@ def test_narrow_dtype_cost_overflow(dtype):
     120, so the optimum routes everything through it. Before costs were
     widened, int8 overflowed the path potential and spuriously failed.
     """
-    a = lambda x: np.asarray(x, dtype=dtype)
+
+    def a(x):
+        return np.asarray(x, dtype=dtype)
+
     fn = pylmcf_cpp.lmcf
     flows = fn(
         a([10, 0, 0, 0, -10]),          # supply

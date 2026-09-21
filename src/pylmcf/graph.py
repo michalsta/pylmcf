@@ -1,8 +1,13 @@
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
 from pylmcf.pylmcf_cpp import CGraph
+
+if TYPE_CHECKING:
+    # networkx is an optional extra, imported lazily inside the functions that
+    # need it; this import exists only so the "nx.DiGraph" annotations resolve.
+    import networkx as nx
 
 
 class Graph(CGraph):
