@@ -9,7 +9,7 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "pylmcf"
 version = "1.2.1"
-description = "Python bindings for Network Simplex algorithm from LEMON library"
+description = "Min-cost-flow solvers for Python and C++: LEMON with warm restarts, plus link-cut-tree network simplex variants"
 authors = [{ name="Michał Startek", email="michal.startek@mimuw.edu.pl" }]
 maintainers = [{ name="Michał Startek", email="michal.startek@mimuw.edu.pl" }]
 license = "BSL-1.0"
@@ -25,7 +25,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Development Status :: 5 - Production/Stable",
 ]
-keywords = ["network simplex", "minimum cost flow", "lemon", "graph algorithms"]
+keywords = ["network simplex", "minimum cost flow", "lemon", "graph algorithms", "link-cut tree", "warm start", "optimal transport"]
 requires-python = ">=3.10"
 
 [project.urls]
