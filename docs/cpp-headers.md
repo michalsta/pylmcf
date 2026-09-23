@@ -10,10 +10,9 @@ pylmcf ships two independent deliverables from one source tree:
 This page is about (2). It is how `wnet` consumes the solvers, and it is where
 most of the recent development has happened.
 
-**Most of this tree is not reachable from Python.** The link-cut-tree simplex
-variants and the 1D chain solver are header-only and C++-only. Do not assume a
-header listed here has a Python binding — check `src/pylmcf/cpp/pylmcf/pylmcf.cpp`
-for the actual binding surface.
+The link-cut-tree simplex variants and 1D chain solver also have
+[Python bindings](python-solvers.md). The standalone link-cut tree and LEMON API
+adapter remain C++ utilities.
 
 ---
 
@@ -78,9 +77,9 @@ usually the easier route.
 `Graph<T>`'s constructor requires edges **sorted by `(start_node, end_node)`** and
 rejects negative or out-of-range node ids, throwing `std::invalid_argument`.
 
-### Header-only, C++ consumers only
+### Header-only solvers and utilities
 
-This is the novel work. None of it has a Python binding.
+These remain usable directly from C++, independently of their Python wrappers.
 
 | Header | Contents | Docs |
 |---|---|---|

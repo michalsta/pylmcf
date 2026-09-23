@@ -3,7 +3,8 @@
 `pylmcf/chain_solver_1d.h` — `ChainSolver1D<Value, Cost>`, a specialised min-cost
 flow solver for one particular LP: `wnet`'s 1D-chain SimpleTrash problem.
 
-**C++-only.** There is no Python binding.
+Python users can call [`pylmcf.solve_chain_1d`](python-solvers.md#1d-chain)
+for the total cost and all per-arc flows. The API below describes direct C++ use.
 
 ---
 

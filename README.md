@@ -17,8 +17,8 @@ Truncated Wasserstein distance between multidimensional distributions) and
 spectra). Both re-solve the same graph hundreds of times with one thing moved,
 which is what most of the machinery here exists to make cheap.
 
-> Much of deliverable (2) is **not exposed to Python** — the link-cut-tree simplex
-> variants and the 1D chain solver are header-only and reachable only from C++.
+The LCT simplex variants and 1D chain solver are also available from Python;
+see [the Python solver APIs](docs/python-solvers.md).
 
 ### Features
 
@@ -31,7 +31,7 @@ which is what most of the machinery here exists to make cheap.
 - NetworkX integration: construct from `nx.DiGraph` or convert results back for visualization
 - Free-threaded CPython support (a separate `cp315-abi3t` wheel)
 - A [C++ header tree](https://github.com/michalsta/pylmcf/blob/main/docs/cpp-headers.md)
-  for downstream packages, including solvers with no Python binding
+  for downstream packages, including the standalone link-cut-tree data structure
 
 ### Documentation
 
@@ -85,6 +85,33 @@ All integer arrays in the OO API are **int64**, and the dtype is not converted f
 you — a mismatched array raises `TypeError`. Costs and minimums must be
 non-negative, and the graph must be feasible (total supply == total demand,
 sufficient capacity) or `solve()` raises `RuntimeError: INFEASIBLE`.
+
+#### LCT and 1D-chain solvers
+
+```python
+from pylmcf import NetworkSimplexLCT, lmcf_lct, lmcf_lct_dyn, solve_chain_1d
+
+# Same five int64 arrays as the functional LEMON API; arbitrary edge order.
+flows = lmcf_lct(supply, starts, ends, capacities, costs)
+# lmcf_lct_dyn(...) selects the experimental dynamic-tree variant.
+solver = NetworkSimplexLCT(supply, starts, ends, capacities, costs)
+solver.solve()
+solver.set_node_supply(new_supply)
+solver.solve()  # warm restart, with automatic cold fallback
+
+chain = solve_chain_1d(
+    np.array([0, 10], dtype=np.int64),
+    np.array([5, 0], dtype=np.int64),   # empirical masses
+    np.array([0, 5], dtype=np.int64),   # theoretical masses
+    kappa=3,
+)
+chain["total_cost"]  # 15: trash is cheaper than transport
+```
+
+These solvers require contiguous **int64** arrays. LCT solvers require balanced
+supplies, non-negative costs, finite capacities, and zero lower bounds. Costs
+and topology are fixed on a stateful LCT instance. See [Python solver APIs](docs/python-solvers.md)
+for return values, counters, validation, and the chain's SimpleTrash semantics.
 
 #### Per-edge lower bounds (minimum flow)
 

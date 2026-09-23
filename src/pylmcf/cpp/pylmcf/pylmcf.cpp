@@ -12,6 +12,7 @@
 
 #include "lmcf.hpp"
 #include "graph.hpp"
+#include "new_solver_bindings.hpp"
 
 
 namespace nb = nanobind;
@@ -207,6 +208,8 @@ NB_MODULE(pylmcf_cpp, m) {
 #endif
 
     m.doc() = "Python binding for the LEMON min cost flow solver";
+
+    pylmcf_python::bind_new_solvers(m);
 
     using nb::arg;
     // Implicit dtype conversion is DISABLED on every array parameter

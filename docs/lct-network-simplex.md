@@ -5,8 +5,10 @@ basis in a [link-cut tree](link-cut-tree.md) instead of LEMON's
 `thread`/`succ_num` arrays, plus an adapter that lets either be dropped in where
 `lemon::NetworkSimplex` is expected.
 
-**These are C++-only.** There is no Python binding, and the Python `Graph` class
-uses LEMON's array solver.
+Both have [Python bindings](python-solvers.md): `NetworkSimplexLCT`,
+`NetworkSimplexLCTDyn`, `lmcf_lct`, and `lmcf_lct_dyn`. The Python `Graph` class
+continues to use LEMON's array solver. The examples and counters below describe
+the direct C++ API; Python counters include the initial cold solve.
 
 ---
 

@@ -3,8 +3,19 @@ import pylmcf.pylmcf_cpp
 from .__version__ import __version__, include
 
 from .graph import Graph
+from .pylmcf_cpp import (
+    NetworkSimplexLCT,
+    NetworkSimplexLCTDyn,
+    lmcf_lct,
+    lmcf_lct_dyn,
+    solve_chain_1d,
+)
 
-__all__ = ["Graph", "__version__", "include", "is_nanobind_split"]
+__all__ = [
+    "Graph", "__version__", "include", "is_nanobind_split",
+    "NetworkSimplexLCT", "NetworkSimplexLCTDyn",
+    "lmcf_lct", "lmcf_lct_dyn", "solve_chain_1d",
+]
 
 
 def is_nanobind_split() -> bool:
