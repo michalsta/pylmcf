@@ -63,11 +63,32 @@ untagged branch `git describe --tags --abbrev=0` returns the most recent
 
 ---
 
-## `tests_cpp/` — C++ oracle suites, hand-compiled, NOT in CI
+## `tests_cpp/` — C++ oracle suites, run by CI under sanitizers
 
-These are the real correctness net for the solver work. **They are not run by
-CMake, not collected by pytest, and not run by CI.** Nothing but running them by
-hand will catch a regression in the headers they cover.
+These are the real correctness net for the solver work. They are not built by
+CMake and not collected by pytest; they are standalone programs.
+
+CI runs every suite on each push, in the `tests_cpp` job of `run_tests.yml`,
+under five sanitizer/hardening lanes (all on the self-hosted `ubuntu-ci:24.04`
+image, all tiers — the whole set costs a few minutes per lane):
+
+| Lane | What it catches |
+|---|---|
+| gcc ASan+UBSan, `_GLIBCXX_ASSERTIONS`, `_GLIBCXX_SANITIZE_VECTOR` | out-of-bounds / use-after-free / leaks (LeakSanitizer is on — these are plain executables), reads past `size()` within capacity, UB |
+| gcc `_GLIBCXX_DEBUG` + `_FORTIFY_SOURCE=3`, stack protector, pattern-initialised locals, perturbed malloc | iterator invalidation and container preconditions; uninitialised reads made visible as wrong answers |
+| clang ASan+UBSan strict (`integer`, `implicit-conversion`, `float-divide-by-zero`, `local-bounds`, `nullability`) | wraparound and narrowing such as an int64 count truncated into LEMON's `int` index. System headers are excluded via `tests_cpp/ubsan-system-headers.ignorelist` (libstdc++'s RNG wraps on purpose) |
+| clang libc++ `_LIBCPP_HARDENING_MODE_DEBUG` + ASan+UBSan | the same on the other standard library. Uses LLVM 22 from apt.llvm.org: Ubuntu's libc++ is linked `-Bsymbolic-functions`, which makes ASan report a bogus alloc-dealloc-mismatch on every thrown exception |
+| clang MSan (origin tracking, use-after-dtor) | uninitialised reads, which ASan cannot see |
+
+Deliberately absent: ASan's `pointer-compare`/`pointer-subtract` (they flag
+libstdc++'s own `vector::capacity()`), and TSan (no suite is threaded).
+
+All lanes build through `tests_cpp/run_all.sh`, which compiles every suite in
+parallel and runs them all, reporting every failure rather than the first:
+
+```bash
+CXX=clang++ CXXFLAGS="-O1 -g -fsanitize=memory" tests_cpp/run_all.sh
+```
 
 Each is a standalone `main()` that exits non-zero on failure, with its build line
 in the header comment. They all validate against an **independent oracle** —

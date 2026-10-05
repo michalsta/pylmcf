@@ -116,3 +116,131 @@ jobs:
         working-directory: ./tests
         run: |
           python -m pytest .
+
+  # The tests_cpp/ oracle suites: the only tests of the header-only solvers
+  # (LCT simplex, chain solver, LEMON warm restarts, canonical potentials).
+  # Standalone executables, no Python, so this is neither part of the
+  # ci_matrix.py covering array (whose sanitizer lanes build and import the
+  # extension) nor of any tier: ~2-4 min per lane, so all lanes always run.
+  # Every lane dry-ran clean in this exact image before being added.
+  tests_cpp:
+    name: "[tests_cpp] ${{ matrix.label }}"
+    needs: select
+    runs-on: [self-hosted, wloczykij-amd64]
+    container: localhost:5000/ubuntu-ci:24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: gcc asan+ubsan
+            cxx: g++
+            # _GLIBCXX_ASSERTIONS is libstdc++'s hardened mode (bounds-checked
+            # operator[], front/back on empty, ...); _GLIBCXX_SANITIZE_VECTOR
+            # lets ASan see past-size() accesses within a vector's capacity.
+            # pointer-compare/pointer-subtract are deliberately absent: they
+            # flag libstdc++'s own vector::capacity() (end_of_storage - start).
+            cxxflags: >-
+              -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined
+              -fno-sanitize-recover=all -D_GLIBCXX_ASSERTIONS -D_GLIBCXX_SANITIZE_VECTOR
+            ldflags: ""
+          - label: gcc debug mode + hardening
+            cxx: g++
+            # _GLIBCXX_DEBUG: full checked-iterator mode (iterator invalidation,
+            # comparator strict-weak-ordering, sortedness preconditions); not
+            # combined with ASan, whose allocator hooks it conflicts with. The
+            # rest is distro-style hardening at -O2, which _FORTIFY_SOURCE needs.
+            # Uninitialised locals become a pattern, and freed/allocated heap
+            # memory is perturbed (GLIBC_TUNABLES below), so a read of either
+            # turns into a wrong answer the oracles catch rather than a lucky 0.
+            cxxflags: >-
+              -O2 -g -D_GLIBCXX_DEBUG -D_GLIBCXX_DEBUG_PEDANTIC -D_GLIBCXX_ASSERTIONS
+              -D_FORTIFY_SOURCE=3 -fstack-protector-strong -fstack-clash-protection
+              -fcf-protection=full -ftrivial-auto-var-init=pattern
+            ldflags: ""
+            glibc_tunables: glibc.malloc.perturb=165
+          - label: clang asan+ubsan strict
+            cxx: clang++
+            # Beyond -fsanitize=undefined: unsigned wraparound and implicit
+            # narrowing / sign-changing conversions (e.g. an int64 count
+            # truncated into LEMON's int node index), float division by zero,
+            # and local array bounds. Those are not UB in themselves, so system
+            # headers are excluded (libstdc++'s RNG wraps on purpose); our
+            # headers and the vendored LEMON stay checked.
+            cxxflags: >-
+              -O1 -g -fno-omit-frame-pointer
+              -fsanitize=address,undefined,integer,implicit-conversion,float-divide-by-zero,local-bounds,nullability
+              -fsanitize-ignorelist=tests_cpp/ubsan-system-headers.ignorelist
+              -fno-sanitize-recover=all -D_GLIBCXX_ASSERTIONS
+            ldflags: ""
+          - label: clang libc++ hardened+asan+ubsan
+            cxx: clang++-22
+            libcxx: true
+            # LLVM from apt.llvm.org, not Ubuntu's clang 18: Ubuntu links its
+            # libc++/libc++abi with -Bsymbolic-functions, which defeats ASan's
+            # interposition inside them (LLVM #59432) and reports a bogus
+            # alloc-dealloc-mismatch on every thrown exception. wnet's libc++
+            # sanitizer lane uses the same LLVM for the same reason.
+            llvm_apt: "22"
+            # libc++'s strictest hardening mode, the counterpart of
+            # _GLIBCXX_ASSERTIONS/_GLIBCXX_DEBUG on the other standard library.
+            cxxflags: >-
+              -O1 -g -fno-omit-frame-pointer -stdlib=libc++
+              -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_DEBUG
+              -fsanitize=address,undefined -fno-sanitize-recover=all
+            ldflags: -stdlib=libc++
+          - label: clang msan
+            cxx: clang++
+            # Uninitialised reads, which ASan does not see: the warm-repair
+            # scratch buffers and lazily built indices are the target. The
+            # suites use only header-instantiated std code (vector, algorithm)
+            # plus printf, so the uninstrumented libstdc++ is not a source of
+            # false positives here.
+            cxxflags: >-
+              -O1 -g -fno-omit-frame-pointer -fsanitize=memory
+              -fsanitize-memory-track-origins=2 -fsanitize-memory-use-after-dtor
+              -fno-sanitize-recover=all
+            ldflags: ""
+
+    steps:
+      - uses: actions/checkout@v5
+      - name: Add apt.llvm.org
+        if: matrix.llvm_apt
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
+            | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc > /dev/null
+          echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-${{ matrix.llvm_apt }} main" \
+            | sudo tee /etc/apt/sources.list.d/llvm-${{ matrix.llvm_apt }}.list
+      - name: Install the clang sanitizer runtime, symbolizer (and libc++)
+        if: startsWith(matrix.cxx, 'clang')
+        run: |
+          if [ -n "${{ matrix.llvm_apt }}" ]; then
+            V="${{ matrix.llvm_apt }}"
+            PKGS="clang-$V"
+          else
+            V=$(clang --version | grep -oP '(?<=clang version )\d+')
+            PKGS=""
+          fi
+          # llvm-$V carries llvm-symbolizer: without it clang's sanitizer
+          # runtimes print bare addresses (gcc's symbolize on their own).
+          PKGS="$PKGS libclang-rt-$V-dev llvm-$V"
+          if [ "${{ matrix.libcxx }}" = "true" ]; then
+            PKGS="$PKGS libc++-$V-dev libc++abi-$V-dev"
+          fi
+          sudo apt-get update -q && sudo apt-get install -y $PKGS
+          for s in ASAN MSAN UBSAN; do
+            echo "${s}_SYMBOLIZER_PATH=/usr/lib/llvm-$V/bin/llvm-symbolizer" >> "$GITHUB_ENV"
+          done
+      - name: Build and run every tests_cpp suite
+        env:
+          CXX: ${{ matrix.cxx }}
+          CXXFLAGS: ${{ matrix.cxxflags }}
+          LDFLAGS: ${{ matrix.ldflags }}
+          # Leak checking stays on: unlike the Python-extension sanitizer
+          # lanes in wnet, these are plain executables.
+          ASAN_OPTIONS: >-
+            detect_leaks=1:strict_string_checks=1:detect_stack_use_after_return=1:check_initialization_order=1:strict_init_order=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+          MSAN_OPTIONS: halt_on_error=1
+          GLIBC_TUNABLES: ${{ matrix.glibc_tunables }}
+        run: tests_cpp/run_all.sh

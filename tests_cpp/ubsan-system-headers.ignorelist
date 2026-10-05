@@ -1,0 +1,6 @@
+# UBSan ignorelist for the "clang asan+ubsan strict" tests_cpp CI lane.
+# The strict checks (unsigned wraparound, implicit conversions) flag behaviour
+# that is well defined and intended in the standard library, e.g. the
+# multiply-with-wrap in std::mt19937_64 seeding. Our headers and the vendored
+# LEMON live under the checkout, not /usr, and stay checked.
+src:/usr/*

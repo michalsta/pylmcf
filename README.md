@@ -43,7 +43,7 @@ see [the Python solver APIs](docs/python-solvers.md).
 | [LCT network simplex](https://github.com/michalsta/pylmcf/blob/main/docs/lct-network-simplex.md) | `NetworkSimplexLCT` and the experimental `NetworkSimplexLCTDyn`, plus the adapter that A/B-tests them against real LEMON. |
 | [The 1D chain solver](https://github.com/michalsta/pylmcf/blob/main/docs/chain-solver-1d.md) | `ChainSolver1D` — successive shortest paths specialised to the 1D-chain LP. |
 | [Build modes and threading](https://github.com/michalsta/pylmcf/blob/main/docs/build-modes.md) | nanobind split vs linked, free-threading, what is and is not thread-safe, wheels. |
-| [Testing and diagnostics](https://github.com/michalsta/pylmcf/blob/main/docs/testing.md) | The two test suites (one of which CI does not run), and the diagnostic build flags. |
+| [Testing and diagnostics](https://github.com/michalsta/pylmcf/blob/main/docs/testing.md) | The two test suites (the C++ one runs in CI under five sanitizer lanes), and the diagnostic build flags. |
 
 ### Installation
 

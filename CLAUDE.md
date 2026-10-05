@@ -29,7 +29,11 @@ cd tests && python -m pytest .
 python -m pytest tests/test_graph.py::test_graph_simple
 ```
 
-**Run a C++ test suite** (see `tests_cpp/` below — these are *not* run by CMake, pytest, or CI):
+**Run the C++ test suites** (see `tests_cpp/` below — not run by CMake or pytest; CI runs them under sanitizers). All of them, with any toolchain/flags, the way CI does:
+```bash
+CXX=clang++ CXXFLAGS="-O1 -g -fsanitize=address,undefined" tests_cpp/run_all.sh
+```
+Or one:
 ```bash
 g++ -I$(python -m pylmcf --include) -std=c++20 -O2 \
     tests_cpp/test_network_simplex_lct.cpp -o /tmp/t && /tmp/t
@@ -126,7 +130,7 @@ Header-only, C++-consumers only (this is where the active work is):
 
 `test_graph.py`, `test_graph_lb.py` (lower bounds), `test_networkx.py`, `test_solver_variants.py` (the four functional solvers), `test_api.py` (`as_nx`, `FromNX` edge cases, `include()`), `test_networkx.py` (**imports `networkx` at module scope**, so every CI job that runs the suite must install it — omitting it is a collection *error*, not a skip), `test_free_threading.py` (skipped unless the GIL is still off *after* importing the extension — so it stays quiet on 3.14t, where the linked fallback is expected to turn it back on — then hammers 8 threads × 25 concurrent solves against a serial oracle), `test_potentials.py` (`potentials()` and functional `return_potentials=True`, certified by complementary slackness, strong duality, and canonicality against a numpy Bellman-Ford oracle — the shared certificate lives in `tests/mcf_certify.py`), `test_validation.py` (the error contract of `Graph` and the four functional solvers: bad topology, lengths, signs, minimum > capacity, contiguity, and the `noconvert` dtype guard), `test_lemon_options.py` (supply types vs an equality-form hub-node oracle, pivot rules, warm-repair strategies and budget, and `infeasibility_cut()` checked as a valid barrier exactly when `solve()` fails), `test_warm_resolve.py` (warm re-solve chains vs a fresh-cold oracle: cap/supply/cost mutations, minimums forcing cold, infeasible-then-feasible recovery, the violation-limit policy, and a counter guard that fails if warm restarts silently stop firing).
 
-### `tests_cpp/` — C++ oracle suites, hand-compiled, NOT in CMake or CI
+### `tests_cpp/` — C++ oracle suites, not in CMake; CI runs them under sanitizers
 
 Each is a standalone `main()` with its `g++` line in the header comment. They are the real correctness net for the solver work, and they all validate against an independent oracle rather than golden values:
 
@@ -138,7 +142,9 @@ Each is a standalone `main()` with its `g++` line in the header comment. They ar
 - `test_chain_solver_1d.cpp` — `ChainSolver1D` vs LEMON on the chain LP.
 - `test_canonical_potentials.cpp` — `canonical_potentials()` vs a textbook Bellman-Ford over the residual graph (EQ/GEQ/LEQ, with and without lower bounds), on both the Johnson-height path and the forced Bellman-Ford fallback the Python suite cannot reach; also checks that a non-optimal flow is rejected.
 
-When touching any solver header, run the corresponding `tests_cpp` suite — nothing else will catch a regression there.
+When touching any solver header, run the corresponding `tests_cpp` suite locally — CI will catch it too, but only after a push.
+
+CI: the `tests_cpp` job in `run_tests.yml` (outside `ci_matrix.py` and its tiers — standalone executables, no Python, ~1-2 min per lane, so every lane runs on every push) builds them through `tests_cpp/run_all.sh` in five lanes on `ubuntu-ci:24.04`: gcc ASan+UBSan with `_GLIBCXX_ASSERTIONS`/`_GLIBCXX_SANITIZE_VECTOR`; gcc `_GLIBCXX_DEBUG` + `_FORTIFY_SOURCE=3` hardening; clang strict UBSan (`integer`, `implicit-conversion`, ...; system headers excluded by `tests_cpp/ubsan-system-headers.ignorelist`); clang libc++ `_LIBCPP_HARDENING_MODE_DEBUG` + ASan+UBSan on **LLVM 22 from apt.llvm.org** (Ubuntu's libc++ is `-Bsymbolic-functions`-linked and makes ASan report a bogus alloc-dealloc-mismatch on any thrown exception); clang MSan. Leak detection is on. Do not add ASan `pointer-compare`/`pointer-subtract` (false positives in libstdc++'s `vector::capacity()`). Lanes were validated in the real image with rootless `podman run --tls-verify=false localhost:5000/ubuntu-ci:24.04` on wloczykij — the way to reproduce a CI-only failure, since `untrusted` has no docker access.
 
 ### Dead scripts — do not treat as live examples
 
