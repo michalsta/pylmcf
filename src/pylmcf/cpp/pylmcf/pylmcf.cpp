@@ -307,5 +307,6 @@ NB_MODULE(pylmcf_cpp, m) {
         .def("set_warm_violation_limit", &Graph<int64_t>::set_warm_violation_limit)
         .def("total_cost", &Graph<int64_t>::total_cost)
         .def("result", &Graph<int64_t>::extract_result_py)
+        .def("potentials", &Graph<int64_t>::extract_potentials_py)
         .def("__str__", &Graph<int64_t>::to_string);
 }

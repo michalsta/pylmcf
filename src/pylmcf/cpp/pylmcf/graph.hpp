@@ -262,6 +262,23 @@ public:
         return std::span<T>(data, no_edges());
     }
 
+    // Node potentials (the dual solution) of the last solve, indexed by node
+    // id.  They follow LEMON's convention: the reduced cost of edge (u, v) is
+    //   rc = cost + pi[u] - pi[v],
+    // and complementary slackness holds against the returned flows (rc > 0
+    // => flow == minimum, rc < 0 => flow == capacity).  Only differences
+    // within a connected component are determined by the problem; nodes the
+    // solver priced through its artificial root may carry large offsets.
+    // Caller must free() the returned span's data.
+    std::span<T> get_node_potentials() const {
+        if (!_solved)
+            throw std::runtime_error("solve() must be called before reading potentials");
+        T* data = static_cast<T*>(malloc(sizeof(T) * no_nodes()));
+        for (LEMON_INT ii = 0; ii < no_nodes(); ii++)
+            data[ii] = solver.potential(lemon_graph.nodeFromId(ii));
+        return std::span<T>(data, no_nodes());
+    }
+
     std::string to_string() const {
         std::string out = "Graph with " + std::to_string(no_nodes()) + " nodes and " + std::to_string(no_edges()) + " edges\n";
         out += "Edges:\n";
@@ -340,6 +357,10 @@ public:
 
     nb::ndarray<T, nb::numpy, nb::shape<-1>> extract_result_py() const {
         return steal_mallocd_span_to_np_array(get_edge_flows());
+    }
+
+    nb::ndarray<T, nb::numpy, nb::shape<-1>> extract_potentials_py() const {
+        return steal_mallocd_span_to_np_array(get_node_potentials());
     }
 
     nb::ndarray<LEMON_INDEX, nb::numpy, nb::shape<-1>, nb::ro> edge_starts_py() const {

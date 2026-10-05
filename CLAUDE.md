@@ -108,7 +108,7 @@ Header-only, C++-consumers only (this is where the active work is):
 
 ### Two public Python APIs
 
-1. **OO API** (`Graph`): stateful, supports re-solving after changing costs/supplies — re-solves warm-restart from the retained basis (cost changes ride the `costs_changed` path; minimums force cold) — exposes `set_edge_minimums()` for lower bounds, warm/cold counters, and `set_warm_violation_limit()`.
+1. **OO API** (`Graph`): stateful, supports re-solving after changing costs/supplies — re-solves warm-restart from the retained basis (cost changes ride the `costs_changed` path; minimums force cold) — exposes `set_edge_minimums()` for lower bounds, `potentials()` (the dual solution, LEMON's `rc = cost + pi[u] - pi[v]` convention), warm/cold counters, and `set_warm_violation_limit()`.
 2. **Functional API** (`pylmcf.pylmcf_cpp.lmcf`, etc.): stateless, numpy arrays in. Four variants: `lmcf` (NetworkSimplex), `lmcf_cycle_canceling`, `lmcf_cost_scaling`, `lmcf_capacity_scaling`. The latter two only support int32/int64 due to arithmetic range requirements. Each has a with- and without-minimums overload.
 
 ### Important constraints
@@ -116,13 +116,13 @@ Header-only, C++-consumers only (this is where the active work is):
 - All integer arrays (supply, costs, capacities, minimums, flows) are **int64** in the OO API, duck-typed in the functional API. Node/arc *ids* are `int` (`LEMON_INDEX`), and counts exceeding `INT_MAX` throw `std::overflow_error`.
 - **Edge costs and minimums must be non-negative** (enforced in C++).
 - The graph must be **feasible** (total supply == total demand, sufficient capacity); otherwise `solve()` raises `RuntimeError: INFEASIBLE`.
-- `result()` / `total_cost()` raise if called before `solve()`.
+- `result()` / `total_cost()` / `potentials()` raise if called before `solve()`, or after any setter since it.
 
 ## Tests
 
 ### `tests/` — Python, pytest, run by CI
 
-`test_graph.py`, `test_graph_lb.py` (lower bounds), `test_networkx.py`, `test_solver_variants.py` (the four functional solvers), `test_api.py` (`as_nx`, `FromNX` edge cases, `include()`), `test_networkx.py` (**imports `networkx` at module scope**, so every CI job that runs the suite must install it — omitting it is a collection *error*, not a skip), `test_free_threading.py` (skipped unless the GIL is still off *after* importing the extension — so it stays quiet on 3.14t, where the linked fallback is expected to turn it back on — then hammers 8 threads × 25 concurrent solves against a serial oracle), `test_warm_resolve.py` (warm re-solve chains vs a fresh-cold oracle: cap/supply/cost mutations, minimums forcing cold, infeasible-then-feasible recovery, the violation-limit policy, and a counter guard that fails if warm restarts silently stop firing).
+`test_graph.py`, `test_graph_lb.py` (lower bounds), `test_networkx.py`, `test_solver_variants.py` (the four functional solvers), `test_api.py` (`as_nx`, `FromNX` edge cases, `include()`), `test_networkx.py` (**imports `networkx` at module scope**, so every CI job that runs the suite must install it — omitting it is a collection *error*, not a skip), `test_free_threading.py` (skipped unless the GIL is still off *after* importing the extension — so it stays quiet on 3.14t, where the linked fallback is expected to turn it back on — then hammers 8 threads × 25 concurrent solves against a serial oracle), `test_potentials.py` (`potentials()` certified by complementary slackness and strong duality against the returned flows, cold, with minimums, and across warm chains), `test_warm_resolve.py` (warm re-solve chains vs a fresh-cold oracle: cap/supply/cost mutations, minimums forcing cold, infeasible-then-feasible recovery, the violation-limit policy, and a counter guard that fails if warm restarts silently stop firing).
 
 ### `tests_cpp/` — C++ oracle suites, hand-compiled, NOT in CMake or CI
 

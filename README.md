@@ -79,7 +79,14 @@ G.solve()
 
 G.result()      # np.array([2, 3, 2])  — flow on each edge
 G.total_cost()  # 21
+G.potentials()  # np.array([-6, -5, 0]) — node potentials (dual solution)
 ```
+
+`potentials()` returns the dual solution in LEMON's convention: the reduced cost
+of edge `(u, v)` is `cost + pi[u] - pi[v]`, and complementary slackness holds
+against `result()` (reduced cost > 0 ⇒ flow at its minimum, < 0 ⇒ flow at
+capacity). Potentials are not unique — only differences within a connected
+component are meaningful.
 
 All integer arrays in the OO API are **int64**, and the dtype is not converted for
 you — a mismatched array raises `TypeError`. Costs and minimums must be
