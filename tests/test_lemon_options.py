@@ -355,13 +355,18 @@ def test_infeasibility_cut_leaves_solution_intact():
 @pytest.mark.parametrize("supply_type", ["geq", "leq"])
 @pytest.mark.parametrize("seed", range(30))
 def test_infeasibility_cut_random(seed, supply_type, with_minimums):
-    # Squeeze capacities of a feasible instance until it may break; the cut
-    # must exist exactly when solve() fails, and must be a valid barrier.
+    # Squeeze capacities of a feasible instance until it may break, sometimes
+    # also imbalancing it the wrong way; the cut must exist exactly when
+    # solve() fails, and must be a valid barrier.
     rng = np.random.default_rng(6000 + seed)
     n = int(rng.integers(2, 20))
     m = int(rng.integers(1, 3 * n))
     inst = random_instance(rng, n, m, with_minimums)
-    if seed % 3:
+    if seed % 5 == 4:
+        # Imbalance the supply type cannot absorb (excess supply under geq,
+        # excess demand under leq): infeasible whatever the capacities.
+        inst = unbalance(rng, inst, "leq" if supply_type == "geq" else "geq")
+    elif seed % 3:
         inst = unbalance(rng, inst, supply_type)
     lo = inst["minimums"] if with_minimums else 0
     inst["caps"] = np.maximum(lo, inst["caps"] - rng.integers(0, 8, m))

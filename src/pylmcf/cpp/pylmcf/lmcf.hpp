@@ -78,6 +78,12 @@ LmcfCost lmcf_impl(
         if (!minimums.empty() && minimums[i] < 0) {
             throw std::invalid_argument("Minimums must be non-negative");
         }
+        // LEMON only asserts this in debug builds; violating it yields flows
+        // outside their bounds with no error.
+        if (!minimums.empty() && minimums[i] > capacities[i]) {
+            throw std::invalid_argument("Edge " + std::to_string(i) + " has minimum " +
+                std::to_string(minimums[i]) + " above its capacity " + std::to_string(capacities[i]));
+        }
         if constexpr (validate_costs) {
             if (costs[i] < 0) {
                 throw std::invalid_argument("Costs must be non-negative");

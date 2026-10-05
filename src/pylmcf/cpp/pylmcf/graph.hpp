@@ -22,6 +22,9 @@ inline lemon::StaticDigraph make_lemon_graph(LEMON_INDEX no_nodes, const std::sp
     const std::span<LEMON_INDEX> &edge_ends) {
     const size_t no_edges = edge_starts.size();
 
+    if (no_nodes < 0)
+        throw std::invalid_argument("Number of nodes must be non-negative");
+
     // Make sure all edge arrays and result are the same size
     if (edge_starts.size() != edge_ends.size()) {
         throw std::invalid_argument("All edge arrays must be the same size");
@@ -218,7 +221,22 @@ public:
         return std::span<T>(data, no_edges());
     }
 
+    // LEMON only asserts lower <= upper in debug builds; violating it makes
+    // every solver return flows outside their bounds without complaint.  The
+    // setters cannot check it (capacities and minimums are set separately),
+    // so it is checked where the pair is consumed.
+    void check_bounds() const {
+        for (LEMON_INDEX ii = 0; ii < no_edges(); ii++) {
+            const auto a = lemon_graph.arcFromId(ii);
+            if (minimums_map[a] > capacities_map[a])
+                throw std::invalid_argument("Edge " + std::to_string(ii) + " has minimum " +
+                    std::to_string(minimums_map[a]) + " above its capacity " +
+                    std::to_string(capacities_map[a]));
+        }
+    }
+
     void solve(){
+        check_bounds();
         solver.supplyMap(node_supply_map);
         solver.costMap(costs_map);
         // Re-solves warm-restart from the retained basis.  warmRun() itself
@@ -296,6 +314,7 @@ public:
     // otherwise one flag per node.  Independent of solve(); reads the current
     // supplies, capacities and minimums.
     std::vector<char> infeasibility_cut() const {
+        check_bounds();
         using G = lemon::StaticDigraph;
         using AM = G::ArcMap<T>;
         using NM = G::NodeMap<T>;

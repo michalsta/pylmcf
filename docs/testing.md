@@ -27,6 +27,7 @@ python -m pytest tests/test_graph.py::test_graph_simple
 | `test_free_threading.py` | 8 threads × 25 concurrent solves vs a serial oracle |
 | `test_warm_resolve.py` | warm re-solve chains vs a fresh-cold oracle |
 | `test_potentials.py` | `potentials()` and `return_potentials=True`: optimality certificate plus canonicality vs a numpy Bellman-Ford (shared helper `mcf_certify.py`) |
+| `test_validation.py` | the error contract of `Graph` and the functional solvers (topology, lengths, signs, minimum > capacity, contiguity, dtype guard) |
 | `test_lemon_options.py` | supply types vs an equality-form oracle, pivot rules, warm-repair strategies and budget, `infeasibility_cut()` as a valid barrier exactly when `solve()` fails |
 
 Two notes:

@@ -181,14 +181,21 @@ def test_functional_potentials_small_dtypes(fn, dtypes):
         assert np.array_equal(flows, flows_only)
 
 
+@pytest.mark.parametrize("unbalanced", [False, True])
 @pytest.mark.parametrize("with_minimums", [False, True])
 @pytest.mark.parametrize("seed", range(15))
 @pytest.mark.parametrize("fn", [f for f, _ in FUNCTIONAL], ids=lambda f: f.__name__)
-def test_functional_potentials_random(fn, seed, with_minimums):
+def test_functional_potentials_random(fn, seed, with_minimums, unbalanced):
     rng = np.random.default_rng(2000 + seed)
     n = int(rng.integers(2, 25))
     m = int(rng.integers(1, 4 * n))
     inst = random_instance(rng, n, m, with_minimums)
+    if unbalanced:
+        # Extra demand: every functional solver reads this as GEQ (LEMON's
+        # default), which is the sign convention its potentials assume.
+        extra = rng.integers(0, 6, n) * (rng.integers(0, 3, n) == 0)
+        extra[rng.integers(0, n)] += 1
+        inst["supply"] = inst["supply"] - extra
     # The functional API accepts arbitrary edge order; shuffle to exercise
     # its internal sort (potentials are per node, so must be unaffected).
     perm = rng.permutation(m)
@@ -198,8 +205,9 @@ def test_functional_potentials_random(fn, seed, with_minimums):
     args = [inst["supply"], starts, ends, caps] + ([mins] if with_minimums else []) + [costs]
     flows, pi = fn(*args, return_potentials=True)
     mcf_certify.certify(n, starts, ends, inst["supply"], caps, costs, flows, pi,
-                        int(np.dot(costs, flows)), minimums=mins)
-    # Same optimum as the OO API.
+                        int(np.dot(costs, flows)), minimums=mins,
+                        supply_type="geq" if unbalanced else "eq")
+    # Same optimum as the OO API (GEQ by default too).
     g = build(inst)
     g.solve()
     assert np.dot(costs, flows) == g.total_cost()
