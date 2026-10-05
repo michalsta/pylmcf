@@ -6,8 +6,11 @@
 #include <vector>
 #include <lemon/static_graph.h>
 #include <lemon/network_simplex.h>
+#include <lemon/circulation.h>
+#include <lemon/adaptors.h>
 
 #include "basics.hpp"
+#include "canonical_potentials.hpp"
 
 #ifdef INCLUDE_NANOBIND_STUFF
 #include <nanobind/nanobind.h>
@@ -51,6 +54,9 @@ inline lemon::StaticDigraph make_lemon_graph(LEMON_INDEX no_nodes, const std::sp
 
 
 template <typename T> class Graph {
+public:
+    using Solver = lemon::NetworkSimplex<lemon::StaticDigraph, T, T>;
+
 private:
     const LEMON_INDEX _no_nodes;
     const std::vector<LEMON_INDEX> _edge_starts;
@@ -73,6 +79,10 @@ private:
     // "repair succeeded => already optimal" fast path, which is only valid
     // while the retained basis prices the current costs.
     bool _costs_dirty = false;
+
+    typename Solver::SupplyType _supply_type = Solver::GEQ;
+    typename Solver::PivotRule _pivot_rule = Solver::BLOCK_SEARCH;
+    typename Solver::WarmRepair _warm_repair = Solver::WarmRepair::Dual;
 
 public:
     Graph(LEMON_INDEX no_nodes, const std::span<LEMON_INDEX> &edge_starts,
@@ -209,7 +219,6 @@ public:
     }
 
     void solve(){
-        using Solver = lemon::NetworkSimplex<lemon::StaticDigraph, T, T>;
         solver.supplyMap(node_supply_map);
         solver.costMap(costs_map);
         // Re-solves warm-restart from the retained basis.  warmRun() itself
@@ -218,13 +227,13 @@ public:
         // every mutation of capacities/supplies/costs/minimums is safe here;
         // _costs_dirty only steers it off the costs-unchanged fast path.
         const auto status = _basis_valid
-            ? solver.warmRun(Solver::BLOCK_SEARCH, Solver::WarmRepair::Dual,
-                             _costs_dirty)
-            : solver.run();
+            ? solver.warmRun(_pivot_rule, _warm_repair, _costs_dirty)
+            : solver.run(_pivot_rule);
         _basis_valid = (status == Solver::OPTIMAL);
         if (status != Solver::OPTIMAL) {
             if (status == Solver::INFEASIBLE)
-                throw std::runtime_error("Solver failed: problem is INFEASIBLE");
+                throw std::runtime_error("Solver failed: problem is INFEASIBLE "
+                                         "(infeasibility_cut() names a set of nodes that proves it)");
             else if (status == Solver::UNBOUNDED)
                 throw std::runtime_error("Solver failed: problem is UNBOUNDED");
             else
@@ -245,6 +254,75 @@ public:
     int primal_repair_count() const { return solver.primalRepairCount(); }
     int policy_cold_count() const { return solver.policyColdCount(); }
     void set_warm_violation_limit(long v) { solver.setWarmViolationLimit(v); }
+    // Repair time budget as a multiple of the last cold solve's wall time
+    // (<= 0 disables).  A catastrophe tripwire, not a tuning knob — see
+    // NetworkSimplex::setWarmRepairBudget().  PYLMCF_WARM_REPAIR_BUDGET, if
+    // set, overrides it.
+    void set_warm_repair_budget(double mult) { solver.setWarmRepairBudget(mult); }
+    double warm_repair_budget() const { return solver.warmRepairBudget(); }
+
+    // Direction of the supply/demand constraints when total supply != 0
+    // (LEMON's SupplyType; with zero total supply both mean equality):
+    //   GEQ (default): out - in >= supply; needs sum(supply) <= 0, i.e.
+    //                  every supply is shipped, demands may go unmet.
+    //   LEQ:           out - in <= supply; needs sum(supply) >= 0, i.e.
+    //                  every demand is met, supplies may go unused.
+    // Warm restarts only apply to zero total supply; others re-solve cold.
+    void set_supply_type(typename Solver::SupplyType st) {
+        _supply_type = st;
+        solver.supplyType(st);
+        _basis_valid = false;
+        _solved = false;
+    }
+    typename Solver::SupplyType supply_type() const { return _supply_type; }
+
+    // Pivot rule for every solve (cold solves and warmRun()'s reoptimization).
+    void set_pivot_rule(typename Solver::PivotRule rule) { _pivot_rule = rule; }
+    typename Solver::PivotRule pivot_rule() const { return _pivot_rule; }
+
+    // Basis-repair strategy used by warm re-solves.  DualRatio/DualGreedy are
+    // not bit-identical to Dual at degenerate optima (same cost, possibly
+    // different optimal flows).
+    void set_warm_repair(typename Solver::WarmRepair strategy) { _warm_repair = strategy; }
+    typename Solver::WarmRepair warm_repair() const { return _warm_repair; }
+
+    // A certificate of infeasibility (LEMON's Circulation barrier): a set B of
+    // nodes such that, under GEQ supply constraints,
+    //   sum(cap of edges leaving B) - sum(minimum of edges entering B)
+    //       < sum(supply of B),
+    // i.e. B must push out more than its boundary can carry.  Under LEQ the
+    // roles flip: sum(cap entering B) - sum(minimum leaving B) < -sum(supply
+    // of B).  Returns an empty vector when the current data is feasible;
+    // otherwise one flag per node.  Independent of solve(); reads the current
+    // supplies, capacities and minimums.
+    std::vector<char> infeasibility_cut() const {
+        using G = lemon::StaticDigraph;
+        using AM = G::ArcMap<T>;
+        using NM = G::NodeMap<T>;
+        std::vector<char> cut;
+        auto collect = [&](auto& circ) {
+            if (circ.run()) return;
+            cut.resize(no_nodes());
+            for (LEMON_INDEX ii = 0; ii < no_nodes(); ii++)
+                cut[ii] = circ.barrier(lemon_graph.nodeFromId(ii));
+        };
+        if (_supply_type == Solver::GEQ) {
+            lemon::Circulation<G, AM, AM, NM> circ(lemon_graph, minimums_map, capacities_map, node_supply_map);
+            collect(circ);
+        } else {
+            // LEQ is GEQ on the reversed graph with negated supplies.
+            using R = lemon::ReverseDigraph<const G>;
+            NM negated(lemon_graph);
+            for (LEMON_INDEX ii = 0; ii < no_nodes(); ii++) {
+                const auto n = lemon_graph.nodeFromId(ii);
+                negated[n] = -node_supply_map[n];
+            }
+            R rev(lemon_graph);
+            lemon::Circulation<R, AM, AM, NM> circ(rev, minimums_map, capacities_map, negated);
+            collect(circ);
+        }
+        return cut;
+    }
 
     T total_cost() const {
         if (!_solved)
@@ -266,17 +344,37 @@ public:
     // id.  They follow LEMON's convention: the reduced cost of edge (u, v) is
     //   rc = cost + pi[u] - pi[v],
     // and complementary slackness holds against the returned flows (rc > 0
-    // => flow == minimum, rc < 0 => flow == capacity).  Only differences
-    // within a connected component are determined by the problem; nodes the
-    // solver priced through its artificial root may carry large offsets.
+    // => flow == minimum, rc < 0 => flow == capacity).  Of all potentials
+    // that are optimal for the returned flows, this is the canonical one
+    // (see canonical_potentials.hpp): the pointwise-largest with pi <= 0
+    // under GEQ, the pointwise-smallest with pi >= 0 under LEQ.  LEMON's raw
+    // tree potentials can carry its 2^62 artificial cost instead.
     // Caller must free() the returned span's data.
     std::span<T> get_node_potentials() const {
         if (!_solved)
             throw std::runtime_error("solve() must be called before reading potentials");
-        T* data = static_cast<T*>(malloc(sizeof(T) * no_nodes()));
-        for (LEMON_INT ii = 0; ii < no_nodes(); ii++)
-            data[ii] = solver.potential(lemon_graph.nodeFromId(ii));
-        return std::span<T>(data, no_nodes());
+        const LEMON_INDEX n = no_nodes();
+        const LEMON_INDEX m = no_edges();
+        std::vector<T> costs(m), caps(m), mins(m), flows(m), raw(n);
+        for (LEMON_INDEX ii = 0; ii < m; ii++) {
+            const auto a = lemon_graph.arcFromId(ii);
+            costs[ii] = costs_map[a];
+            caps[ii] = capacities_map[a];
+            mins[ii] = minimums_map[a];
+            flows[ii] = solver.flow(a);
+        }
+        for (LEMON_INDEX ii = 0; ii < n; ii++)
+            raw[ii] = solver.potential(lemon_graph.nodeFromId(ii));
+        T* data = static_cast<T*>(malloc(sizeof(T) * n));
+        std::span<T> out(data, n);
+        try {
+            canonical_potentials<T, T>(n, _edge_starts, _edge_ends, costs, caps, mins,
+                                       flows, raw, _supply_type == Solver::LEQ, out);
+        } catch (...) {
+            free(data);
+            throw;
+        }
+        return out;
     }
 
     std::string to_string() const {
@@ -361,6 +459,16 @@ public:
 
     nb::ndarray<T, nb::numpy, nb::shape<-1>> extract_potentials_py() const {
         return steal_mallocd_span_to_np_array(get_node_potentials());
+    }
+
+    nb::object infeasibility_cut_py() const {
+        const std::vector<char> cut = infeasibility_cut();
+        if (cut.empty())
+            return nb::none();
+        bool* data = static_cast<bool*>(malloc(sizeof(bool) * cut.size()));
+        for (size_t ii = 0; ii < cut.size(); ii++)
+            data[ii] = cut[ii] != 0;
+        return nb::cast(steal_mallocd_span_to_np_array(std::span<bool>(data, cut.size())));
     }
 
     nb::ndarray<LEMON_INDEX, nb::numpy, nb::shape<-1>, nb::ro> edge_starts_py() const {

@@ -202,6 +202,10 @@ flag that is forwarded as `costs_changed`.
 | `DualRatio` | `Dual` with a bound-flipping (long-step) ratio test: cheap bound flips of cut-crossing arcs cut the number of basis pivots. |
 | `DualGreedy` | Like `DualRatio` but the entering arc is chosen by maximum capacity, aiming to cover the violation in one pivot. Suits widely varying capacities. |
 
+From Python, `G.set_warm_repair("repair_only" | "dual" | "primal" |
+"dual_ratio" | "dual_greedy")` selects the strategy for later re-solves, and
+`G.warm_repair()` reads it back.
+
 `DualRatio` and `DualGreedy` are **not bit-identical** to `Dual` — they can land
 on a different basis at a degenerate optimum. Same cost, possibly different
 flow vector. They are opt-in for that reason.
@@ -215,6 +219,8 @@ non-decreasing violation counts abandons the repair for the cold fallback.
 ns.setWarmRepairBudget(64.0);   // the default
 ns.setWarmRepairBudget(0.0);    // disable
 ```
+
+From Python: `G.set_warm_repair_budget(mult)` / `G.warm_repair_budget()`.
 
 A repair attempt bails to the (always correct) cold fallback once it has run for
 `mult` times the wall time of the last cold solve on that solver

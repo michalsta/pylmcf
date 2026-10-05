@@ -26,6 +26,8 @@ python -m pytest tests/test_graph.py::test_graph_simple
 | `test_api.py` | `as_nx`, `FromNX` edge cases, `include()` |
 | `test_free_threading.py` | 8 threads × 25 concurrent solves vs a serial oracle |
 | `test_warm_resolve.py` | warm re-solve chains vs a fresh-cold oracle |
+| `test_potentials.py` | `potentials()` and `return_potentials=True`: optimality certificate plus canonicality vs a numpy Bellman-Ford (shared helper `mcf_certify.py`) |
+| `test_lemon_options.py` | supply types vs an equality-form oracle, pivot rules, warm-repair strategies and budget, `infeasibility_cut()` as a valid barrier exactly when `solve()` fails |
 
 Two notes:
 
@@ -85,6 +87,7 @@ g++ -I$(python -m pylmcf --include) -std=c++20 -O2 \
 | `test_network_simplex_lct_dyn_warm.cpp` | LEMON (the dynamic variant, warm) |
 | `test_lct_adapter.cpp` | real `lemon::NetworkSimplex` on `wnet`'s exact call pattern |
 | `test_chain_solver_1d.cpp` | LEMON on the chain LP |
+| `test_canonical_potentials.cpp` | a textbook residual-graph Bellman-Ford, on both the Johnson path and the forced fallback |
 
 Run the lot:
 

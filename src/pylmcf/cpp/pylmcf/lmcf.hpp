@@ -15,6 +15,7 @@
 #include <type_traits>
 
 #include "basics.hpp"
+#include "canonical_potentials.hpp"
 
 
 template <typename T>
@@ -35,6 +36,11 @@ using LmcfCost = std::int64_t;
 // Core implementation — selects the LEMON solver via template template parameter.
 // minimums may be an empty span {} to indicate no lower bounds (zero by default).
 // validate_costs: if true, rejects negative arc costs (required by NetworkSimplex).
+// potentials: optional output, one per node (the dual solution, LEMON's
+// convention: reduced cost = cost + pi[start] - pi[end]); empty span skips it.
+// They are the canonical optimal potentials for the returned flows (largest
+// with pi <= 0, see canonical_potentials.hpp), hence identical across solvers
+// that return the same flows.
 // Returns the optimal total cost (in the wide cost type, never the narrow T).
 template <template <typename...> class Solver, typename T, bool validate_costs = false>
 LmcfCost lmcf_impl(
@@ -44,10 +50,13 @@ LmcfCost lmcf_impl(
     std::span<T> capacities,
     std::span<T> minimums,
     std::span<T> costs,
-    std::span<T> result
+    std::span<T> result,
+    std::span<LmcfCost> potentials = {}
     )
     requires std::is_signed<T>::value && std::is_integral<T>::value
     {
+    if (!potentials.empty() && potentials.size() != node_supply.size())
+        throw std::invalid_argument("Potentials output must have one entry per node");
     if (edges_starts.size() != edges_ends.size() || edges_starts.size() != capacities.size() ||
         (!minimums.empty() && edges_starts.size() != minimums.size()) ||
         edges_starts.size() != costs.size() || edges_starts.size() != result.size()) {
@@ -143,6 +152,26 @@ LmcfCost lmcf_impl(
 
     for (size_t j = 0; j < no_edges; j++)
         result[perm[j]] = solver.flow(graph.arcFromId(static_cast<LEMON_INDEX>(j)));
+
+    if (!potentials.empty()) {
+        // All in sorted-arc order; potentials are per node, order-free.
+        std::vector<LEMON_INDEX> s_starts(no_edges), s_ends(no_edges);
+        std::vector<LmcfCost> s_costs(no_edges), raw(no_nodes);
+        std::vector<T> s_caps(no_edges), s_mins, s_flows(no_edges);
+        if (!minimums.empty()) s_mins.resize(no_edges);
+        for (size_t j = 0; j < no_edges; j++) {
+            s_starts[j] = arcs[j].first;
+            s_ends[j] = arcs[j].second;
+            s_costs[j] = costs[perm[j]];
+            s_caps[j] = capacities[perm[j]];
+            if (!minimums.empty()) s_mins[j] = minimums[perm[j]];
+            s_flows[j] = result[perm[j]];
+        }
+        for (size_t i = 0; i < no_nodes; i++)
+            raw[i] = solver.potential(graph.nodeFromId(static_cast<LEMON_INDEX>(i)));
+        canonical_potentials<T, LmcfCost>(static_cast<LEMON_INDEX>(no_nodes), s_starts, s_ends,
+                                          s_costs, s_caps, s_mins, s_flows, raw, false, potentials);
+    }
 
     return solver.totalCost();
 }

@@ -85,13 +85,16 @@ G.potentials()  # np.array([-6, -5, 0]) — node potentials (dual solution)
 `potentials()` returns the dual solution in LEMON's convention: the reduced cost
 of edge `(u, v)` is `cost + pi[u] - pi[v]`, and complementary slackness holds
 against `result()` (reduced cost > 0 ⇒ flow at its minimum, < 0 ⇒ flow at
-capacity). Potentials are not unique — only differences within a connected
-component are meaningful.
+capacity). Potentials are not unique, so pylmcf returns a canonical choice: of
+all potentials optimal for the returned flows, the pointwise-largest with
+`pi <= 0` (the smallest with `pi >= 0` under `"leq"` supply, below). Its values
+are bounded by path costs — LEMON's raw tree potentials can instead carry its
+internal 2^62 artificial cost on some nodes.
 
 All integer arrays in the OO API are **int64**, and the dtype is not converted for
 you — a mismatched array raises `TypeError`. Costs and minimums must be
-non-negative, and the graph must be feasible (total supply == total demand,
-sufficient capacity) or `solve()` raises `RuntimeError: INFEASIBLE`.
+non-negative, and the graph must be feasible (see below for unbalanced supply)
+or `solve()` raises `RuntimeError: INFEASIBLE`.
 
 #### LCT and 1D-chain solvers
 
@@ -129,6 +132,29 @@ G.result()      # np.array([3, 2, 3])
 G.total_cost()  # 24
 ```
 
+#### Unbalanced supply, and why a problem is infeasible
+
+When total supply and demand differ, the supply type says which side may fall
+short (LEMON's `SupplyType`; with balanced supply both mean equality):
+
+```python
+G.set_supply_type("geq")  # default: out - in >= supply. Every supply is shipped,
+                          # demands may go unmet; needs sum(supply) <= 0.
+G.set_supply_type("leq")  # out - in <= supply. Every demand is met, supplies
+                          # may go unused; needs sum(supply) >= 0.
+```
+
+Unbalanced re-solves do not warm-restart. When `solve()` raises `INFEASIBLE`,
+`infeasibility_cut()` says why: a boolean mask of nodes `B` that must push out
+more than the edges leaving `B` can carry (under `"leq"`: must take in more than
+the edges entering `B` can deliver). It returns `None` when the problem is
+feasible, and does not need or disturb a solve.
+
+```python
+G.set_node_supply(np.array([9, 0, -9]))
+G.infeasibility_cut()     # array([ True, False, False]) — node 0's out-edges carry at most 6
+```
+
 #### Re-solving: warm restarts
 
 Changing supplies, capacities or costs and calling `solve()` again reuses the
@@ -163,7 +189,12 @@ tell whether warm restarts are actually firing — a regression that silently ro
 every re-solve through a cold rebuild still gives correct answers. Nonzero lower
 bounds force a cold solve.
 
-Full details, the repair strategies, the `set_warm_violation_limit()` policy and
+The pivot rule (`set_pivot_rule()`: `"block_search"` by default, or
+`"first_eligible"`, `"best_eligible"`, `"candidate_list"`, `"altering_list"`), the
+warm-repair strategy (`set_warm_repair()`: `"dual"` by default, or
+`"repair_only"`, `"primal"`, `"dual_ratio"`, `"dual_greedy"`) and the repair time
+budget (`set_warm_repair_budget()`) are configurable; the defaults are what
+you want unless you are benchmarking. Full details, the repair strategies, the `set_warm_violation_limit()` policy and
 the C++ API: **[Warm restarts](https://github.com/michalsta/pylmcf/blob/main/docs/warm-restart.md)**.
 
 #### Constructing from a NetworkX graph
@@ -205,6 +236,10 @@ flows = pylmcf_cpp.lmcf_cycle_canceling(supply, starts, ends, caps, costs)
 flows = pylmcf_cpp.lmcf_cost_scaling(supply, starts, ends, caps, costs)   # int32/int64 only
 flows = pylmcf_cpp.lmcf_capacity_scaling(supply, starts, ends, caps, costs)  # int32/int64 only
 ```
+
+Pass `return_potentials=True` to get `(flows, potentials)` instead; potentials
+are always int64 and canonical as above, so every solver returning the same
+flows returns the same potentials.
 
 The functional API is stateless and has no warm restart. It is duck-typed over
 int8/16/32/64 (cost and capacity scaling excepted, which need the wider range),

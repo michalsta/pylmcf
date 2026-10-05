@@ -1,43 +1,15 @@
 # Node potentials (the dual solution) exposed by Graph.potentials().
 #
 # Potentials are not unique, so they are never compared against golden
-# values.  Each solve is instead certified from first principles: with
-# rc = cost + pi[start] - pi[end],
-#   (a) complementary slackness against the returned flows:
-#       rc > 0 => flow == minimum, rc < 0 => flow == capacity;
-#   (b) strong duality: the dual objective computed from the potentials
-#       alone equals total_cost().
-# Given a primal-feasible flow, (a) is a full optimality certificate for the
-# pair; (b) is what a caller recovering an objective from the duals relies on.
+# values; each solve is certified from first principles instead (primal
+# feasibility, complementary slackness, strong duality — see mcf_certify).
 
 import numpy as np
 import pytest
 
+import mcf_certify
+from mcf_certify import random_instance
 from pylmcf.graph import Graph
-
-
-def random_instance(rng, n, m, with_minimums=False):
-    """Random feasible instance; feasibility by witness construction."""
-    starts = rng.integers(0, n, m)
-    ends = rng.integers(0, n, m)
-    ends = np.where(ends == starts, (ends + 1) % n, ends)
-    order = np.lexsort((ends, starts))
-    starts, ends = starts[order], ends[order]
-    minimums = rng.integers(0, 4, m) if with_minimums else np.zeros(m, dtype=np.int64)
-    wit = minimums + rng.integers(0, 13, m)
-    supply = np.zeros(n, dtype=np.int64)
-    np.add.at(supply, starts, wit)
-    np.add.at(supply, ends, -wit)
-    caps = wit + rng.integers(0, 19, m) * (rng.integers(0, 3, m) != 0)
-    return {
-        "n": n,
-        "starts": starts.astype(np.int64),
-        "ends": ends.astype(np.int64),
-        "supply": supply,
-        "caps": caps.astype(np.int64),
-        "costs": rng.integers(0, 51, m).astype(np.int64),
-        "minimums": minimums.astype(np.int64) if with_minimums else None,
-    }
 
 
 def build(inst):
@@ -56,20 +28,9 @@ def push(g, inst):
 
 def certify(g, inst):
     pi = g.potentials()
-    assert pi.dtype == np.int64
-    assert pi.shape == (inst["n"],)
-    flows = g.result()
-    lo = inst["minimums"] if inst["minimums"] is not None else np.zeros_like(flows)
-    caps = inst["caps"]
-    rc = inst["costs"] + pi[inst["starts"]] - pi[inst["ends"]]
-
-    assert np.all(flows[rc > 0] == lo[rc > 0]), "rc > 0 on an arc above its minimum"
-    assert np.all(flows[rc < 0] == caps[rc < 0]), "rc < 0 on an arc below capacity"
-
-    dual = (-np.dot(inst["supply"], pi)
-            + np.dot(np.minimum(rc, 0), caps)
-            + np.dot(np.maximum(rc, 0), lo))
-    assert dual == g.total_cost()
+    mcf_certify.certify(inst["n"], inst["starts"], inst["ends"], inst["supply"],
+                        inst["caps"], inst["costs"], g.result(), pi,
+                        g.total_cost(), minimums=inst["minimums"])
     return pi
 
 
@@ -186,3 +147,59 @@ def test_potentials_warm_chain(seed):
     resolves = (g.warm_start_count() + g.dual_repair_count()
             + g.primal_repair_count() + g.cold_start_count())
     assert resolves == 12
+
+
+# --- Functional API: return_potentials=True ---------------------------------
+
+from pylmcf import pylmcf_cpp  # noqa: E402
+
+FUNCTIONAL = [
+    (pylmcf_cpp.lmcf, [np.int8, np.int16, np.int32, np.int64]),
+    (pylmcf_cpp.lmcf_cycle_canceling, [np.int8, np.int16, np.int32, np.int64]),
+    (pylmcf_cpp.lmcf_cost_scaling, [np.int32, np.int64]),
+    (pylmcf_cpp.lmcf_capacity_scaling, [np.int32, np.int64]),
+]
+
+
+def test_functional_default_returns_flows_only():
+    out = pylmcf_cpp.lmcf(np.array([5, 0, -5]), np.array([0, 0, 1]), np.array([1, 2, 2]),
+                          np.array([3, 3, 5]), np.array([1, 3, 5]))
+    assert isinstance(out, np.ndarray)
+
+
+@pytest.mark.parametrize("fn,dtypes", FUNCTIONAL, ids=lambda x: getattr(x, "__name__", ""))
+def test_functional_potentials_small_dtypes(fn, dtypes):
+    # The README instance fits int8; potentials still come back int64.
+    for dt in dtypes:
+        args = [np.array(a, dtype=dt) for a in
+                ([5, 0, -5], [0, 0, 1], [1, 2, 2], [3, 3, 5], [1, 3, 5])]
+        flows, pi = fn(*args, return_potentials=True)
+        assert flows.dtype == dt
+        assert pi.dtype == np.int64
+        assert pi[2] - pi[0] == 6
+        flows_only = fn(*args)
+        assert np.array_equal(flows, flows_only)
+
+
+@pytest.mark.parametrize("with_minimums", [False, True])
+@pytest.mark.parametrize("seed", range(15))
+@pytest.mark.parametrize("fn", [f for f, _ in FUNCTIONAL], ids=lambda f: f.__name__)
+def test_functional_potentials_random(fn, seed, with_minimums):
+    rng = np.random.default_rng(2000 + seed)
+    n = int(rng.integers(2, 25))
+    m = int(rng.integers(1, 4 * n))
+    inst = random_instance(rng, n, m, with_minimums)
+    # The functional API accepts arbitrary edge order; shuffle to exercise
+    # its internal sort (potentials are per node, so must be unaffected).
+    perm = rng.permutation(m)
+    starts, ends = inst["starts"][perm], inst["ends"][perm]
+    caps, costs = inst["caps"][perm], inst["costs"][perm]
+    mins = inst["minimums"][perm] if with_minimums else None
+    args = [inst["supply"], starts, ends, caps] + ([mins] if with_minimums else []) + [costs]
+    flows, pi = fn(*args, return_potentials=True)
+    mcf_certify.certify(n, starts, ends, inst["supply"], caps, costs, flows, pi,
+                        int(np.dot(costs, flows)), minimums=mins)
+    # Same optimum as the OO API.
+    g = build(inst)
+    g.solve()
+    assert np.dot(costs, flows) == g.total_cost()
