@@ -1718,17 +1718,15 @@ namespace lemon {
     }
 
     // Sync _cap[i] from _upper[i] for all real arcs (i < _arc_num).
-    // Call after upperMap() and before repairTreeFlows().
+    // Call after upperMap() and before repairTreeFlows().  Lower bounds are
+    // never on the warm path (warmRun() sends them cold: init() folds _lower
+    // into _supply/_cap and the warm path re-applies neither), so _cap is the
+    // plain capacity here.  A future caller with lower bounds would need
+    // init()'s per-sign shift, not this copy.
     void syncCapsFromUpper() {
-      if (_has_lower) {
-        for (int i = 0; i != _arc_num; ++i) {
-          Value c = _lower[i];
-          _cap[i] = _upper[i] < MAX + c ? _upper[i] - c : INF;
-        }
-      } else {
-        for (int i = 0; i != _arc_num; ++i) {
-          _cap[i] = _upper[i];
-        }
+      LEMON_ASSERT(!_has_lower, "syncCapsFromUpper() does not handle lower bounds");
+      for (int i = 0; i != _arc_num; ++i) {
+        _cap[i] = _upper[i];
       }
     }
 
