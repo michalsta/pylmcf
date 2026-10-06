@@ -109,6 +109,9 @@ g++ -I$(python -m pylmcf --include) -std=c++20 -O2 \
 | `test_network_simplex_lct_dyn_warm.cpp` | LEMON (the dynamic variant, warm) |
 | `test_lct_adapter.cpp` | real `lemon::NetworkSimplex` on `wnet`'s exact call pattern |
 | `test_chain_solver_1d.cpp` | LEMON on the chain LP |
+| `test_graph.cpp` | `Graph<T>` (the C++ API behind `CGraph`): `CapacityScaling` optimum + full certificate, every pivot rule × repair strategy, supply types, infeasibility cut, policy knobs, degenerate graphs, `Graph<int32_t>` |
+| `test_lmcf.cpp` | `lmcf.hpp` + `basics.hpp`: all four functional solvers at every bound width, shuffled edge order, wide cost on narrow inputs, potentials, validation, UNBOUNDED, empty problem |
+| `test_env_overrides.cpp` | `PYLMCF_WARM_VIOLATION_LIMIT` / `PYLMCF_WARM_REPAIR_BUDGET`, one `fork()`ed child per scenario (each is read once per process) |
 | `test_canonical_potentials.cpp` | a textbook residual-graph Bellman-Ford, on both the Johnson path and the forced fallback |
 
 Run the lot:

@@ -114,3 +114,25 @@ def test_lmcf_rejects_negative_costs():
     # Only the network simplex variant requires non-negative costs.
     with pytest.raises(ValueError, match="non-negative"):
         pylmcf_cpp.lmcf(SUPPLY, STARTS, ENDS, CAPS, i64(1, -3, 5))
+
+
+# --- the empty problem ----------------------------------------------------
+
+@pytest.mark.parametrize("fn", FUNCTIONAL, ids=lambda f: f.__name__)
+def test_functional_empty_problem(fn):
+    # LEMON rejects an empty node set as INFEASIBLE; an empty problem is
+    # trivially optimal.
+    e = i64()
+    flows, pi = fn(e, e, e, e, e, return_potentials=True)
+    assert flows.shape == (0,) and pi.shape == (0,)
+
+
+def test_graph_empty_problem():
+    g = Graph(0, i64(), i64())
+    g.set_node_supply(i64())
+    g.set_edge_capacities(i64())
+    g.set_edge_costs(i64())
+    g.solve()
+    assert g.total_cost() == 0
+    assert g.result().shape == (0,) and g.potentials().shape == (0,)
+    assert g.infeasibility_cut() is None

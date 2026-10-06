@@ -11,8 +11,7 @@
 // conservation) and that Sum(cost*flow) == reported cost.
 //
 // Build:
-//   g++ -I$(python -m pylmcf --include) -std=c++20 -O2 \
-//       tests_cpp/test_network_simplex_lct.cpp -o /tmp/tnsl && /tmp/tnsl
+//   g++ -I$(python -m pylmcf --include) -std=c++20 -O2 tests_cpp/test_network_simplex_lct.cpp -o /tmp/tnsl && /tmp/tnsl
 // -------------------------------------------------------------------------
 #define LEMON_ONLY_TEMPLATES
 #include <lemon/static_graph.h>

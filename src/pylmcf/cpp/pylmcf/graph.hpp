@@ -237,6 +237,13 @@ public:
 
     void solve(){
         check_bounds();
+        // LEMON's init() rejects an empty node set and run() reports that as
+        // INFEASIBLE; an empty problem is trivially optimal at cost 0.
+        if (_no_nodes == 0) {
+            _costs_dirty = false;
+            _solved = true;
+            return;
+        }
         solver.supplyMap(node_supply_map);
         solver.costMap(costs_map);
         // Re-solves warm-restart from the retained basis.  warmRun() itself

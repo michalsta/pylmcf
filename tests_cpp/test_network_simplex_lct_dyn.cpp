@@ -1,7 +1,8 @@
-// test_network_simplex_lct.cpp
+// test_network_simplex_lct_dyn.cpp
 // -------------------------------------------------------------------------
-// Phase B oracle: NetworkSimplexLCT (link-cut-tree cold solver) vs LEMON's
-// array NetworkSimplex on the same random feasible instances.
+// Oracle for NetworkSimplexLCTDyn (the experimental dynamic-trees cold
+// solver, flow carried in the link-cut tree) vs LEMON's array NetworkSimplex
+// on the same random feasible instances.
 //
 // Instances are generated exactly like the dual-repair suite: EQ supply
 // (sum == 0) by construction from a witness flow, costs in [0,50], finite
@@ -11,8 +12,7 @@
 // conservation) and that Sum(cost*flow) == reported cost.
 //
 // Build:
-//   g++ -I$(python -m pylmcf --include) -std=c++20 -O2 \
-//       tests_cpp/test_network_simplex_lct.cpp -o /tmp/tnsl && /tmp/tnsl
+//   g++ -I$(python -m pylmcf --include) -std=c++20 -O2 tests_cpp/test_network_simplex_lct.cpp -o /tmp/tnsl && /tmp/tnsl
 // -------------------------------------------------------------------------
 #define LEMON_ONLY_TEMPLATES
 #include <lemon/static_graph.h>

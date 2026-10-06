@@ -10,8 +10,7 @@
 //           Source->Sink (trash) cost κ cap INF
 //
 // Build:
-//   g++ -I$(python -m pylmcf --include) -std=c++20 -O2 \
-//       tests_cpp/test_chain_solver_1d.cpp -o /tmp/tc && /tmp/tc
+//   g++ -I$(python -m pylmcf --include) -std=c++20 -O2 tests_cpp/test_chain_solver_1d.cpp -o /tmp/tc && /tmp/tc
 // -------------------------------------------------------------------------
 #define LEMON_ONLY_TEMPLATES
 #include <lemon/static_graph.h>

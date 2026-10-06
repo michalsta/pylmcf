@@ -44,8 +44,7 @@
 // guards.
 //
 // Build (mirrors src/wnet/cpp/wnet/Makefile):
-//   g++ -I$(python -m pylmcf --include) -std=c++20 -O2 -o /tmp/test_dual_repair \
-//       tests_cpp/test_dual_repair.cpp && /tmp/test_dual_repair
+//   g++ -I$(python -m pylmcf --include) -std=c++20 -O2 -o /tmp/test_dual_repair tests_cpp/test_dual_repair.cpp && /tmp/test_dual_repair
 // -------------------------------------------------------------------------
 
 #define LEMON_ONLY_TEMPLATES

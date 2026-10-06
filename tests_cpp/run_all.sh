@@ -9,6 +9,8 @@
 #   LDFLAGS   extra link flags
 #   JOBS      parallel compiles (default: nproc)
 #   OUT       build directory (default: a fresh mktemp dir)
+#   TIMEOUT   per-suite run limit in seconds (default: 900); a hung solver
+#             fails as a timeout instead of stalling the whole job
 #
 # Every suite is a standalone main() that exits non-zero on failure. All are
 # built (in parallel) and all are run, even after a failure, so one run reports
@@ -23,6 +25,7 @@ CXXFLAGS=${CXXFLAGS:-}
 LDFLAGS=${LDFLAGS:-}
 JOBS=${JOBS:-$(nproc 2>/dev/null || echo 2)}
 OUT=${OUT:-$(mktemp -d)}
+TIMEOUT=${TIMEOUT:-900}
 mkdir -p "$OUT"
 
 echo "compiler: $("$CXX" --version | head -n1)"
@@ -67,8 +70,9 @@ for name in "${suites[@]}"; do
         continue
     fi
     start=$(date +%s)
-    "$OUT/$name" > "$OUT/$name.run.log" 2>&1
+    timeout "$TIMEOUT" "$OUT/$name" > "$OUT/$name.run.log" 2>&1
     status=$?
+    [ "$status" -eq 124 ] && echo "TIMEOUT after ${TIMEOUT}s" >> "$OUT/$name.run.log"
     secs=$(( $(date +%s) - start ))
     if [ "$status" -eq 0 ]; then
         echo "PASS    $name (${secs}s): $(tail -n1 "$OUT/$name.run.log")"

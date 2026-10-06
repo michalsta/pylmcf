@@ -11,8 +11,7 @@
 //   minToRoot / addToRoot with no intervening structural op).
 //
 // Build (same -I as test_dual_repair.cpp):
-//   g++ -I$(python -m pylmcf --include) -std=c++20 -O2 \
-//       tests_cpp/test_link_cut_tree.cpp -o /tmp/tlct && /tmp/tlct
+//   g++ -I$(python -m pylmcf --include) -std=c++20 -O2 tests_cpp/test_link_cut_tree.cpp -o /tmp/tlct && /tmp/tlct
 // -------------------------------------------------------------------------
 #include <pylmcf/link_cut_tree.h>
 

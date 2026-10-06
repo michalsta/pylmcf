@@ -15,8 +15,7 @@
 // reduced cost 0, and potential() is finite/usable for the gradient path.
 //
 // Build:
-//   g++ -I$(python -m pylmcf --include) -std=c++20 -O2 \
-//       tests_cpp/test_lct_adapter.cpp -o /tmp/tla && /tmp/tla
+//   g++ -I$(python -m pylmcf --include) -std=c++20 -O2 tests_cpp/test_lct_adapter.cpp -o /tmp/tla && /tmp/tla
 // -------------------------------------------------------------------------
 #define LEMON_ONLY_TEMPLATES
 #include <lemon/static_graph.h>
@@ -195,13 +194,22 @@ int main() {
 
     Adapter s(g);                                  // wnet: emplace(graph)
     s.upperMap(um).costMap(cm).supplyMap(sm);      // wnet cold path
-    auto st = s.run(Adapter::BLOCK_SEARCH);
+    // A third of the instances prime with warmRun() (nothing built yet: it
+    // must build and solve cold).
+    auto st = (t % 3 == 0) ? s.warmRun() : s.run(Adapter::BLOCK_SEARCH);
     verify("cold-prime", g, s, in, st == Adapter::OPTIMAL);
 
     int steps = gen.uni(3, 9);
     for (int k = 0; k < steps; ++k) {
       gen.mutate(in);
+      // Every fourth step also re-prices the arcs: outside wnet's pattern,
+      // a costMap() before warmRun() must rebuild rather than reuse a basis
+      // priced under the old costs.
+      const bool reprice = (k % 4 == 3);
+      if (reprice)
+        for (int i = 0; i < m; ++i) in.cost[i] = gen.uni(0, 30);
       push();
+      if (reprice) s.costMap(cm);
       s.upperMap(um).supplyMap(sm);                // wnet warm path
       auto wst = s.warmRun(Adapter::BLOCK_SEARCH, Adapter::WarmRepair::Dual);
       ++g_steps;

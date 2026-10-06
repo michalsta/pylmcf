@@ -9,13 +9,15 @@
 //  - ADVERSARIAL: re-randomize all supplies each step -> the retained basis
 //    usually breaks -> warmRun cold-falls-back; validates that path's
 //    correctness too.
+//  - CAPACITY CHANGES: chains that start with warmRun() (no prior run()) and
+//    change arc capacities between steps — sometimes into infeasibility —
+//    which must take the conservative cold path every time.
 //
 // Oracle = exact integer totalCost equality vs independent cold LEMON +
 // primal feasibility/conservation of the Dyn flow.
 //
 // Build:
-//   g++ -I$(python -m pylmcf --include) -std=c++20 -O2 \
-//       tests_cpp/test_network_simplex_lct_dyn_warm.cpp -o /tmp/tdw && /tmp/tdw
+//   g++ -I$(python -m pylmcf --include) -std=c++20 -O2 tests_cpp/test_network_simplex_lct_dyn_warm.cpp -o /tmp/tdw && /tmp/tdw
 // -------------------------------------------------------------------------
 #define LEMON_ONLY_TEMPLATES
 #include <lemon/static_graph.h>
@@ -200,6 +202,49 @@ int main() {
               warm_hits, total_warm_steps);
   if (warm_hits < 50) {
     std::printf("INEFFECTIVE: warm fast path fired only %ld (<50)\n", warm_hits);
+    ++g_fail;
+  }
+
+  // (3) warmRun() as the very first solve, then capacity changes.
+  long cap_cold = 0, cap_steps = 0;
+  Gen g3(0xCA9C4A9u);
+  for (int t = 0; t < 300; ++t) {
+    int n = g3.uni(4, 30);
+    Instance in = g3.make(n);
+    g3.witnessSupply(in, 6);
+    DYN s(in.n);
+    std::vector<int> ids;
+    for (int i = 0; i < (int)in.arcs.size(); ++i)
+      ids.push_back(s.addArc(in.arcs[i].first, in.arcs[i].second,
+                             in.cost[i], in.cap[i]));
+    for (int v = 0; v < in.n; ++v) s.setSupply(v, in.supply[v]);
+    const int c0 = s.coldCount();
+    verify("warm-first", s, in, ids, s.warmRun() == DYN::OPTIMAL);
+    CHECK(s.coldCount() == c0 + 1, "warmRun without a basis must count as cold");
+    int steps = g3.uni(3, 8);
+    for (int k = 0; k < steps; ++k) {
+      // Move a few capacities up or down (never below 0).
+      int moves = g3.uni(1, 3);
+      for (int q = 0; q < moves; ++q) {
+        int e = g3.uni(0, (int)in.arcs.size() - 1);
+        in.cap[e] = std::max<Value>(0, in.cap[e] + g3.uni(-6, 6));
+        s.setCap(ids[e], in.cap[e]);
+      }
+      if (k % 2) {  // sometimes nudge supplies in the same step
+        g3.sparseNudge(in, 1);
+        for (int v = 0; v < in.n; ++v) s.setSupply(v, in.supply[v]);
+      }
+      const int cb = s.coldCount();
+      auto st = s.warmRun();
+      ++cap_steps;
+      ++g_steps;
+      if (s.coldCount() > cb) ++cap_cold;
+      verify("cap-warm", s, in, ids, st == DYN::OPTIMAL);
+    }
+  }
+  std::printf("capacity changes: cold fallbacks=%ld / %ld\n", cap_cold, cap_steps);
+  if (cap_cold < 100) {
+    std::printf("INEFFECTIVE: capacity-change cold path fired only %ld (<100)\n", cap_cold);
     ++g_fail;
   }
 

@@ -91,6 +91,12 @@ LmcfCost lmcf_impl(
         }
     }
 
+    // LEMON's solvers reject an empty node set as INFEASIBLE; an empty problem
+    // (no nodes, hence no edges — any edge failed the id check above) is
+    // trivially optimal at cost 0.
+    if (no_nodes == 0)
+        return 0;
+
     // StaticDigraph (flat arrays, cache-friendly for the residual traversals
     // the LEMON MCF algorithms run) requires arcs sorted by (source, target).
     // The functional API accepts arbitrary edge order, so we sort via a

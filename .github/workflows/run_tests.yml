@@ -192,10 +192,12 @@ jobs:
           - label: clang msan
             cxx: clang++
             # Uninitialised reads, which ASan does not see: the warm-repair
-            # scratch buffers and lazily built indices are the target. The
-            # suites use only header-instantiated std code (vector, algorithm)
-            # plus printf, so the uninstrumented libstdc++ is not a source of
-            # false positives here.
+            # scratch buffers and lazily built indices are the target. libstdc++
+            # is uninstrumented, so anything built inside libstdc++.so reads as
+            # uninitialised: std::to_string and std::string operator+ (extern
+            # template). Test labels therefore use snprintf (mcf_test::num/lbl),
+            # and the sections that test error *messages* skip themselves under
+            # MSan (mcf_test::section(..., true)); the other lanes run them.
             cxxflags: >-
               -O1 -g -fno-omit-frame-pointer -fsanitize=memory
               -fsanitize-memory-track-origins=2 -fsanitize-memory-use-after-dtor

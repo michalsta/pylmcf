@@ -11,8 +11,7 @@
 // A coverage guard asserts the warm (non-cold-fallback) path actually fired.
 //
 // Build:
-//   g++ -I$(python -m pylmcf --include) -std=c++20 -O2 \
-//       tests_cpp/test_network_simplex_lct_warm.cpp -o /tmp/tnslw && /tmp/tnslw
+//   g++ -I$(python -m pylmcf --include) -std=c++20 -O2 tests_cpp/test_network_simplex_lct_warm.cpp -o /tmp/tnslw && /tmp/tnslw
 // -------------------------------------------------------------------------
 #define LEMON_ONLY_TEMPLATES
 #include <lemon/static_graph.h>
@@ -150,8 +149,12 @@ int main() {
       ids.push_back(
           s.addArc(in.arcs[i].first, in.arcs[i].second, in.cost[i], in.cap[i]));
     for (int v = 0; v < in.n; ++v) s.setSupply(v, in.supply[v]);
-    auto st = s.run();                              // cold prime
+    // Every other instance primes with warmRun(): without a basis it must
+    // act as (and count as) a cold solve.
+    const long c0 = s.coldCount();
+    auto st = (t % 2) ? s.warmRun() : s.run();     // cold prime
     verify("cold-prime", s, in, ids, st == LCTNS::OPTIMAL);
+    if (t % 2) CHECK(s.coldCount() == c0 + 1, "warmRun without a basis must count as cold");
 
     const int steps = gen.uni(4, 12);
     for (int k = 0; k < steps; ++k) {
