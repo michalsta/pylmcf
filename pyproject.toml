@@ -8,7 +8,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "pylmcf"
-version = "1.2.1"
+version = "1.3.0"
 description = "Min-cost-flow solvers for Python and C++: LEMON with warm restarts, plus link-cut-tree network simplex variants"
 authors = [{ name="Michał Startek", email="michal.startek@mimuw.edu.pl" }]
 maintainers = [{ name="Michał Startek", email="michal.startek@mimuw.edu.pl" }]

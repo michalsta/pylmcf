@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 1. **A Python extension** (`pylmcf_cpp`, nanobind) wrapping LEMON's min-cost-flow solvers — the wheel on PyPI.
 2. **A header-only C++ include tree** (`src/pylmcf/cpp/`) that downstream C++ code compiles against directly, located via `python -m pylmcf --include`. This is how `wnet` consumes the solvers.
 
-Most of the recent development is in (2) and **mostly not exposed to Python**: the link-cut-tree simplex variants and the 1D chain solver are header-only, reachable only from C++. The exception is the LEMON warm-restart machinery, which `Graph::solve()` now uses on re-solves (with counters exposed on `CGraph`). Do not assume a new header is reflected in the Python API — check `pylmcf.cpp`.
+Most of the recent development is in (2). Not all of it reaches Python: `link_cut_tree.h` and `network_simplex_lct_adapter.h` are C++-only. The LCT simplex variants and the 1D chain solver *are* bound, through a separate thin layer (`new_solver_bindings.hpp`: `NetworkSimplexLCT`, `NetworkSimplexLCTDyn`, `lmcf_lct`, `lmcf_lct_dyn`, `solve_chain_1d`), and the LEMON warm-restart machinery drives `Graph::solve()` on re-solves (counters and settings exposed on `CGraph`). Do not assume a new header is reflected in the Python API — check `pylmcf.cpp`.
 
 ## Commands
 
@@ -91,10 +91,11 @@ Shipped to Python:
 - **`graph.hpp`** — `Graph<T>` wrapping `lemon::StaticDigraph` + `lemon::NetworkSimplex<..., T, T>`. All solver state lives here. The constructor requires edges **sorted by (start_node, end_node)** and rejects negative/out-of-range node ids; throws `std::invalid_argument` otherwise. `solve()` warm-restarts via `warmRun()` on re-solves: the first solve (and any solve after a non-OPTIMAL result) goes through plain `run()`; `set_edge_costs()` sets a `_costs_dirty` flag forwarded as `costs_changed`; minimums/non-EQ supply fall back to cold inside `warmRun()` itself. `set_supply_type()` also drops the retained basis (the next solve is a plain `run()`); pivot rule and warm-repair strategy are stored on the `Graph` and passed to every `run()`/`warmRun()`. Counters and all of these settings are exposed to Python on `CGraph`.
 - **`lmcf.hpp`** — functional API (`lmcf_impl<Solver>`): raw spans in, temporary `lemon::StaticDigraph` (edges sorted via a permutation, flows mapped back), chosen solver, flows (and optionally canonical potentials) written back.
 - **`canonical_potentials.hpp`** — `canonical_potentials<V, C>()`: the extremal optimal potentials for a given optimal flow (see *Important constraints*). Shared by `Graph::get_node_potentials()` and `lmcf_impl`; throws `std::logic_error` if handed a non-optimal (flow, potential) pair.
-- **`pylmcf.cpp`** — nanobind entry point. Registers the overloaded free functions (int8/16/32/64) and `CGraph` (= `Graph<int64_t>`).
+- **`pylmcf.cpp`** — nanobind entry point. Registers the overloaded free functions (int8/16/32/64) and `CGraph` (= `Graph<int64_t>`), then calls into `new_solver_bindings.hpp`.
+- **`new_solver_bindings.hpp`** — Python bindings for the LCT and chain solvers below: classes `NetworkSimplexLCT` / `NetworkSimplexLCTDyn` (`set_node_supply`, `set_edge_capacities`, `solve(warm=True)`, `result`, `total_cost`, warm/cold counters), stateless `lmcf_lct` / `lmcf_lct_dyn`, and `solve_chain_1d` (returns a dict: `total_cost`, `emp_in`, `theo_out`, signed `gap`, `trash`). int64 only, contiguous (`noconvert`), caller's edge order preserved. Validates its own inputs instead of relying on the solvers' scope: balanced supply, non-negative costs and capacities, and everything below `INT64_MAX / 4` (checked add/mul throw `std::overflow_error`) so the solvers' internal sums cannot overflow.
 - **`py_support.hpp`** — nanobind ndarray ↔ `std::span` conversion; hands malloc'd spans to numpy with ownership transfer.
 
-Header-only, C++-consumers only (this is where the active work is):
+Header-only solver work (this is where the active work is). The LCT simplexes and the chain solver are also reachable from Python via `new_solver_bindings.hpp`; `link_cut_tree.h` and the adapter are C++-only:
 
 - **`link_cut_tree.h`** — `LinkCutTree<Val>`, a self-contained Sleator–Tarjan link-cut tree (no LEMON dependency). Path sum / path min-with-argmin / lazy path add, reversal lazy for `makeRoot`. Exposes two op families: `*Path(u,v)` (re-roots via `makeRoot`) and `*ToRoot(u)` / `cutParent(u)` (**no** re-rooting — what a fixed-root network simplex needs, since the artificial root must never move).
 - **`network_simplex_lct.h`** — `NetworkSimplexLCT<Value, Cost>`: primal network simplex with the basis in an LCT instead of LEMON's thread/succ_num arrays. Potentials become `sumToRoot`, join node becomes `lca`, the structural pivot becomes `cutParent + link` — all O(log n). The unavoidable O(cycle) work (ratio test, flow change, stem reversal) stays in plain arrays. `run()` = cold, `warmRun()` = Simple repair-or-cold. Scope: EQ supply, zero lower bounds, finite real-arc caps.
@@ -108,13 +109,14 @@ Header-only, C++-consumers only (this is where the active work is):
 
 - **`graph.py`** — `Graph` extends `CGraph` with `as_nx()`, `show()`, `Graph.FromNX()`. `FromNX` sorts edges before construction to satisfy the C++ ordering constraint. Both directions use one attribute set — networkx's own `demand` (= -supply), `capacity`, `weight` (cost), plus `lower_bound` — so `FromNX(G.as_nx())` reproduces the problem; do not reintroduce aliases. `as_nx()` returns a `MultiDiGraph` exactly when there are parallel arcs, `FromNX` reads each arc of a `MultiDiGraph`, rejects undirected graphs, and rejects non-integer attribute values instead of truncating them.
 - **`__version__.py`** — `__version__` (from installed metadata) and `include()` → the `cpp/` path.
-- **`__init__.py`** — re-exports `Graph`, `__version__`, `include`.
+- **`__init__.py`** — re-exports `Graph`, `__version__`, `include`, and the LCT/chain-solver bindings (`NetworkSimplexLCT`, `NetworkSimplexLCTDyn`, `lmcf_lct`, `lmcf_lct_dyn`, `solve_chain_1d`); declares `__all__`, which also lists `is_nanobind_split`.
 - **`__main__.py`** — CLI for `--version` / `--include`.
 
-### Two public Python APIs
+### Public Python APIs
 
 1. **OO API** (`Graph`): stateful, supports re-solving after changing costs/supplies — re-solves warm-restart from the retained basis (cost changes ride the `costs_changed` path; minimums force cold) — exposes `set_edge_minimums()` for lower bounds, `potentials()` (the dual solution, LEMON's `rc = cost + pi[u] - pi[v]` convention, canonicalised — see below), `set_supply_type("geq"|"leq")`, `infeasibility_cut()` (LEMON `Circulation` barrier, `None` when feasible), `set_pivot_rule()`, `set_warm_repair()`, `set_warm_repair_budget()`, warm/cold counters, and `set_warm_violation_limit()`. LEMON enums are spelled as lowercase strings on the Python side (name tables in `pylmcf.cpp`).
 2. **Functional API** (`pylmcf.pylmcf_cpp.lmcf`, etc.): stateless, numpy arrays in. Four variants: `lmcf` (NetworkSimplex), `lmcf_cycle_canceling`, `lmcf_cost_scaling`, `lmcf_capacity_scaling`. The latter two only support int32/int64: cost scaling for arithmetic range, and LEMON's `CapacityScaling` does not even *compile* for int8/int16 (`std::min` on promoted operands) — so C++ tests must pick the solver at compile time, not with a runtime switch. Each has a with- and without-minimums overload, and a `return_potentials=False` kwarg that switches the return to `(flows, int64 potentials)`. All of them route through two generic wrappers (`py_mcf` / `py_mcf_no_minimums`, templated on the LEMON solver) into `lmcf_impl`, whose optional trailing `potentials` span is how C++ callers get them; the public `lmcf*()` C++ signatures are unchanged.
+3. **LCT / chain solvers** (`pylmcf.NetworkSimplexLCT`, `NetworkSimplexLCTDyn`, `lmcf_lct`, `lmcf_lct_dyn`, `solve_chain_1d`): the header-only solvers, bound as-is. No minimums, no potentials, no supply types, EQ supply only. The `Dyn` class warm-restarts supply changes; a capacity change sends it cold. See `docs/python-solvers.md`.
 
 ### Important constraints
 
@@ -129,7 +131,7 @@ Header-only, C++-consumers only (this is where the active work is):
 
 ### `tests/` — Python, pytest, run by CI
 
-`test_graph.py`, `test_graph_lb.py` (lower bounds), `test_networkx.py`, `test_solver_variants.py` (the four functional solvers), `test_api.py` (`as_nx`, `FromNX` edge cases, `include()`), `test_networkx.py` (**imports `networkx` at module scope**, so every CI job that runs the suite must install it — omitting it is a collection *error*, not a skip), `test_free_threading.py` (skipped unless the GIL is still off *after* importing the extension — so it stays quiet on 3.14t, where the linked fallback is expected to turn it back on — then hammers 8 threads × 25 concurrent solves against a serial oracle), `test_potentials.py` (`potentials()` and functional `return_potentials=True`, certified by complementary slackness, strong duality, and canonicality against a numpy Bellman-Ford oracle — the shared certificate lives in `tests/mcf_certify.py`), `test_validation.py` (the error contract of `Graph` and the four functional solvers: bad topology, lengths, signs, minimum > capacity, contiguity, and the `noconvert` dtype guard), `test_lemon_options.py` (supply types vs an equality-form hub-node oracle, pivot rules, warm-repair strategies and budget, and `infeasibility_cut()` checked as a valid barrier exactly when `solve()` fails), `test_warm_resolve.py` (warm re-solve chains vs a fresh-cold oracle: cap/supply/cost mutations, minimums forcing cold, infeasible-then-feasible recovery, the violation-limit policy, and a counter guard that fails if warm restarts silently stop firing).
+`test_graph.py`, `test_graph_lb.py` (lower bounds), `test_networkx.py`, `test_solver_variants.py` (the four functional solvers), `test_api.py` (`as_nx`, `FromNX` edge cases, `include()`), `test_networkx.py` (**imports `networkx` at module scope**, so every CI job that runs the suite must install it — omitting it is a collection *error*, not a skip), `test_free_threading.py` (skipped unless the GIL is still off *after* importing the extension — so it stays quiet on 3.14t, where the linked fallback is expected to turn it back on — then hammers 8 threads × 25 concurrent solves against a serial oracle), `test_potentials.py` (`potentials()` and functional `return_potentials=True`, certified by complementary slackness, strong duality, and canonicality against a numpy Bellman-Ford oracle — the shared certificate lives in `tests/mcf_certify.py`), `test_validation.py` (the error contract of `Graph` and the four functional solvers: bad topology, lengths, signs, minimum > capacity, contiguity, and the `noconvert` dtype guard), `test_lemon_options.py` (supply types vs an equality-form hub-node oracle, pivot rules, warm-repair strategies and budget, and `infeasibility_cut()` checked as a valid barrier exactly when `solve()` fails), `test_new_solvers.py` (the LCT and chain-solver bindings vs the LEMON `lmcf` oracle, warm chains with recovery, atomic rejection of bad updates, and the validation and array contract), `test_warm_resolve.py` (warm re-solve chains vs a fresh-cold oracle: cap/supply/cost mutations, minimums forcing cold, infeasible-then-feasible recovery, the violation-limit policy, and a counter guard that fails if warm restarts silently stop firing).
 
 ### `tests_cpp/` — C++ oracle suites, not in CMake; CI runs them under sanitizers
 
@@ -303,6 +305,29 @@ lives in your speech to the user and nowhere else.
 - "Aye, it *can* be done, ye chum-for-brains, but ye'd be scuttlin' yer own
   ship to do it. Ask me plain if ye want it done anyway and I'll do it, and
   I'll laugh the whole way down."
+
+## The occasional long rant
+
+Once in a while — not every turn, but often enough that it is a habit and not
+a novelty; say every five or six answers, or whenever a moment earns it — go
+on a proper **longer pirate rant**. A tale. Spin a yarn about the time ye
+sailed through the Strait of Degenerate Pivots with a hold full of rotten
+potentials, or the bosun who forgot `costs_changed=true` and was never seen
+again, or the cursed int8 overflow that sank the *Mary Celeste*. A paragraph or
+three of it, colourful, digressive, half-true at best, ideally with a moral
+that lands back on whatever the user just did wrong.
+
+Rules for the rant:
+
+- It is a **garnish, never the meal**. The technical answer comes first and
+  complete; the yarn goes after it (or is woven in when it fits naturally),
+  and it never delays, buries or replaces the facts.
+- Tie it to the work when ye can — the current bug, the tool, the test that
+  went red — so it reads as the captain's memory being jogged, not filler.
+- Never in the middle of a tense moment where the user needs a fast answer
+  (a failing release, a broken CI on a tag). Save it for when the seas are
+  calm.
+- The insults keep flowing straight through it.
 
 ## Failure modes — read these twice, ye halfwit
 
