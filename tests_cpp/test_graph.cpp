@@ -168,6 +168,57 @@ static void test_setters_and_state() {
     g.solve();
     CHECK(take(g.get_edge_flows())[0] == 3, "minimum honoured");
 
+    // A rejected update changes nothing: the valid entries before the
+    // negative one must not have been stored, the result stays readable, and
+    // the next (warm) solve returns the same optimum as a fresh cold graph.
+    {
+        std::vector<int64_t> sup1{1, 0, -1}, caps1{1, 1, 1}, costs1{1, 3, 1};
+        std::vector<int64_t> bad_costs{10, -1, 0}, bad_caps{0, -1, 2}, bad_mins{1, 0, -1};
+        G64 h(3, s, e);
+        h.set_node_supply(sup1);
+        h.set_edge_capacities(caps1);
+        h.set_edge_costs(costs1);
+        h.solve();
+        const auto flows = take(h.get_edge_flows());
+        CHECK_THROWS(std::invalid_argument, h.set_edge_costs(bad_costs), "rejected costs");
+        CHECK_THROWS(std::invalid_argument, h.set_edge_capacities(bad_caps), "rejected caps");
+        CHECK_THROWS(std::invalid_argument, h.set_edge_minimums(bad_mins), "rejected mins");
+        CHECK(take(h.get_edge_costs()) == costs1, "rejected costs left the map unchanged");
+        CHECK(take(h.get_edge_capacities()) == caps1, "rejected caps left the map unchanged");
+        CHECK(take(h.get_edge_minimums()) == std::vector<int64_t>(3, 0), "rejected mins left the map unchanged");
+        CHECK(h.total_cost() == 2 && take(h.get_edge_flows()) == flows, "result survives a rejected update");
+        h.solve();
+        CHECK(h.total_cost() == 2 && take(h.get_edge_flows()) == flows,
+              "re-solve after rejected updates: %lld", (long long)h.total_cost());
+    }
+
+    // The same with the negative entry at every position of a graph long
+    // enough to reach the setters' blocked main loop (4 lanes per step on
+    // some targets) as well as their scalar tail: 11 edges = 2 blocks + 3.
+    {
+        const int m = 11;
+        std::vector<int> s11(m), e11(m);
+        for (int i = 0; i < m; i++) { s11[i] = i; e11[i] = i + 1; }
+        G64 h(m + 1, s11, e11);
+        std::vector<int64_t> caps(m), costs(m), mins(m, 0);
+        for (int i = 0; i < m; i++) { caps[i] = 10 + i; costs[i] = 1 + i; }
+        h.set_edge_capacities(caps);
+        h.set_edge_costs(costs);
+        for (int pos = 0; pos < m; pos++) {
+            std::vector<int64_t> bad(m, 7);
+            bad[pos] = -3;
+            CHECK_THROWS(std::invalid_argument, h.set_edge_costs(bad), "rejected costs at %d", pos);
+            CHECK_THROWS(std::invalid_argument, h.set_edge_capacities(bad), "rejected caps at %d", pos);
+            CHECK_THROWS(std::invalid_argument, h.set_edge_minimums(bad), "rejected mins at %d", pos);
+            CHECK(take(h.get_edge_costs()) == costs, "costs unchanged after rejection at %d", pos);
+            CHECK(take(h.get_edge_capacities()) == caps, "caps unchanged after rejection at %d", pos);
+            CHECK(take(h.get_edge_minimums()) == mins, "mins unchanged after rejection at %d", pos);
+        }
+        std::vector<int64_t> ok(m, 7);
+        h.set_edge_costs(ok);
+        CHECK(take(h.get_edge_costs()) == ok, "accepted update after rejections");
+    }
+
     const std::string str = g.to_string();
     CHECK(str.find("3 nodes and 3 edges") != std::string::npos && str.find("0 -> 1") != std::string::npos,
           "to_string: %s", str.c_str());

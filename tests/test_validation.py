@@ -72,6 +72,66 @@ def test_graph_setters_reject_other_dtypes(setter, dtype):
         getattr(g, setter)(np.zeros(n, dtype=dtype))
 
 
+GETTERS = ("get_node_supply", "get_edge_capacities", "get_edge_minimums", "get_edge_costs")
+
+
+def _setter_graph():
+    g = Graph(3, i64(0, 0, 1), i64(1, 2, 2))
+    g.set_node_supply(i64(1, 0, -1))
+    g.set_edge_capacities(i64(1, 1, 1))
+    g.set_edge_costs(i64(1, 3, 1))
+    return g
+
+
+# A rejected update must change nothing: the negative entry comes *after*
+# valid ones that differ from the current data, which a check-while-writing
+# loop had already stored -- leaving the maps half-updated while the solver
+# and the costs-changed flag still described the old problem, so the next
+# warm solve returned a stale, suboptimal flow (cost 11 instead of 3 here).
+@pytest.mark.parametrize("setter,bad", [
+    ("set_edge_costs", i64(10, -1, 0)),
+    ("set_edge_capacities", i64(0, -1, 2)),
+    ("set_edge_minimums", i64(1, 0, -1)),
+])
+def test_graph_rejected_setter_changes_nothing(setter, bad):
+    g = _setter_graph()
+    g.solve()
+    before = {name: getattr(g, name)().copy() for name in GETTERS}
+    flows, cost = g.result().copy(), g.total_cost()
+    with pytest.raises(ValueError, match="non-negative"):
+        getattr(g, setter)(bad)
+    for name in GETTERS:
+        assert np.array_equal(getattr(g, name)(), before[name]), name
+    assert np.array_equal(g.result(), flows) and g.total_cost() == cost
+
+    # The next update of that setter must re-solve warm to the cold optimum.
+    good = np.abs(bad)
+    getattr(g, setter)(good)
+    g.solve()
+    cold = _setter_graph()
+    getattr(cold, setter)(good)
+    cold.solve()
+    assert g.total_cost() == cold.total_cost()
+    # And re-solving the unchanged graph must not move the optimum either.
+    g2 = _setter_graph()
+    g2.solve()
+    with pytest.raises(ValueError):
+        getattr(g2, setter)(bad)
+    g2.solve()
+    assert g2.total_cost() == cost
+
+
+@pytest.mark.parametrize("setter", ["set_edge_costs", "set_edge_capacities", "set_edge_minimums"])
+def test_graph_rejected_setter_on_fresh_graph(setter):
+    # Nothing set yet: the rejected update must leave the zero defaults (not
+    # LEMON's own defaults, 1 for costs and infinite for capacities).
+    g = Graph(3, i64(0, 0, 1), i64(1, 2, 2))
+    with pytest.raises(ValueError, match="non-negative"):
+        getattr(g, setter)(i64(4, 5, -1))
+    for name in GETTERS:
+        assert np.array_equal(getattr(g, name)(), i64(0, 0, 0)), name
+
+
 def test_graph_minimum_above_capacity():
     g = Graph(3, STARTS, ENDS)
     g.set_node_supply(SUPPLY)

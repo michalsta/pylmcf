@@ -104,8 +104,11 @@ public:
             // LEMON's own default upper bound is infinite, but capacities_map
             // (what the getters, check_bounds() and infeasibility_cut() read)
             // starts at zero.  Make the solver agree with it until
-            // set_edge_capacities() is called.
+            // set_edge_capacities() is called.  Same for costs (LEMON's
+            // default is 1): the setters roll back from the solver's copies,
+            // so those must always equal the maps.
             solver.upperMap(capacities_map);
+            solver.costMap(costs_map);
         };
 
 
@@ -151,15 +154,63 @@ public:
         return std::span<T>(data, no_nodes());
     }
 
+    // Stores values into map in one pass and reports whether they were all
+    // non-negative.  The sign bit of an OR over all values, rather than a
+    // compare-and-throw per element, keeps the loop branch-free, so it
+    // vectorizes (even on baseline x86-64, where SSE2 has no 64-bit compare)
+    // and reads the input only once.
+    template <typename Map>
+    bool store_non_negative(Map& map, const std::span<T>& values) {
+#if defined(__GNUC__) && !defined(__clang__) && defined(__aarch64__)
+        // GCC does not split this OR reduction into independent accumulators
+        // on AArch64, so a single one is a loop-carried dependency bound by
+        // the 2-cycle NEON latency (1.15-1.2x slower than the old loop on an
+        // M1).  Four explicit accumulators fix it.  Only here: clang splits
+        // the reduction itself, and both compilers vectorize this form worse
+        // on x86.  LEMON_INDEX (arcFromId's own type) avoids an int64->int
+        // conversion of ii + k that blocks vectorization.
+        T acc[4] = {0, 0, 0, 0};
+        const LEMON_INDEX n = no_edges();
+        LEMON_INDEX ii = 0;
+        for (; ii + 4 <= n; ii += 4)
+            for (int k = 0; k < 4; k++) {
+                acc[k] |= values[ii + k];
+                map[lemon_graph.arcFromId(ii + k)] = values[ii + k];
+            }
+        for (; ii < n; ii++) {
+            acc[0] |= values[ii];
+            map[lemon_graph.arcFromId(ii)] = values[ii];
+        }
+        return ((acc[0] | acc[1]) | (acc[2] | acc[3])) >= 0;
+#else
+        T acc = 0;
+        for (LEMON_INT ii = 0; ii < no_edges(); ii++) {
+            acc |= values[ii];
+            map[lemon_graph.arcFromId(ii)] = values[ii];
+        }
+        return acc >= 0;
+#endif
+    }
+
+    // Undoes a rejected store_non_negative(): a rejected update must change
+    // nothing, and the solver still holds the last accepted values (every
+    // successful setter pushes its map into it; solving never rewrites real
+    // arcs' costs or bounds).
+    template <typename Map, typename Old>
+    void restore_from_solver(Map& map, Old old) {
+        for (LEMON_INT ii = 0; ii < no_edges(); ii++) {
+            const auto a = lemon_graph.arcFromId(ii);
+            map[a] = old(solver.internalArcId(a));
+        }
+    }
+
     void set_edge_capacities(const std::span<T> &capacities) {
         if (capacities.size() != static_cast<size_t>(no_edges()))
             throw std::invalid_argument("Capacities must have the same size as the number of edges");
 
-        for (LEMON_INT ii = 0; ii < no_edges(); ii++)
-        {
-            if (capacities[ii] < 0)
-                throw std::invalid_argument("Capacities must be non-negative");
-            capacities_map[lemon_graph.arcFromId(ii)] = capacities[ii];
+        if (!store_non_negative(capacities_map, capacities)) {
+            restore_from_solver(capacities_map, [&](int i) { return solver.internalUpper(i); });
+            throw std::invalid_argument("Capacities must be non-negative");
         }
 
         solver.upperMap(capacities_map);
@@ -170,11 +221,9 @@ public:
         if (minimums.size() != static_cast<size_t>(no_edges()))
             throw std::invalid_argument("Minimums must have the same size as the number of edges");
 
-        for (LEMON_INT ii = 0; ii < no_edges(); ii++)
-        {
-            if (minimums[ii] < 0)
-                throw std::invalid_argument("Minimums must be non-negative");
-            minimums_map[lemon_graph.arcFromId(ii)] = minimums[ii];
+        if (!store_non_negative(minimums_map, minimums)) {
+            restore_from_solver(minimums_map, [&](int i) { return solver.internalLower(i); });
+            throw std::invalid_argument("Minimums must be non-negative");
         }
 
         solver.lowerMap(minimums_map);
@@ -205,11 +254,9 @@ public:
         if (costs.size() != static_cast<size_t>(no_edges()))
             throw std::invalid_argument("Costs must have the same size as the number of edges");
 
-        for (LEMON_INT ii = 0; ii < no_edges(); ii++)
-        {
-            if (costs[ii] < 0)
-                throw std::invalid_argument("Costs must be non-negative");
-            costs_map[lemon_graph.arcFromId(ii)] = costs[ii];
+        if (!store_non_negative(costs_map, costs)) {
+            restore_from_solver(costs_map, [&](int i) { return solver.internalCost(i); });
+            throw std::invalid_argument("Costs must be non-negative");
         }
 
         solver.costMap(costs_map);

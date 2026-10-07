@@ -1508,6 +1508,11 @@ namespace lemon {
     Value&       internalFlow(int i)   { return _flow[i]; }
     Value&       internalSupply(int i) { return _supply[i]; }
     signed char& internalState(int i)  { return _state[i]; }
+    // The last values pushed by costMap()/upperMap()/lowerMap() (or reset()),
+    // untouched by solving for real arcs (i < number of arcs).
+    const Cost&  internalCost(int i)  const { return _cost[i]; }
+    const Value& internalUpper(int i) const { return _upper[i]; }
+    const Value& internalLower(int i) const { return _lower[i]; }
     Value&       sumSupplyMutable()    { return _sum_supply; }
     static constexpr signed char STATE_LOWER_VAL = STATE_LOWER;
     static constexpr signed char STATE_UPPER_VAL = STATE_UPPER;
