@@ -47,7 +47,8 @@ def test_as_nx_unsolved_structure():
     assert nx_g.number_of_edges() == 3
     for _, _, data in nx_g.edges(data=True):
         assert "capacity" in data
-        assert "cost" in data
+        assert "weight" in data
+        assert "lower_bound" in data
         assert "flow" not in data
 
 
@@ -98,3 +99,95 @@ def test_from_nx_roundtrip():
     G = Graph.FromNX(G_nx)
     G.solve()
     assert G.total_cost() == 3 * 7
+
+
+def _assert_same_problem(G, H):
+    for getter in ("edge_starts", "edge_ends", "get_node_supply",
+                   "get_edge_capacities", "get_edge_minimums", "get_edge_costs"):
+        assert np.array_equal(getattr(G, getter)(), getattr(H, getter)()), getter
+
+
+@pytest.mark.skipif(not HAS_NX, reason="networkx not installed")
+def test_nx_default_roundtrip_preserves_costs_and_lower_bounds():
+    G = Graph(2, np.array([0]), np.array([1]))
+    G.set_node_supply(np.array([2, -2]))
+    G.set_edge_capacities(np.array([5]))
+    G.set_edge_minimums(np.array([1]))
+    G.set_edge_costs(np.array([7]))
+    G.solve()
+    H = Graph.FromNX(G.as_nx())
+    _assert_same_problem(G, H)
+    H.solve()
+    assert H.total_cost() == G.total_cost() == 14
+
+
+@pytest.mark.skipif(not HAS_NX, reason="networkx not installed")
+def test_nx_roundtrip_keeps_parallel_arcs():
+    G = Graph(2, np.array([0, 0, 1]), np.array([1, 1, 0]))
+    G.set_node_supply(np.array([3, -3]))
+    G.set_edge_capacities(np.array([1, 4, 2]))
+    G.set_edge_costs(np.array([1, 5, 2]))
+    G.solve()
+    nx_g = G.as_nx()
+    assert isinstance(nx_g, nx.MultiDiGraph)
+    assert nx_g.number_of_edges() == 3
+    H = Graph.FromNX(nx_g)
+    _assert_same_problem(G, H)
+    H.solve()
+    assert np.array_equal(H.result(), G.result())
+    assert H.total_cost() == G.total_cost() == 1 + 2 * 5
+
+
+@pytest.mark.skipif(not HAS_NX, reason="networkx not installed")
+def test_as_nx_without_parallel_arcs_is_digraph():
+    nx_g = _simple_graph().as_nx()
+    assert type(nx_g) is nx.DiGraph
+
+
+@pytest.mark.skipif(not HAS_NX, reason="networkx not installed")
+def test_from_nx_multidigraph_reads_each_arc():
+    G_nx = nx.MultiDiGraph()
+    G_nx.add_node(0, demand=-2)
+    G_nx.add_node(1, demand=2)
+    G_nx.add_edge(0, 1, capacity=1, weight=2)
+    G_nx.add_edge(0, 1, capacity=1, weight=3)
+    G = Graph.FromNX(G_nx)
+    assert np.array_equal(G.get_edge_capacities(), [1, 1])
+    assert np.array_equal(G.get_edge_costs(), [2, 3])
+    G.solve()
+    assert G.total_cost() == 5
+    assert G.total_cost() == nx.min_cost_flow_cost(G_nx)
+
+
+@pytest.mark.skipif(not HAS_NX, reason="networkx not installed")
+@pytest.mark.parametrize("where", ["demand", "capacity", "lower_bound", "weight"])
+def test_from_nx_rejects_fractional_values(where):
+    G_nx = nx.DiGraph()
+    G_nx.add_node(0, demand=-1)
+    G_nx.add_node(1, demand=1)
+    G_nx.add_edge(0, 1, capacity=3, lower_bound=0, weight=2)
+    if where == "demand":
+        G_nx.nodes[1]["demand"] = 1.5
+    else:
+        G_nx[0][1][where] = 1.5
+    with pytest.raises(ValueError, match=where):
+        Graph.FromNX(G_nx)
+
+
+@pytest.mark.skipif(not HAS_NX, reason="networkx not installed")
+def test_from_nx_accepts_integral_floats_and_numpy_ints():
+    G_nx = nx.DiGraph()
+    G_nx.add_node(0, demand=np.int32(-2))
+    G_nx.add_node(1, demand=2.0)
+    G_nx.add_edge(0, 1, capacity=np.int64(3), weight=4.0)
+    G = Graph.FromNX(G_nx)
+    G.solve()
+    assert G.total_cost() == 8
+
+
+@pytest.mark.skipif(not HAS_NX, reason="networkx not installed")
+def test_from_nx_rejects_undirected_graph():
+    G_nx = nx.Graph()
+    G_nx.add_edge(0, 1, capacity=1, weight=1)
+    with pytest.raises(ValueError, match="directed"):
+        Graph.FromNX(G_nx)

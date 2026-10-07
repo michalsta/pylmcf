@@ -1,3 +1,4 @@
+import operator
 from typing import TYPE_CHECKING, Optional
 
 import numpy as np
@@ -26,9 +27,9 @@ class Graph(CGraph):
         edge_ends (np.ndarray): Array of ending node indices for each edge.
 
     Methods:
-        as_nx() -> nx.DiGraph:
+        as_nx() -> nx.DiGraph | nx.MultiDiGraph:
             Converts the internal C++ subgraph representation to a NetworkX directed graph,
-            including node and edge attributes such as capacity, cost, and flow.
+            including node and edge attributes such as demand, capacity, weight, and flow.
 
         show() -> None:
             Visualizes the graph using matplotlib and NetworkX, displaying nodes and edges
@@ -40,13 +41,27 @@ class Graph(CGraph):
     ) -> None:
         super().__init__(no_nodes, edge_starts, edge_ends)
 
-    def as_nx(self) -> "nx.DiGraph":
+    def as_nx(self) -> "nx.DiGraph | nx.MultiDiGraph":
         """
         Convert the C++ graph to a NetworkX graph.
+
+        Attribute names are the ones FromNX() reads by default (and the ones
+        networkx's own min-cost-flow functions use), so FromNX(G.as_nx())
+        reproduces the problem: node "demand" (= -supply), edge "capacity",
+        "lower_bound" and "weight" (cost), plus "flow" and "label" once solved.
+
+        Returns a DiGraph, or a MultiDiGraph if the graph has parallel arcs
+        (a DiGraph would merge them into one edge).
         """
         import networkx as nx
 
-        nx_graph = nx.DiGraph()
+        edge_starts = self.edge_starts()
+        edge_ends = self.edge_ends()
+        # Edges are sorted by (start, end), so parallel arcs are adjacent.
+        has_parallel = bool(
+            np.any((edge_starts[1:] == edge_starts[:-1]) & (edge_ends[1:] == edge_ends[:-1]))
+        )
+        nx_graph = nx.MultiDiGraph() if has_parallel else nx.DiGraph()
         for node_id, supply in enumerate(self.get_node_supply()):
             nx_graph.add_node(node_id, demand=-supply)
         capacities = self.get_edge_capacities()
@@ -57,9 +72,9 @@ class Graph(CGraph):
         except RuntimeError:
             flows = None
         for i, (edge_start, edge_end, capacity, minimum, cost) in enumerate(
-            zip(self.edge_starts(), self.edge_ends(), capacities, minimums, costs)
+            zip(edge_starts, edge_ends, capacities, minimums, costs)
         ):
-            attrs = dict(capacity=capacity, minimum=minimum, cost=cost)
+            attrs = dict(capacity=capacity, lower_bound=minimum, weight=cost)
             if flows is not None:
                 flow = flows[i]
                 attrs["flow"] = flow
@@ -91,7 +106,8 @@ class Graph(CGraph):
         Create a Graph from a NetworkX graph.
 
         Args:
-            nx_graph (nx.DiGraph): The input NetworkX directed graph.
+            nx_graph (nx.DiGraph | nx.MultiDiGraph): The input NetworkX directed
+                graph. Parallel arcs of a MultiDiGraph become separate edges.
             demand (str, optional):
                 The node attribute name for supply/demand values. Defaults to "demand".
                 If not present, the supply must be set later using set_node_supply().
@@ -108,8 +124,12 @@ class Graph(CGraph):
             Graph: The created Graph instance.
 
         Raises:
-            ValueError: If nodes are not contiguous integers from 0 to n-1.
+            ValueError: If the graph is undirected, if nodes are not contiguous
+                integers from 0 to n-1, or if an attribute value is not an
+                integer (fractional values are rejected, not truncated).
         """
+        if not nx_graph.is_directed():
+            raise ValueError("FromNX requires a directed graph (DiGraph or MultiDiGraph)")
         no_nodes = nx_graph.number_of_nodes()
         if set(range(no_nodes)) != set(nx_graph.nodes()):
             raise ValueError(
@@ -117,26 +137,27 @@ class Graph(CGraph):
                 f"got: {sorted(nx_graph.nodes())}"
             )
 
-        sorted_edges = sorted(nx_graph.edges(), key=lambda edge: (edge[0], edge[1]))
+        # edges(data=True) yields each parallel arc of a MultiDiGraph
+        # separately; sorted() is stable, so they keep their key order.
+        sorted_edges = sorted(nx_graph.edges(data=True), key=lambda edge: (edge[0], edge[1]))
         no_edges = len(sorted_edges)
 
         # Edge-index arrays are built as int32 (LEMON's index type) so the
         # C++ constructor takes them without a conversion copy.
-        edge_array = np.array(sorted_edges, dtype=np.int32).reshape(no_edges, 2)
+        edge_array = np.array([(u, v) for u, v, _ in sorted_edges], dtype=np.int32).reshape(no_edges, 2)
         edge_starts = np.ascontiguousarray(edge_array[:, 0])
         edge_ends   = np.ascontiguousarray(edge_array[:, 1])
         capacities   = np.zeros(no_edges, dtype=np.int64) if capacity    is not None else None
         minimums     = np.zeros(no_edges, dtype=np.int64) if lower_bound is not None else None
         costs        = np.zeros(no_edges, dtype=np.int64) if weight      is not None else None
 
-        for i, (u, v) in enumerate(sorted_edges):
-            attrs = nx_graph[u][v]
+        for i, (u, v, attrs) in enumerate(sorted_edges):
             if capacities is not None:
-                capacities[i] = attrs.get(capacity,    0)
+                capacities[i] = _integral(attrs.get(capacity,    0), capacity,    (u, v))
             if minimums   is not None:
-                minimums[i]   = attrs.get(lower_bound, 0)
+                minimums[i]   = _integral(attrs.get(lower_bound, 0), lower_bound, (u, v))
             if costs      is not None:
-                costs[i]      = attrs.get(weight,      0)
+                costs[i]      = _integral(attrs.get(weight,      0), weight,      (u, v))
 
         G = Graph(no_nodes, edge_starts, edge_ends)
 
@@ -144,7 +165,7 @@ class Graph(CGraph):
         if demand is not None:
             supply = np.zeros(no_nodes, dtype=np.int64)
             for node_id in nx_graph.nodes():
-                supply[node_id] = -nx_graph.nodes[node_id].get(demand, 0)
+                supply[node_id] = -_integral(nx_graph.nodes[node_id].get(demand, 0), demand, node_id)
             G.set_node_supply(supply)
 
         if capacities is not None:
@@ -155,6 +176,18 @@ class Graph(CGraph):
             G.set_edge_costs(costs)
 
         return G
+
+
+def _integral(value, attr: str, where) -> int:
+    """value as an int, or ValueError if it is not integer-valued (assigning
+    1.5 into an int64 array would silently truncate it to 1)."""
+    try:
+        return operator.index(value)
+    except TypeError:
+        pass
+    if isinstance(value, (float, np.floating)) and float(value).is_integer():
+        return int(value)
+    raise ValueError(f"Attribute {attr!r} of {where} must be an integer, got {value!r}")
 
 
 def show_graph(nx_graph: "nx.DiGraph", filename: Optional[str] = None) -> None:

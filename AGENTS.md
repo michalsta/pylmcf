@@ -106,7 +106,7 @@ Header-only, C++-consumers only (this is where the active work is):
 
 ### Python layer (`src/pylmcf/`)
 
-- **`graph.py`** — `Graph` extends `CGraph` with `as_nx()`, `show()`, `Graph.FromNX()`. `FromNX` sorts edges before construction to satisfy the C++ ordering constraint.
+- **`graph.py`** — `Graph` extends `CGraph` with `as_nx()`, `show()`, `Graph.FromNX()`. `FromNX` sorts edges before construction to satisfy the C++ ordering constraint. Both directions use one attribute set — networkx's own `demand` (= -supply), `capacity`, `weight` (cost), plus `lower_bound` — so `FromNX(G.as_nx())` reproduces the problem; do not reintroduce aliases. `as_nx()` returns a `MultiDiGraph` exactly when there are parallel arcs, `FromNX` reads each arc of a `MultiDiGraph`, rejects undirected graphs, and rejects non-integer attribute values instead of truncating them.
 - **`__version__.py`** — `__version__` (from installed metadata) and `include()` → the `cpp/` path.
 - **`__init__.py`** — re-exports `Graph`, `__version__`, `include`.
 - **`__main__.py`** — CLI for `--version` / `--include`.
