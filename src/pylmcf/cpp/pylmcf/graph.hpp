@@ -100,7 +100,13 @@ public:
         minimums_map(lemon_graph),
         costs_map(lemon_graph),
         solver(lemon_graph)
-        {};
+        {
+            // LEMON's own default upper bound is infinite, but capacities_map
+            // (what the getters, check_bounds() and infeasibility_cut() read)
+            // starts at zero.  Make the solver agree with it until
+            // set_edge_capacities() is called.
+            solver.upperMap(capacities_map);
+        };
 
 
     Graph() = delete;

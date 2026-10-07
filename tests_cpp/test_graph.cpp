@@ -197,6 +197,22 @@ static void test_degenerate_graphs() {
         const auto cut = g.infeasibility_cut();
         CHECK(cut.size() == 2 && cut[0] && !cut[1], "edgeless cut");
     }
+    {   // capacities never set: they are zero, for the solver as for the getters
+        // and the certificate (LEMON's own default upper bound is infinite)
+        std::vector<int> s{0}, e{1};
+        G64 g(2, s, e);
+        std::vector<int64_t> sup{1, -1}, costs{1};
+        g.set_node_supply(sup);
+        g.set_edge_costs(costs);
+        CHECK(take(g.get_edge_capacities()) == std::vector<int64_t>{0}, "default capacities");
+        CHECK_THROWS(std::runtime_error, g.solve(), "default capacities infeasible");
+        const auto cut = g.infeasibility_cut();
+        CHECK(cut.size() == 2 && cut[0] && !cut[1], "default capacities cut");
+        std::vector<int64_t> caps{1};
+        g.set_edge_capacities(caps);
+        g.solve();
+        CHECK(g.total_cost() == 1, "capacities set after construction");
+    }
     {   // zero nodes
         std::vector<int> s, e;
         G64 g(0, s, e);
