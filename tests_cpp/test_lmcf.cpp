@@ -194,6 +194,11 @@ static void validation_for() {
         CHECK(run({}, {}, {}, {}, {}, {}, 0, 0) == 0, "%s: empty problem", nm);
         // Nodes without edges, zero supply.
         CHECK(run({0, 0}, {}, {}, {}, {}, {}, 0, 2) == 0, "%s: edgeless", nm);
+        // Every LEMON solver negates supplies: min() is rejected.  (min() + 1
+        // is accepted but not yet safe everywhere -- CycleCanceling overflows
+        // on it internally; see the supply-sum range checks still to come.)
+        const int64_t lo = std::numeric_limits<int64_t>::min();
+        CHECK_THROWS(std::invalid_argument, run({0, 0, lo}, st, en, cap, {}, cost, 3), "%s: min supply", nm);
     }
 }
 
@@ -235,6 +240,31 @@ static void test_validation() {
     unbounded_for<Solver::CC>();
     unbounded_for<Solver::CS>();
     unbounded_for<Solver::CAP>();
+    // Network simplex's artificial arcs cost 2^62: a real cost of 2^62 used
+    // to be reported INFEASIBLE on a feasible problem; it is now rejected,
+    // and 2^62 - 1, the largest accepted cost, solves.
+    {
+        const int64_t big = std::numeric_limits<int64_t>::max() / 2;
+        V s1{1, -1}, a{0}, b{1}, c1{1}, o1(1);
+        V too_big{big + 1}, largest{big};
+        CHECK_THROWS(std::invalid_argument, lmcf<int64_t>(s1, a, b, c1, too_big, o1), "lmcf cost 2^62");
+        CHECK(lmcf<int64_t>(s1, a, b, c1, largest, o1) == big && o1[0] == 1, "lmcf cost 2^62 - 1");
+    }
+    // min() + 1 under network simplex (an unmet GEQ demand: optimal at 0).
+    {
+        V s3{0, 0, std::numeric_limits<int64_t>::min() + 1}, o3(3);
+        V st3{0, 0, 1}, en3{1, 2, 2}, cap3{3, 3, 5}, cost3{1, 3, 5};
+        CHECK(lmcf<int64_t>(s3, st3, en3, cap3, cost3, o3) == 0, "lmcf min + 1 supply");
+    }
+    // The supply minimum at a narrow width (only NS and CC compile for int8).
+    {
+        std::vector<int8_t> s8{0, -128}, a8{0}, b8{1}, c8{1}, m8, k8{1}, o8(1);
+        std::vector<LmcfCost> p8;
+        CHECK_THROWS(std::invalid_argument,
+                     (call_impl<Solver::NS, int8_t>(s8, a8, b8, c8, m8, k8, o8, p8)), "int8 NS -128 supply");
+        CHECK_THROWS(std::invalid_argument,
+                     (call_impl<Solver::CC, int8_t>(s8, a8, b8, c8, m8, k8, o8, p8)), "int8 CC -128 supply");
+    }
 }
 
 static void test_basics() {

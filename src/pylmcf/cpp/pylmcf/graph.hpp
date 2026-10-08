@@ -59,6 +59,14 @@ inline lemon::StaticDigraph make_lemon_graph(LEMON_INDEX no_nodes, const std::sp
 template <typename T> class Graph {
 public:
     using Solver = lemon::NetworkSimplex<lemon::StaticDigraph, T, T>;
+    // Largest accepted edge cost.  NetworkSimplex starts from artificial arcs
+    // costing max/2 + 1 (2^62 for int64) and relies on every real arc being
+    // cheaper; a cost at or above it lets flow stay on an artificial arc and
+    // a feasible problem is reported INFEASIBLE.  Necessary, not sufficient:
+    // potentials and the objective sum costs along paths, which can still
+    // overflow below this bound.  max/2 is 2^k - 1, so store_or()'s OR
+    // accumulator exceeds it iff some single cost does.
+    static constexpr T MAX_COST = std::numeric_limits<T>::max() / 2;
 
 private:
     const LEMON_INDEX _no_nodes;
@@ -138,6 +146,18 @@ public:
         if (node_supply.size() != static_cast<size_t>(no_nodes()))
             throw std::invalid_argument("Node supply must have the same size as the number of nodes");
 
+        // LEMON negates supplies (init()'s artificial-arc flows, and the LEQ
+        // infeasibility_cut() below), and -min() overflows: undefined
+        // behaviour for int32/int64, a silently wrong answer in practice.
+        // Checked before anything is written, so a rejected update changes
+        // nothing; branch-free, so the check vectorizes.
+        bool has_min = false;
+        for (const T v : node_supply)
+            has_min |= v == std::numeric_limits<T>::min();
+        if (has_min)
+            throw std::invalid_argument("Node supplies must be greater than " +
+                std::to_string(std::numeric_limits<T>::min()) + " (LEMON negates them)");
+
         for (LEMON_INT ii = 0; ii < no_nodes(); ii++)
             node_supply_map[lemon_graph.nodeFromId(ii)] = node_supply[ii];
 
@@ -154,13 +174,14 @@ public:
         return std::span<T>(data, no_nodes());
     }
 
-    // Stores values into map in one pass and reports whether they were all
-    // non-negative.  The sign bit of an OR over all values, rather than a
-    // compare-and-throw per element, keeps the loop branch-free, so it
-    // vectorizes (even on baseline x86-64, where SSE2 has no 64-bit compare)
-    // and reads the input only once.
+    // Stores values into map in one pass and returns the OR of all of them,
+    // which is negative iff some value is, and -- for a limit of the form
+    // 2^k - 1 -- above the limit iff some value is (see MAX_COST).  An OR
+    // reduction, rather than a compare-and-throw per element, keeps the loop
+    // branch-free, so it vectorizes (even on baseline x86-64, where SSE2 has
+    // no 64-bit compare) and reads the input only once.
     template <typename Map>
-    bool store_non_negative(Map& map, const std::span<T>& values) {
+    T store_or(Map& map, const std::span<T>& values) {
 #if defined(__GNUC__) && !defined(__clang__) && defined(__aarch64__)
         // GCC does not split this OR reduction into independent accumulators
         // on AArch64, so a single one is a loop-carried dependency bound by
@@ -181,18 +202,18 @@ public:
             acc[0] |= values[ii];
             map[lemon_graph.arcFromId(ii)] = values[ii];
         }
-        return ((acc[0] | acc[1]) | (acc[2] | acc[3])) >= 0;
+        return (acc[0] | acc[1]) | (acc[2] | acc[3]);
 #else
         T acc = 0;
         for (LEMON_INT ii = 0; ii < no_edges(); ii++) {
             acc |= values[ii];
             map[lemon_graph.arcFromId(ii)] = values[ii];
         }
-        return acc >= 0;
+        return acc;
 #endif
     }
 
-    // Undoes a rejected store_non_negative(): a rejected update must change
+    // Undoes a rejected store_or(): a rejected update must change
     // nothing, and the solver still holds the last accepted values (every
     // successful setter pushes its map into it; solving never rewrites real
     // arcs' costs or bounds).
@@ -208,7 +229,7 @@ public:
         if (capacities.size() != static_cast<size_t>(no_edges()))
             throw std::invalid_argument("Capacities must have the same size as the number of edges");
 
-        if (!store_non_negative(capacities_map, capacities)) {
+        if (store_or(capacities_map, capacities) < 0) {
             restore_from_solver(capacities_map, [&](int i) { return solver.internalUpper(i); });
             throw std::invalid_argument("Capacities must be non-negative");
         }
@@ -221,7 +242,7 @@ public:
         if (minimums.size() != static_cast<size_t>(no_edges()))
             throw std::invalid_argument("Minimums must have the same size as the number of edges");
 
-        if (!store_non_negative(minimums_map, minimums)) {
+        if (store_or(minimums_map, minimums) < 0) {
             restore_from_solver(minimums_map, [&](int i) { return solver.internalLower(i); });
             throw std::invalid_argument("Minimums must be non-negative");
         }
@@ -254,9 +275,13 @@ public:
         if (costs.size() != static_cast<size_t>(no_edges()))
             throw std::invalid_argument("Costs must have the same size as the number of edges");
 
-        if (!store_non_negative(costs_map, costs)) {
+        const T acc = store_or(costs_map, costs);
+        if (acc < 0 || acc > MAX_COST) {
             restore_from_solver(costs_map, [&](int i) { return solver.internalCost(i); });
-            throw std::invalid_argument("Costs must be non-negative");
+            if (acc < 0)
+                throw std::invalid_argument("Costs must be non-negative");
+            throw std::invalid_argument("Costs must be at most " + std::to_string(MAX_COST) +
+                " (LEMON's artificial arcs cost one more, and must be dearer than any real arc)");
         }
 
         solver.costMap(costs_map);
@@ -394,7 +419,7 @@ public:
             NM negated(lemon_graph);
             for (LEMON_INDEX ii = 0; ii < no_nodes(); ii++) {
                 const auto n = lemon_graph.nodeFromId(ii);
-                negated[n] = -node_supply_map[n];
+                negated[n] = -node_supply_map[n];  // safe: set_node_supply() rejects min()
             }
             R rev(lemon_graph);
             lemon::Circulation<R, AM, AM, NM> circ(rev, minimums_map, capacities_map, negated);

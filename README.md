@@ -93,8 +93,11 @@ internal 2^62 artificial cost on some nodes.
 
 All integer arrays in the OO API are **int64**, and the dtype is not converted for
 you — a mismatched array raises `TypeError`. Costs and minimums must be
-non-negative, and the graph must be feasible (see below for unbalanced supply)
-or `solve()` raises `RuntimeError: INFEASIBLE`.
+non-negative, costs at most 2^62 − 1 (network simplex's artificial arcs cost
+2^62 and must stay dearer than any real arc), supplies greater than the
+dtype's minimum (LEMON negates them), and the graph must be feasible (see
+below for unbalanced supply) or `solve()` raises `RuntimeError: INFEASIBLE`.
+A rejected setter leaves the graph unchanged.
 
 #### LCT and 1D-chain solvers
 

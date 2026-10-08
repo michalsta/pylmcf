@@ -219,6 +219,37 @@ static void test_setters_and_state() {
         CHECK(take(h.get_edge_costs()) == ok, "accepted update after rejections");
     }
 
+    // Supply min() is rejected before anything is written (LEMON negates
+    // supplies; the LEQ cut did too, and returned "feasible" for it).
+    {
+        std::vector<int> s0, e0;
+        G64 h(1, s0, e0);
+        h.set_supply_type(NS::LEQ);
+        std::vector<int64_t> lo{std::numeric_limits<int64_t>::min()}, lo1{std::numeric_limits<int64_t>::min() + 1};
+        CHECK_THROWS(std::invalid_argument, h.set_node_supply(lo), "supply min rejected");
+        CHECK(take(h.get_node_supply()) == std::vector<int64_t>{0}, "rejected supply left the map unchanged");
+        h.set_node_supply(lo1);
+        const auto cut = h.infeasibility_cut();
+        CHECK(cut.size() == 1 && cut[0], "LEQ min + 1 supply is infeasible, cut names the node");
+        CHECK_THROWS(std::runtime_error, h.solve(), "LEQ min + 1 supply solve");
+    }
+    // Costs above MAX_COST (2^62 - 1) are rejected and change nothing; the
+    // bound itself solves (2^62 used to come back INFEASIBLE).
+    {
+        std::vector<int> s1{0}, e1{1};
+        G64 h(2, s1, e1);
+        std::vector<int64_t> sup{1, -1}, cap{1}, ok{G64::MAX_COST}, big{G64::MAX_COST + 1}, neg_big{-1};
+        h.set_node_supply(sup);
+        h.set_edge_capacities(cap);
+        h.set_edge_costs(ok);
+        CHECK_THROWS(std::invalid_argument, h.set_edge_costs(big), "cost 2^62 rejected");
+        CHECK(take(h.get_edge_costs()) == ok, "rejected cost left the map unchanged");
+        h.solve();
+        CHECK(h.total_cost() == G64::MAX_COST, "cost 2^62 - 1 solves: %lld", (long long)h.total_cost());
+        static_assert(G64::MAX_COST == (int64_t(1) << 62) - 1);
+        static_assert(Graph<int32_t>::MAX_COST == (int32_t(1) << 30) - 1);
+    }
+
     const std::string str = g.to_string();
     CHECK(str.find("3 nodes and 3 edges") != std::string::npos && str.find("0 -> 1") != std::string::npos,
           "to_string: %s", str.c_str());

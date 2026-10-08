@@ -272,3 +272,69 @@ def test_misaligned_fixes_suggested_by_the_error_work():
         g.set_edge_costs(COSTS)
         g.solve()
         assert g.total_cost() == 21
+
+
+# --- supply minimum and cost bound -------------------------------------------
+# LEMON negates supplies (artificial-arc flows; Graph's LEQ cut too), so the
+# dtype's minimum overflowed: the LEQ cut called a one-node INT64_MIN graph
+# feasible.  NetworkSimplex's artificial arcs cost 2^62, so a real cost of
+# 2^62 made a feasible problem come back INFEASIBLE.
+
+I64_MIN, MAX_COST = np.iinfo(np.int64).min, 2**62 - 1
+
+
+def test_graph_rejects_min_supply_and_changes_nothing():
+    g = Graph(3, STARTS, ENDS)
+    g.set_node_supply(SUPPLY)
+    with pytest.raises(ValueError, match="greater than"):
+        g.set_node_supply(i64(1, 2, I64_MIN))
+    assert np.array_equal(g.get_node_supply(), SUPPLY)
+
+
+def test_leq_cut_no_longer_sees_min_supply_as_feasible():
+    g = Graph(1, i64(), i64())
+    g.set_supply_type("leq")
+    with pytest.raises(ValueError, match="greater than"):
+        g.set_node_supply(i64(I64_MIN))
+    g.set_node_supply(i64(I64_MIN + 1))  # the smallest accepted: LEQ-infeasible
+    assert np.array_equal(g.infeasibility_cut(), [True])
+    with pytest.raises(RuntimeError, match="INFEASIBLE"):
+        g.solve()
+
+
+@pytest.mark.parametrize("fn", FUNCTIONAL, ids=lambda f: f.__name__)
+@pytest.mark.parametrize("dtype", [np.int8, np.int16, np.int32, np.int64])
+def test_functional_rejects_min_supply(fn, dtype):
+    if dtype in (np.int8, np.int16) and fn in (pylmcf_cpp.lmcf_cost_scaling, pylmcf_cpp.lmcf_capacity_scaling):
+        pytest.skip("cost/capacity scaling are bound for int32/int64 only")
+    a = lambda *x: np.array(x, dtype=dtype)  # noqa: E731
+    with pytest.raises(ValueError, match="greater than"):
+        fn(a(0, 0, np.iinfo(dtype).min), a(0, 0, 1), a(1, 2, 2), a(3, 3, 5), a(1, 3, 5))
+
+
+def test_graph_cost_bound():
+    g = Graph(2, i64(0), i64(1))
+    g.set_node_supply(i64(1, -1))
+    g.set_edge_capacities(i64(1))
+    g.set_edge_costs(i64(MAX_COST))
+    with pytest.raises(ValueError, match="at most"):
+        g.set_edge_costs(i64(MAX_COST + 1))
+    with pytest.raises(ValueError, match="non-negative"):
+        g.set_edge_costs(i64(-1))
+    assert np.array_equal(g.get_edge_costs(), [MAX_COST])  # rejections changed nothing
+    g.solve()  # 2^62 used to come back INFEASIBLE; 2^62 - 1 is the largest accepted
+    assert g.total_cost() == MAX_COST
+
+
+def test_graph_cost_bound_mid_array_rolls_back():
+    g = Graph(3, STARTS, ENDS)
+    g.set_edge_costs(COSTS)
+    with pytest.raises(ValueError, match="at most"):
+        g.set_edge_costs(i64(1, 2**62, 3))
+    assert np.array_equal(g.get_edge_costs(), COSTS)
+
+
+def test_functional_cost_bound():
+    with pytest.raises(ValueError, match="at most"):
+        pylmcf_cpp.lmcf(i64(1, -1), i64(0), i64(1), i64(1), i64(MAX_COST + 1))
+    assert np.array_equal(pylmcf_cpp.lmcf(i64(1, -1), i64(0), i64(1), i64(1), i64(MAX_COST)), [1])

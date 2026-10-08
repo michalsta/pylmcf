@@ -88,6 +88,22 @@ LmcfCost lmcf_impl(
             if (costs[i] < 0) {
                 throw std::invalid_argument("Costs must be non-negative");
             }
+            // NetworkSimplex's artificial arcs cost max/2 + 1 (2^62) and must
+            // be dearer than every real arc; see Graph::MAX_COST.
+            if (static_cast<LmcfCost>(costs[i]) > std::numeric_limits<LmcfCost>::max() / 2) {
+                throw std::invalid_argument("Costs must be at most " +
+                    std::to_string(std::numeric_limits<LmcfCost>::max() / 2) +
+                    " (LEMON's artificial arcs cost one more, and must be dearer than any real arc)");
+            }
+        }
+    }
+
+    // Every LEMON solver negates supplies internally, and -min() overflows
+    // (undefined behaviour for int32/int64, a wrong answer for narrower types).
+    for (size_t i = 0; i < no_nodes; i++) {
+        if (node_supply[i] == std::numeric_limits<T>::min()) {
+            throw std::invalid_argument("Node supplies must be greater than " +
+                std::to_string(std::numeric_limits<T>::min()) + " (LEMON negates them)");
         }
     }
 
