@@ -5,6 +5,7 @@ Run with the interpreter containing the built pylmcf:
 """
 import argparse
 import json
+import os
 import platform
 import time
 from statistics import median
@@ -28,7 +29,10 @@ def measure(fn, repeats):
 def run():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True)
+    parser.add_argument("--cpu", type=int)
     args = parser.parse_args()
+    if args.cpu is not None:
+        os.sched_setaffinity(0, {args.cpu})
     rows = []
     for n in (100, 500, 2000):
         rng = np.random.default_rng(42 + n)
@@ -71,7 +75,7 @@ def run():
             assert dual == g.total_cost()
             rows.append(dict(solver=cls.__name__, nodes=n, arcs=len(starts), cold_solve_us=cold_us, timings=timing))
             print(cls.__name__, n, {k: round(v["median_us"], 2) for k, v in timing.items()}, flush=True)
-    report = dict(platform=platform.platform(), python=platform.python_version(), rows=rows)
+    report = dict(platform=platform.platform(), python=platform.python_version(), cpu=args.cpu, rows=rows)
     with open(args.output, "w") as output:
         json.dump(report, output, indent=2)
 

@@ -60,6 +60,9 @@ these preconditions and valid IDs; Python wrappers enforce them.
 The ordinary LCT solver already materializes potentials after solving. The
 dynamic variant materializes them lazily on the first dual query, then serves
 O(1) reads until the next solve. Flow-only dynamic solves incur no export work.
+Artificial costs use the largest absolute real cost (including negative
+shifted matching costs) and checked multiplication. This prevents false
+infeasibility from an underpriced artificial cycle and signed overflow.
 Capacity multipliers are computed inline, not maintained during pivots. This
 avoids additional work in solves that never request duals.
 
