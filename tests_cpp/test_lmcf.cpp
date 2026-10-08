@@ -195,8 +195,9 @@ static void validation_for() {
         // Nodes without edges, zero supply.
         CHECK(run({0, 0}, {}, {}, {}, {}, {}, 0, 2) == 0, "%s: edgeless", nm);
         // Every LEMON solver negates supplies: min() is rejected.  (min() + 1
-        // is accepted but not yet safe everywhere -- CycleCanceling overflows
-        // on it internally; see the supply-sum range checks still to come.)
+        // is accepted but outside the documented value-range contract --
+        // CycleCanceling overflows on it internally -- so it is not tested
+        // here; see LmcfCost in lmcf.hpp.)
         const int64_t lo = std::numeric_limits<int64_t>::min();
         CHECK_THROWS(std::invalid_argument, run({0, 0, lo}, st, en, cap, {}, cost, 3), "%s: min supply", nm);
     }

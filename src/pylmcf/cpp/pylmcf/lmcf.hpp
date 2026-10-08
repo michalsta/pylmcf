@@ -31,6 +31,13 @@ void print_span(std::span<T> span) {
 // potentials and the cost*flow products that LEMON computes internally overflow
 // a narrow T (e.g. int8/int16), silently corrupting the optimum. int64 cost
 // arithmetic is what the OO API (Graph<int64_t>) already uses.
+//
+// Everything else is deliberately left in T and unchecked: the caller
+// guarantees that total supply and every flow fit T with room to spare (some
+// solvers overflow at the exact limit).  Outside that range int8/int16 give
+// wrong results silently and int32/int64 is UB; a capacity of T's max means
+// unbounded.  The narrow dtypes exist to trade that for smaller memory, so do
+// not widen them here.
 using LmcfCost = std::int64_t;
 
 // Core implementation — selects the LEMON solver via template template parameter.

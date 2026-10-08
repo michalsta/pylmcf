@@ -97,7 +97,10 @@ non-negative, costs at most 2^62 − 1 (network simplex's artificial arcs cost
 2^62 and must stay dearer than any real arc), supplies greater than the
 dtype's minimum (LEMON negates them), and the graph must be feasible (see
 below for unbalanced supply) or `solve()` raises `RuntimeError: INFEASIBLE`.
-A rejected setter leaves the graph unchanged.
+A rejected setter leaves the graph unchanged. As in the functional API below, the
+value range is unchecked: total supply and every flow must fit in int64 with
+room to spare, a capacity of `INT64_MAX` means unbounded, and the total cost
+must fit in int64.
 
 #### LCT and 1D-chain solvers
 
@@ -247,6 +250,18 @@ flows returns the same potentials.
 The functional API is stateless and has no warm restart. It is duck-typed over
 int8/16/32/64 (cost and capacity scaling excepted, which need the wider range),
 and each function has a with- and without-minimums overload.
+
+**Value range is the caller's responsibility, at every width.** Supplies,
+capacities, minimums and flows are computed in the input dtype (costs and the
+objective in int64), and nothing checks that intermediate values fit — that is
+what keeps the narrow types small. The sum of the positive supplies, the
+magnitude of the sum of the negative ones, and therefore every arc's flow must
+fit the dtype with room to spare: at the exact limit some solvers already
+overflow internally. Outside that range, int8/int16 return wrong results
+without an error (a feasible problem reported `INFEASIBLE`, say), and
+int32/int64 is undefined behaviour. A capacity equal to the dtype's maximum
+(127 for int8, 32767 for int16, …) means *unbounded*, not that number. The
+total cost must fit in int64.
 
 #### Visualization
 
