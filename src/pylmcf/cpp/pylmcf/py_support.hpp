@@ -6,6 +6,8 @@
 #include <span>
 #include <vector>
 #include <cstring>
+#include <cstdint>
+#include <string>
 
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
@@ -21,6 +23,28 @@ namespace nb = nanobind;
 template <typename T>
 using ndarray_1d = nb::ndarray<T, nb::shape<-1>, nb::device::cpu>;
 
+// A typed pointer must be aligned to its element: dereferencing a misaligned
+// int64_t* is undefined behaviour, and the optimizer may act on it (e.g.
+// peeling a vectorized loop to a 16-byte boundary assuming 8-byte alignment,
+// then using aligned vector loads).  NumPy readily produces such arrays
+// (flags.aligned == False): views at an odd offset into a byte buffer,
+// np.frombuffer(..., offset=1), fields of packed structured arrays.
+template <typename T>
+void require_aligned(const void* data, size_t size) {
+    const auto offset = reinterpret_cast<std::uintptr_t>(data) % alignof(T);
+    if (size > 0 && offset != 0) {
+        throw std::invalid_argument(
+            "pylmcf requires arrays aligned to their element size (" +
+            std::to_string(alignof(T)) + " bytes) and does not copy inputs "
+            "(this is a performance-critical path), but received an array whose "
+            "data starts " + std::to_string(offset) + " byte(s) past an aligned "
+            "address (numpy flags.aligned is False). Make an aligned copy on the "
+            "Python side before passing it in, e.g. `arr = arr.copy()` or "
+            "`arr = np.require(arr, requirements=\"CA\")` "
+            "(np.ascontiguousarray does not realign a contiguous array).");
+    }
+}
+
 template <typename T>
 std::span<T> numpy_to_span(ndarray_1d<T> array) {
     // stride(0) is in elements; a size<=1 array is trivially contiguous whatever
@@ -33,11 +57,13 @@ std::span<T> numpy_to_span(ndarray_1d<T> array) {
             "Make it contiguous on the Python side before passing it in, e.g. "
             "`arr = np.ascontiguousarray(arr)`.");
     }
+    require_aligned<T>(array.data(), array.shape(0));
     return std::span<T>(static_cast<T*>(array.data()), array.shape(0));
 }
 
 template <typename T>
 std::vector<T> numpy_to_vector(nb::ndarray<T, nb::shape<-1>> array) {
+    require_aligned<T>(array.data(), array.shape(0));
     return std::vector<T>(static_cast<T*>(array.data()), static_cast<T*>(array.data()) + array.shape(0));
 }
 

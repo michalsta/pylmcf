@@ -196,3 +196,79 @@ def test_graph_empty_problem():
     assert g.total_cost() == 0
     assert g.result().shape == (0,) and g.potentials().shape == (0,)
     assert g.infeasibility_cut() is None
+
+
+# --- alignment ------------------------------------------------------------
+# A typed C++ pointer must be aligned to its element; numpy_to_span() used to
+# accept any contiguous array, including views at an odd byte offset
+# (flags.aligned False), and dereference them as int64_t* -- undefined
+# behaviour that x86 merely tolerates.
+
+def misaligned(values, dtype=np.int64):
+    values = np.asarray(values, dtype=dtype)
+    buf = np.zeros(values.nbytes + 1, dtype=np.uint8)
+    out = np.ndarray(values.shape, dtype=dtype, buffer=buf, offset=1)
+    out[:] = values
+    # numpy calls every empty array aligned, whatever its address.
+    assert out.ctypes.data % out.itemsize != 0 and out.flags.c_contiguous
+    assert out.size == 0 or not out.flags.aligned
+    return out
+
+
+@pytest.mark.parametrize("setter,values", [
+    ("set_node_supply", SUPPLY), ("set_edge_capacities", CAPS),
+    ("set_edge_minimums", i64(0, 0, 0)), ("set_edge_costs", COSTS),
+])
+def test_graph_setters_reject_misaligned(setter, values):
+    g = Graph(3, STARTS, ENDS)
+    with pytest.raises(ValueError, match="aligned"):
+        getattr(g, setter)(misaligned(values))
+
+
+@pytest.mark.parametrize("dtype", [np.int64, np.int32])
+@pytest.mark.parametrize("which", ["starts", "ends"])
+def test_graph_constructor_rejects_misaligned(dtype, which):
+    starts, ends = STARTS.astype(dtype), ENDS.astype(dtype)
+    if which == "starts":
+        starts = misaligned(starts, dtype)
+    else:
+        ends = misaligned(ends, dtype)
+    with pytest.raises(ValueError, match="aligned"):
+        Graph(3, starts, ends)
+
+
+@pytest.mark.parametrize("fn", FUNCTIONAL, ids=lambda f: f.__name__)
+@pytest.mark.parametrize("pos", range(6), ids=["supply", "starts", "ends", "caps", "minimums", "costs"])
+def test_functional_rejects_misaligned(fn, pos):
+    args = [SUPPLY, STARTS, ENDS, CAPS, i64(0, 0, 0), COSTS]
+    args[pos] = misaligned(args[pos])
+    with pytest.raises(ValueError, match="aligned"):
+        fn(*args)
+
+
+@pytest.mark.parametrize("fn", ["lmcf_lct", "lmcf_lct_dyn"])
+def test_lct_rejects_misaligned(fn):
+    import pylmcf
+    with pytest.raises(ValueError, match="aligned"):
+        getattr(pylmcf, fn)(SUPPLY, STARTS, ENDS, misaligned(CAPS), COSTS)
+
+
+def test_misaligned_single_element_rejected_empty_accepted():
+    g = Graph(2, i64(0), i64(1))
+    with pytest.raises(ValueError, match="aligned"):
+        g.set_edge_costs(misaligned([1]))
+    e = Graph(1, i64(), i64())
+    e.set_edge_costs(misaligned([]))  # nothing is dereferenced
+
+
+def test_misaligned_fixes_suggested_by_the_error_work():
+    bad = misaligned(SUPPLY)
+    with pytest.raises(ValueError, match=r"arr\.copy\(\)"):
+        Graph(3, STARTS, ENDS).set_node_supply(bad)
+    for fixed in (bad.copy(), np.require(bad, requirements="CA")):
+        g = Graph(3, STARTS, ENDS)
+        g.set_node_supply(fixed)
+        g.set_edge_capacities(CAPS)
+        g.set_edge_costs(COSTS)
+        g.solve()
+        assert g.total_cost() == 21
