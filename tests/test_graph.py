@@ -32,3 +32,15 @@ def test_default_capacities_are_zero_for_the_solver_too():
     G.solve()
     assert np.array_equal(G.result(), [1])
     assert G.infeasibility_cut() is None
+
+
+def test_default_costs_are_zero_for_the_solver_too():
+    G = Graph(3, np.array([0, 1]), np.array([1, 2]))
+    G.set_node_supply(np.array([2, 0, -2]))
+    G.set_edge_capacities(np.array([5, 5]))
+    G.solve()
+    assert G.total_cost() == 0
+    assert np.array_equal(G.result(), [2, 2])
+    G.set_edge_costs(np.array([3, 4]))
+    G.solve()
+    assert G.total_cost() == 14

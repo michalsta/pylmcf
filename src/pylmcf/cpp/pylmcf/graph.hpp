@@ -1,6 +1,7 @@
 #ifndef PYLMCF_GRAPH_HPP
 #define PYLMCF_GRAPH_HPP
 
+#include <cassert>
 #include <stdexcept>
 #include <span>
 #include <vector>
@@ -313,7 +314,26 @@ public:
         }
     }
 
+#ifndef NDEBUG
+    // The invariant that lets solve() skip re-pushing costs into the solver:
+    // its cost array already equals costs_map.  It holds because costs_map
+    // changes only in set_edge_costs(), which either pushes the accepted
+    // values or restores the map from the solver; the constructor pushes the
+    // initial zeros over LEMON's default of 1; and LEMON itself writes real
+    // arcs' costs only in costMap() and reset() (the latter only from its
+    // constructor) -- init() touches artificial arcs (ids >= arc count) only.
+    bool costs_in_sync() const {
+        for (LEMON_INDEX ii = 0; ii < no_edges(); ii++) {
+            const auto a = lemon_graph.arcFromId(ii);
+            if (solver.internalCost(solver.internalArcId(a)) != costs_map[a])
+                return false;
+        }
+        return true;
+    }
+#endif
+
     void solve(){
+        assert(costs_in_sync() && "solver costs out of sync with costs_map");
         check_bounds();
         // LEMON's init() rejects an empty node set and run() reports that as
         // INFEASIBLE; an empty problem is trivially optimal at cost 0.
@@ -322,8 +342,9 @@ public:
             _solved = true;
             return;
         }
+        // Supplies are pushed here, not by set_node_supply().  Costs are
+        // not: the solver already holds costs_map (see costs_in_sync()).
         solver.supplyMap(node_supply_map);
-        solver.costMap(costs_map);
         // Re-solves warm-restart from the retained basis.  warmRun() itself
         // falls back to a cold init()+start() whenever the basis cannot be
         // reused (non-EQ supply, nonzero lower bounds, failed repair), so

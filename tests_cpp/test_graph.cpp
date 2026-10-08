@@ -295,6 +295,21 @@ static void test_degenerate_graphs() {
         g.solve();
         CHECK(g.total_cost() == 1, "capacities set after construction");
     }
+    {   // costs never set: they are zero for the solver too (LEMON's own
+        // default is 1, which solve() used to paper over by re-pushing costs)
+        std::vector<int> s{0, 1}, e{1, 2};
+        G64 g(3, s, e);
+        std::vector<int64_t> sup{2, 0, -2}, caps{5, 5};
+        g.set_node_supply(sup);
+        g.set_edge_capacities(caps);
+        g.solve();
+        CHECK(g.total_cost() == 0, "default costs: total %lld", (long long)g.total_cost());
+        CHECK(take(g.get_edge_flows()) == (std::vector<int64_t>{2, 2}), "default costs flows");
+        std::vector<int64_t> costs{3, 4};
+        g.set_edge_costs(costs);
+        g.solve();
+        CHECK(g.total_cost() == 2 * 7, "costs set after a solve: %lld", (long long)g.total_cost());
+    }
     {   // zero nodes
         std::vector<int> s, e;
         G64 g(0, s, e);
