@@ -421,6 +421,11 @@ public:
     // supplies, capacities and minimums.
     std::vector<char> infeasibility_cut() const {
         check_bounds();
+        // The empty problem is feasible (cf. solve()); LEMON's Circulation
+        // cannot even start on it -- its Elevator reads node 0 of an empty
+        // node list.
+        if (_no_nodes == 0)
+            return {};
         using G = lemon::StaticDigraph;
         using AM = G::ArcMap<T>;
         using NM = G::NodeMap<T>;

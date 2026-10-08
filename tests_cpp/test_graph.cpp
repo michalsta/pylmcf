@@ -319,6 +319,8 @@ static void test_degenerate_graphs() {
         g.set_edge_costs(none);
         g.solve();
         CHECK(g.total_cost() == 0, "empty graph");
+        CHECK(g.infeasibility_cut().empty(), "empty graph is feasible");
+        CHECK(take(g.get_node_potentials()).empty() && take(g.get_edge_flows()).empty(), "empty graph results");
     }
     {   // self-loop with negative-free cost never carries flow
         std::vector<int> s{0, 0}, e{0, 1};
