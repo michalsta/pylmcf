@@ -90,4 +90,20 @@ nb::ndarray<T, nb::numpy, nb::shape<-1>> create_empty_numpy_array(size_t size) {
     return nb::ndarray<T, nb::numpy, nb::shape<-1>>(data, {size}, capsule);
 }
 
+// Snapshot API shared by Graph and the LCT wrappers. Into variants avoid
+// allocations; all output arrays are writable, aligned, contiguous int64.
+template <typename Owner, typename T>
+nb::dict dual_snapshot(const Owner& owner, size_t n, size_t m) {
+    auto pi = create_empty_numpy_array<T>(n);
+    auto rc = create_empty_numpy_array<T>(m);
+    auto lower = create_empty_numpy_array<T>(m);
+    auto upper = create_empty_numpy_array<T>(m);
+    owner.dual_values(std::span<T>(pi.data(), n), std::span<T>(rc.data(), m),
+                      std::span<T>(lower.data(), m), std::span<T>(upper.data(), m));
+    nb::dict out;
+    out["potentials"] = pi; out["reduced_costs"] = rc;
+    out["lower_bound_multipliers"] = lower; out["upper_bound_multipliers"] = upper;
+    return out;
+}
+
 #endif // PYLMCF_PY_SUPPORT_H

@@ -31,6 +31,7 @@
 #include <cstdlib>
 
 #include <lemon/core.h>
+#include <pylmcf/dual_values.hpp>
 #include <lemon/math.h>
 
 #ifdef PYLMCF_PIVOT_STATS
@@ -1295,6 +1296,32 @@ namespace lemon {
     /// \pre \ref run() must be called before using this function.
     Cost potential(const Node& n) const {
       return _pi[_node_id[n]];
+    }
+
+    // pylmcf: read-only fast dual API. Valid after an OPTIMAL run/warmRun
+    // and until any solver input changes. No canonicalization or graph search.
+    Cost reducedCost(const Arc& a) const {
+      const int e = _arc_id[a];
+      return pylmcf::reducedCost(_cost[e], _pi[_source[e]], _pi[_target[e]]);
+    }
+    Cost lowerBoundMultiplier(const Arc& a) const {
+      return std::max(Cost(0), reducedCost(a));
+    }
+    Cost upperBoundMultiplier(const Arc& a) const {
+      return std::min(Cost(0), reducedCost(a));
+    }
+    void dualValues(std::span<Cost> pi, std::span<Cost> rc,
+                    std::span<Cost> lower, std::span<Cost> upper) const {
+      pylmcf::checkDualBuffers(size_t(_node_num), size_t(_arc_num), pi, rc, lower, upper);
+      if (_graph.maxNodeId() + 1 != _node_num || _graph.maxArcId() + 1 != _arc_num)
+        throw std::invalid_argument("Bulk dualValues requires dense graph IDs; use mapped accessors for sparse IDs");
+      for (NodeIt v(_graph); v != INVALID; ++v) pi[_graph.id(v)] = potential(v);
+      for (ArcIt a(_graph); a != INVALID; ++a) {
+        const auto e = _graph.id(a);
+        rc[e] = reducedCost(a);
+        lower[e] = std::max(Cost(0), rc[e]);
+        upper[e] = std::min(Cost(0), rc[e]);
+      }
     }
 
     /// \brief Copy the potential values (the dual solution) into the

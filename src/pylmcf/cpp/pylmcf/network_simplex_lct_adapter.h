@@ -110,6 +110,14 @@ class NetworkSimplexLCTAdapter {
   V flow(const Arc& a) const { return _s->flow(_g.id(a)); }
   C potential(const Node& v) const { return _s->potential(_g.id(v)); }
 
+  C reducedCost(const Arc& a) const { return _s->reducedCost(_g.id(a)); }
+  C lowerBoundMultiplier(const Arc& a) const { return _s->lowerBoundMultiplier(_g.id(a)); }
+  C upperBoundMultiplier(const Arc& a) const { return _s->upperBoundMultiplier(_g.id(a)); }
+  void dualValues(std::span<C> pi, std::span<C> rc,
+                  std::span<C> lower, std::span<C> upper) const {
+    _s->dualValues(pi, rc, lower, upper);
+  }
+
   int warmStartCount() const { return _s ? _s->warmCount() : 0; }
   int coldStartCount() const { return _s ? _s->coldCount() : 0; }
   int dualRepairCount() const { return 0; }    // Simple strategy: no repairs

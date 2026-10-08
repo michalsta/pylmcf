@@ -82,6 +82,10 @@ G.total_cost()  # 21
 G.potentials()  # np.array([-6, -5, 0]) — node potentials (dual solution)
 ```
 
+For performance-sensitive dual consumers, use `raw_potentials()`,
+`dual_values()` or allocation-free `dual_values_into()`. These are also exposed
+on both LCT variants. See [Fast dual certificates](docs/fast_duals.md).
+
 `potentials()` returns the dual solution in LEMON's convention: the reduced cost
 of edge `(u, v)` is `cost + pi[u] - pi[v]`, and complementary slackness holds
 against `result()` (reduced cost > 0 ⇒ flow at its minimum, < 0 ⇒ flow at

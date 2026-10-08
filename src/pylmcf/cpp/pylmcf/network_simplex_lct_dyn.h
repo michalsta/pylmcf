@@ -31,6 +31,8 @@
 #ifndef PYLMCF_NETWORK_SIMPLEX_LCT_DYN_H
 #define PYLMCF_NETWORK_SIMPLEX_LCT_DYN_H
 
+#include "dual_values.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -139,8 +141,34 @@ class NetworkSimplexLCTDyn {
 
   Cost totalCost() const { return _total; }
   Value flow(int arc_id) const { return _flowOut[arc_id]; }
+  // Materialize on demand: flow-only solves pay no potential-export cost.
+  // Reading the cache is O(1) after the first query in a solved generation.
+  Cost potential(int node) const {
+    if (!_piCacheValid) {
+      _piCache.resize(_n);
+      for (int u = 0; u < _n; ++u) _piCache[u] = _lct.sumToRoot(u);
+      _piCacheValid = true;
+    }
+    return _piCache[node];
+  }
   int warmCount() const { return _warmCnt; }
   int coldCount() const { return _coldCnt; }
+
+  Cost reducedCost(int arc) const {
+    return pylmcf::reducedCost(_cost[arc], potential(_src[arc]), potential(_tgt[arc]));
+  }
+  Cost lowerBoundMultiplier(int arc) const { return std::max(Cost(0), reducedCost(arc)); }
+  Cost upperBoundMultiplier(int arc) const { return std::min(Cost(0), reducedCost(arc)); }
+  void dualValues(std::span<Cost> pi, std::span<Cost> rc,
+                  std::span<Cost> lower, std::span<Cost> upper) const {
+    checkDualBuffers(size_t(_n), size_t(_m), pi, rc, lower, upper);
+    for (int v = 0; v < _n; ++v) pi[v] = potential(v);
+    for (int e = 0; e < _m; ++e) {
+      rc[e] = reducedCost(e);
+      lower[e] = std::max(Cost(0), rc[e]);
+      upper[e] = std::min(Cost(0), rc[e]);
+    }
+  }
 
  private:
   enum { ST_UPPER = -1, ST_TREE = 0, ST_LOWER = 1 };
@@ -293,9 +321,7 @@ class NetworkSimplexLCTDyn {
     if (_built) return;
     _m = (int)_src.size();
     _R = _n; _N = _n + 1;
-    Cost mx = 1;
-    for (int e = 0; e < _m; ++e) if (_cost[e] > mx) mx = _cost[e];
-    _BIGM = mx * Cost(_n + 2) * Cost(_m + 2) + 1;
+    _BIGM = simplexArtificialCost<Cost>(std::span<const Cost>(_cost.data(), _m), _n, _m);
     _src.resize(_m + _n); _tgt.resize(_m + _n);
     _cost.resize(_m + _n); _cap.resize(_m + _n);
     _state.assign(_m + _n, ST_LOWER);
@@ -557,6 +583,7 @@ class NetworkSimplexLCTDyn {
   }
 
   Status finish() {
+    _piCacheValid = false;
     if (_bad) return INFEASIBLE;                   // structural bail-out
     for (int u = 0; u < _n; ++u) {                // materialize all tree flows
       if (_predArc[u] >= 0 && _state[_predArc[u]] == ST_TREE)
@@ -588,11 +615,13 @@ class NetworkSimplexLCTDyn {
   std::vector<Value> _oldFlow, _prevSupply, _prevCap;
   bool _haveBasis = false;
   int _warmCnt = 0, _coldCnt = 0;
+  mutable std::vector<Cost> _piCache;
+  mutable bool _piCacheValid = false;
   std::vector<Cost> _piMemo;
   std::vector<int> _piStamp;
   int _piGen = 0, _priceNext = 0;
   bool _bad = false;
-  LCT _lct;
+  mutable LCT _lct;
   Cost _total = 0;
 #ifdef PYLMCF_DYN_DEBUG
   std::vector<Value> _fdbg;
