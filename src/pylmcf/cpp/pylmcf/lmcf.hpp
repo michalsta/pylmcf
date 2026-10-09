@@ -51,12 +51,12 @@ using LmcfCost = std::int64_t;
 // Returns the optimal total cost (in the wide cost type, never the narrow T).
 template <template <typename...> class Solver, typename T, bool validate_costs = false>
 LmcfCost lmcf_impl(
-    std::span<T> node_supply,
-    std::span<T> edges_starts,
-    std::span<T> edges_ends,
-    std::span<T> capacities,
-    std::span<T> minimums,
-    std::span<T> costs,
+    std::span<const T> node_supply,
+    std::span<const T> edges_starts,
+    std::span<const T> edges_ends,
+    std::span<const T> capacities,
+    std::span<const T> minimums,
+    std::span<const T> costs,
     std::span<T> result,
     std::span<LmcfCost> potentials = {}
     )

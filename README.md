@@ -91,6 +91,10 @@ all potentials optimal for the returned flows, the pointwise-largest with
 are bounded by path costs — LEMON's raw tree potentials can instead carry its
 internal 2^62 artificial cost on some nodes.
 
+Input arrays may be writable or read-only (including read-only NumPy memory
+maps); they must be contiguous and aligned to their element size. Returned flow
+and potential arrays are writable and own their data.
+
 All integer arrays in the OO API are **int64**, and the dtype is not converted for
 you — a mismatched array raises `TypeError`. Costs and minimums must be
 non-negative, costs at most 2^62 − 1 (network simplex's artificial arcs cost

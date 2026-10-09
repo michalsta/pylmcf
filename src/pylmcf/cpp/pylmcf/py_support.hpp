@@ -19,9 +19,10 @@ namespace nb = nanobind;
 // NOT request nb::c_contig here: that would make nanobind silently copy strided
 // inputs, hiding an allocation+copy on this performance-critical path. Instead we
 // accept the array as-is and fail loudly in numpy_to_span() if it is not
-// stride-1, since the std::span below assumes contiguous memory.
+// stride-1, since the std::span below assumes contiguous memory. Const elements
+// accept both writable and read-only buffers without requesting a copy.
 template <typename T>
-using ndarray_1d = nb::ndarray<T, nb::shape<-1>, nb::device::cpu>;
+using ndarray_1d = nb::ndarray<const T, nb::shape<-1>, nb::device::cpu>;
 
 // A typed pointer must be aligned to its element: dereferencing a misaligned
 // int64_t* is undefined behaviour, and the optimizer may act on it (e.g.
@@ -46,7 +47,7 @@ void require_aligned(const void* data, size_t size) {
 }
 
 template <typename T>
-std::span<T> numpy_to_span(ndarray_1d<T> array) {
+std::span<const T> numpy_to_span(ndarray_1d<T> array) {
     // stride(0) is in elements; a size<=1 array is trivially contiguous whatever
     // its reported stride.
     if (array.shape(0) > 1 && array.stride(0) != 1) {
@@ -58,7 +59,7 @@ std::span<T> numpy_to_span(ndarray_1d<T> array) {
             "`arr = np.ascontiguousarray(arr)`.");
     }
     require_aligned<T>(array.data(), array.shape(0));
-    return std::span<T>(static_cast<T*>(array.data()), array.shape(0));
+    return std::span<const T>(array.data(), array.shape(0));
 }
 
 template <typename T>

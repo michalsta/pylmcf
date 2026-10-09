@@ -19,8 +19,8 @@
 #include "py_support.hpp"
 #endif
 
-inline lemon::StaticDigraph make_lemon_graph(LEMON_INDEX no_nodes, const std::span<LEMON_INDEX> &edge_starts,
-    const std::span<LEMON_INDEX> &edge_ends) {
+inline lemon::StaticDigraph make_lemon_graph(LEMON_INDEX no_nodes, const std::span<const LEMON_INDEX> &edge_starts,
+    const std::span<const LEMON_INDEX> &edge_ends) {
     const size_t no_edges = edge_starts.size();
 
     if (no_nodes < 0)
@@ -97,8 +97,8 @@ private:
     typename Solver::WarmRepair _warm_repair = Solver::WarmRepair::Dual;
 
 public:
-    Graph(LEMON_INDEX no_nodes, const std::span<LEMON_INDEX> &edge_starts,
-        const std::span<LEMON_INDEX> &edge_ends):
+    Graph(LEMON_INDEX no_nodes, const std::span<const LEMON_INDEX> &edge_starts,
+        const std::span<const LEMON_INDEX> &edge_ends):
 
         _no_nodes(no_nodes),
         _edge_starts(edge_starts.begin(), edge_starts.end()),
@@ -143,7 +143,7 @@ public:
         return _edge_ends;
     }
 
-    void set_node_supply(const std::span<T> &node_supply) {
+    void set_node_supply(const std::span<const T> &node_supply) {
         if (node_supply.size() != static_cast<size_t>(no_nodes()))
             throw std::invalid_argument("Node supply must have the same size as the number of nodes");
 
@@ -182,7 +182,7 @@ public:
     // branch-free, so it vectorizes (even on baseline x86-64, where SSE2 has
     // no 64-bit compare) and reads the input only once.
     template <typename Map>
-    T store_or(Map& map, const std::span<T>& values) {
+    T store_or(Map& map, const std::span<const T>& values) {
 #if defined(__GNUC__) && !defined(__clang__) && defined(__aarch64__)
         // GCC does not split this OR reduction into independent accumulators
         // on AArch64, so a single one is a loop-carried dependency bound by
@@ -226,7 +226,7 @@ public:
         }
     }
 
-    void set_edge_capacities(const std::span<T> &capacities) {
+    void set_edge_capacities(const std::span<const T> &capacities) {
         if (capacities.size() != static_cast<size_t>(no_edges()))
             throw std::invalid_argument("Capacities must have the same size as the number of edges");
 
@@ -239,7 +239,7 @@ public:
         _solved = false;
     }
 
-    void set_edge_minimums(const std::span<T> &minimums) {
+    void set_edge_minimums(const std::span<const T> &minimums) {
         if (minimums.size() != static_cast<size_t>(no_edges()))
             throw std::invalid_argument("Minimums must have the same size as the number of edges");
 
@@ -272,7 +272,7 @@ public:
         return std::span<T>(data, no_edges());
     }
 
-    void set_edge_costs(const std::span<T> &costs) {
+    void set_edge_costs(const std::span<const T> &costs) {
         if (costs.size() != static_cast<size_t>(no_edges()))
             throw std::invalid_argument("Costs must have the same size as the number of edges");
 

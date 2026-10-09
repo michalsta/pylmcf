@@ -2,7 +2,9 @@
 
 All names below are available from both `pylmcf` and `pylmcf.pylmcf_cpp`.
 All input arrays must be one-dimensional, contiguous CPU arrays with exact
-`np.int64` dtype. Implicit dtype conversion is disabled. The wrappers own
+`np.int64` dtype and must be aligned to their element size. Writable and read-only
+arrays, including read-only memory maps, are accepted without a conversion copy.
+Implicit dtype conversion is disabled. The wrappers own
 copies of stateful inputs, and returned arrays own their data.
 
 ## LCT network simplex
