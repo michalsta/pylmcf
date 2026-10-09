@@ -43,8 +43,7 @@ struct ChainSolver1D {
   };
 
   static Cost solve(const std::vector<Point>& pts, Cost kappa) {
-    Flows f;
-    return run(pts, kappa, &f);
+    return run(pts, kappa, nullptr);
   }
   static Flows solveFull(const std::vector<Point>& pts, Cost kappa) {
     Flows f;
