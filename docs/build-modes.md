@@ -68,17 +68,35 @@ one built from an sdist and the rest from wheels, a stale editable install left
 over from an experiment, a `WNET_NB_LINKED=ON` sanitizer build sitting in a venv
 whose other packages came from wheels.
 
-### The stable-ABI tag caveat on linked builds
+### Wheel tags follow the build mode
 
-Every linked path drops the `wheel.py-api` request, because nanobind refuses a
-linked build targeting the classic 3.10/3.11 stable ABI. musl is where this
-actually bites — it is the only linked path on which scikit-build-core honours
-`py-api` at all.
+The in-tree `_pylmcf_build` backend selects the Python ABI before every wheel
+and editable hook, including metadata preparation. It uses the same
+`_pylmcf_metadata.build_mode()` selector as runtime dependency metadata and
+CMake:
 
-**scikit-build-core still *tags* such a wheel `cp310-abi3` while the extension
-inside is version-specific.** A musl-built wheel must therefore be installed and
-discarded — never republished, never reused across Python versions. CMake emits a
-warning when it drops the request.
+| Mode | `wheel.py-api` | Wheel ABI |
+|---|---|---|
+| Split, ordinary CPython | `cp310` | `cp310-abi3` |
+| Split, free-threaded CPython 3.15+ | `cp315t` | `cp315-abi3t` |
+| Linked | empty | the building interpreter's native ABI |
+
+A linked build on CPython 3.14 produces a `cp314-cp314` wheel containing a
+CPython 3.14 extension. musl, 32-bit Windows, PyPy, and older free-threaded
+interpreters therefore get correctly tagged wheels when building from source;
+pip can cache them without promising compatibility with other Python versions.
+
+Forced linked builds work with `-Ccmake.define.WNET_NB_LINKED=ON` or
+`CMAKE_ARGS=-DWNET_NB_LINKED=ON`. The wrapper resolves scikit-build-core's
+settings and CMake arguments, pins the selected option to avoid stale CMake
+cache values, and omits `nanobind-backend` from linked-wheel dependencies.
+Conflicting ABI overrides are rejected. CMake also rejects a linked build with
+a remaining stable-ABI request instead of silently changing the extension ABI.
+
+The CI artifact checker compares filename tags with the wheel's `WHEEL` header,
+checks the extension suffix and backend dependency, and runs before installation
+in the source fallback lanes. Published split wheels and forced-linked and
+32-bit Windows builds are checked too.
 
 ---
 
@@ -142,9 +160,9 @@ can express "not a free-threaded interpreter". A static requirement made
 resolution fail on free-threaded CPython 3.14 *before a compiler was reached* —
 and building from the sdist is the only install path those interpreters have.
 
-`_pylmcf_metadata._split_mode()` mirrors the `NB_MODE` selection in
-`CMakeLists.txt`. **The two must be kept in step.** The libc test lives in one
-place only — `_pylmcf_metadata.is_musl()`, which CMake calls through
+The backend wrapper, metadata provider, and CMake all call
+`_pylmcf_metadata.build_mode()`. The libc test lives in one place only,
+`_pylmcf_metadata.is_musl()`. CMake calls the selector through
 `Python_EXECUTABLE`, treating a failed probe as a hard error rather than guessing.
 
 ---
@@ -159,7 +177,7 @@ installs in editable/development mode. It uses
 `SKBUILD_BUILD_DIR=_skbuild_<host>_<venv>` so the persistent CMake directory is
 keyed on both hostname and active venv — the repo is often shared across machines
 over NFS, and each venv has its own Python ABI and nanobind. It falls back to an
-isolated build if `scikit_build_core` or `nanobind` are missing from the venv.
+isolated build if its build dependencies are missing or too old in the venv.
 
 Requirements for a source build: **Python 3.10+ and a C++20 compiler.**
 

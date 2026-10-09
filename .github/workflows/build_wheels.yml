@@ -104,6 +104,9 @@ jobs:
           # dies in arraytypes.c: "Did not find correct pointer sized integer".
           CIBW_SKIP: "*-musllinux_* *-win32 cp310-win_arm64"
 
+      - name: Check wheel tags and extension ABIs
+        run: python .github/scripts/check_wheel_abi.py --mode split wheelhouse
+
       - uses: actions/upload-artifact@v4
         with:
           name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
@@ -284,7 +287,9 @@ jobs:
           python3 -m venv /venv
           /venv/bin/python -VV
           /venv/bin/python -m pip install --upgrade pip
-          /venv/bin/python -m pip install -v dist/*.tar.gz
+          /venv/bin/python -m pip wheel --no-deps --wheel-dir linked-wheels -v dist/*.tar.gz
+          /venv/bin/python .github/scripts/check_wheel_abi.py --mode linked linked-wheels
+          /venv/bin/python -m pip install linked-wheels/*.whl
 
       - name: Assert musl was detected and the backend was not required
         # If _pylmcf_metadata.is_musl() had missed, the install above would
@@ -337,7 +342,9 @@ jobs:
         run: |
           python -VV
           python -m pip install --upgrade pip
-          python -m pip install -v dist/*.tar.gz
+          python -m pip wheel --no-deps --wheel-dir linked-wheels -v dist/*.tar.gz
+          python .github/scripts/check_wheel_abi.py --mode linked linked-wheels
+          python -m pip install linked-wheels/*.whl
 
       - name: Assert the backend was not required
         # A linked build embeds nanobind; pulling nanobind-backend in here would
@@ -384,7 +391,9 @@ jobs:
         run: |
           python -VV
           python -m pip install --upgrade pip
-          python -m pip install -v dist/*.tar.gz
+          python -m pip wheel --no-deps --wheel-dir linked-wheels -v dist/*.tar.gz
+          python .github/scripts/check_wheel_abi.py --mode linked linked-wheels
+          python -m pip install linked-wheels/*.whl
 
       - name: Smoke-test the compiled extension
         # Run from a scratch directory so the import resolves to the installed
@@ -398,3 +407,43 @@ jobs:
         run: |
           python -m pip install pytest networkx
           python -m pytest tests/ -q
+
+  # Check both forced linked mode and the automatic 32-bit Windows fallback.
+  # No runtime dependencies are installed: this lane inspects build artifacts,
+  # so absence of a NumPy win32 wheel cannot mask the ABI regression.
+  test_wheel_linked:
+    name: Linked wheel ABI on ${{ matrix.os }} (${{ matrix.architecture }})
+    if: github.repository_owner == 'michalsta'
+    needs: [build_sdist]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: "3.14"
+            architecture: x64
+            force-linked: "ON"
+          - os: windows-latest
+            python: "3.13"
+            architecture: x86
+            force-linked: "OFF"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+          architecture: ${{ matrix.architecture }}
+      - uses: actions/download-artifact@v5
+        with:
+          name: cibw-sdist
+          path: dist
+      - name: Build a linked wheel from the sdist
+        run: >-
+          python -c "import glob, subprocess, sys;
+          subprocess.check_call([sys.executable, '-m', 'pip', 'wheel', '--no-deps',
+          '--wheel-dir', 'linked-wheels',
+          '-Ccmake.define.WNET_NB_LINKED=${{ matrix.force-linked }}',
+          glob.glob('dist/*.tar.gz')[0]])"
+      - name: Check wheel tags and extension ABI
+        run: python .github/scripts/check_wheel_abi.py --mode linked linked-wheels

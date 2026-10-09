@@ -17,10 +17,10 @@ requirement is decided here, against the interpreter doing the build, and
 ``dependencies`` is reported as ``Dynamic`` (PEP 643) so that a resolver
 re-evaluates it for each wheel instead of trusting the sdist's PKG-INFO.
 
-``WNET_NB_LINKED=ON`` also forces a linked build, and is deliberately not
-considered here: it exists for local sanitizer and debug builds, never for
-distributable wheels, and an unused requirement on an interpreter the backend
-does support is harmless.
+The in-tree backend wrapper resolves explicit ``WNET_NB_LINKED`` settings
+before invoking this provider. Its scoped environment communicates that choice
+here; CMake calls the same ``build_mode()`` with its resolved option. Wheel
+ABI selection and runtime dependencies therefore follow one decision.
 
 Wired up in pyproject.toml as::
 
@@ -52,7 +52,7 @@ TYPE_CHECKING = False
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-__all__ = ["dynamic_metadata", "dynamic_wheel", "is_musl", "is_win32"]
+__all__ = ["build_mode", "dynamic_metadata", "dynamic_wheel", "is_musl", "is_win32"]
 
 # Matches the floor nanobind reports at configure time ("split-mode extensions
 # require 'nanobind-backend>=X.Y' at runtime"); keep the two in step.
@@ -101,20 +101,20 @@ def is_win32() -> bool:
     return sysconfig.get_platform() == "win32"
 
 
-def _split_mode() -> bool:
-    """Mirror the NB_MODE selection in CMakeLists.txt, in the same order."""
-    if sys.implementation.name != "cpython":
-        return False
-    if is_musl():
-        # nanobind-backend publishes no musllinux wheel and no sdist at all, so
-        # split mode is unsatisfiable here however the install is attempted.
-        return False
-    if is_win32():
-        # No 32-bit Windows backend wheel exists, so the same applies.
-        return False
-    if sysconfig.get_config_var("Py_GIL_DISABLED") and sys.version_info < (3, 15):
-        return False
-    return True
+def build_mode(force_linked: bool | None = None) -> str:
+    """The shared mode decision for the backend, metadata provider, and CMake."""
+    if force_linked is None:
+        selected = os.environ.get("_PYLMCF_BUILD_MODE")
+        if selected is not None:
+            if selected not in {"linked", "split", "split-free-threaded"}:
+                raise ValueError(f"Unknown pylmcf build mode: {selected!r}")
+            return selected
+        force_linked = False
+    if force_linked or sys.implementation.name != "cpython" or is_musl() or is_win32():
+        return "linked"
+    if sysconfig.get_config_var("Py_GIL_DISABLED"):
+        return "linked" if sys.version_info < (3, 15) else "split-free-threaded"
+    return "split"
 
 
 def dynamic_metadata(
@@ -137,7 +137,7 @@ def dynamic_metadata(
         msg = f"This provider takes no settings, got {sorted(settings)}"
         raise RuntimeError(msg)
     dependencies = list(BASE_DEPENDENCIES)
-    if _split_mode():
+    if build_mode() != "linked":
         dependencies.append(BACKEND_REQUIREMENT)
     return {"dependencies": dependencies}
 

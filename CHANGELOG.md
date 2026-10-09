@@ -22,6 +22,12 @@ Changes since 1.2.1.
 
 ### Fixed
 
+- Linked builds now produce wheels tagged for the building interpreter, including
+  musl, 32-bit Windows, PyPy, older free-threaded Python, and forced linked builds.
+  Previously, some linked wheels advertised `cp310-abi3` compatibility despite
+  containing a Python-specific extension. Build mode, wheel tags, and runtime
+  dependencies now share one selector, and conflicting ABI requests are rejected.
+
 - Rejected `Graph` setters leave the problem and retained solution unchanged.
   Previously, an invalid update could partially overwrite a map and cause a
   later warm solve to return a stale, suboptimal flow.
