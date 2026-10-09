@@ -104,6 +104,13 @@ jobs:
           # dies in arraytypes.c: "Did not find correct pointer sized integer".
           CIBW_SKIP: "*-musllinux_* *-win32 cp310-win_arm64"
 
+      # cibuildwheel installs framework Pythons on macOS, which can replace the
+      # host's unversioned python symlink. Restore a known host interpreter for
+      # the artifact check after those installers have finished.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
       - name: Check wheel tags and extension ABIs
         run: python .github/scripts/check_wheel_abi.py --mode split wheelhouse
 
