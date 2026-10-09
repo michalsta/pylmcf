@@ -35,6 +35,9 @@ see [the Python solver APIs](docs/python-solvers.md).
 
 ### Documentation
 
+See the [changelog](https://github.com/michalsta/pylmcf/blob/main/CHANGELOG.md)
+for release notes and migration details.
+
 | | |
 |---|---|
 | [Warm restarts](https://github.com/michalsta/pylmcf/blob/main/docs/warm-restart.md) | How re-solving reuses the basis, the repair strategies, the counters and the two policy knobs. Start here — it is on by default and affects every re-solve. |
