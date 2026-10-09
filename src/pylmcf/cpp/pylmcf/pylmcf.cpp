@@ -272,5 +272,14 @@ NB_MODULE(pylmcf_cpp, m) {
         .def("total_cost", &Graph<int64_t>::total_cost)
         .def("result", &Graph<int64_t>::extract_result_py)
         .def("potentials", &Graph<int64_t>::extract_potentials_py)
+        .def("raw_potentials", &Graph<int64_t>::raw_potentials_py,
+             "Raw simplex potentials: no canonicalization; fresh snapshot after solve.")
+        .def("reduced_costs", [](const Graph<int64_t>& g) { return g.arc_duals_py(0); })
+        .def("lower_bound_multipliers", [](const Graph<int64_t>& g) { return g.arc_duals_py(1); })
+        .def("upper_bound_multipliers", [](const Graph<int64_t>& g) { return g.arc_duals_py(2); })
+        .def("dual_values", &Graph<int64_t>::dual_values_py)
+        .def("dual_values_into", &Graph<int64_t>::dual_values_into_py,
+             arg("potentials").noconvert(), arg("reduced_costs").noconvert(),
+             arg("lower_bound_multipliers").noconvert(), arg("upper_bound_multipliers").noconvert())
         .def("__str__", &Graph<int64_t>::to_string);
 }

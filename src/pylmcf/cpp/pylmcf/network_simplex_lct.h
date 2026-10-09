@@ -38,6 +38,8 @@
 #ifndef PYLMCF_NETWORK_SIMPLEX_LCT_H
 #define PYLMCF_NETWORK_SIMPLEX_LCT_H
 
+#include "dual_values.hpp"
+
 #include <pylmcf/link_cut_tree.h>
 
 #include <limits>
@@ -127,6 +129,22 @@ class NetworkSimplexLCT {
   // artificial root guarantees).  Cached post-solve so this is O(1)/const.
   Cost potential(int node) const { return _piCache[node]; }
 
+  Cost reducedCost(int arc) const {
+    return pylmcf::reducedCost(_cost[arc], potential(_src[arc]), potential(_tgt[arc]));
+  }
+  Cost lowerBoundMultiplier(int arc) const { return std::max(Cost(0), reducedCost(arc)); }
+  Cost upperBoundMultiplier(int arc) const { return std::min(Cost(0), reducedCost(arc)); }
+  void dualValues(std::span<Cost> pi, std::span<Cost> rc,
+                  std::span<Cost> lower, std::span<Cost> upper) const {
+    checkDualBuffers(size_t(_n), size_t(_m), pi, rc, lower, upper);
+    for (int v = 0; v < _n; ++v) pi[v] = potential(v);
+    for (int e = 0; e < _m; ++e) {
+      rc[e] = reducedCost(e);
+      lower[e] = std::max(Cost(0), rc[e]);
+      upper[e] = std::min(Cost(0), rc[e]);
+    }
+  }
+
  private:
   enum { ST_UPPER = -1, ST_TREE = 0, ST_LOWER = 1 };
 
@@ -138,10 +156,7 @@ class NetworkSimplexLCT {
     _R = _n;
     _N = _n + 1;
     _INF = std::numeric_limits<Value>::max() / 4;
-    Cost mx = 1;
-    for (int e = 0; e < _m; ++e)
-      if (_cost[e] > mx) mx = _cost[e];
-    _BIGM = mx * Cost(_n + 2) * Cost(_m + 2) + 1;
+    _BIGM = simplexArtificialCost<Cost>(std::span<const Cost>(_cost.data(), _m), _n, _m);
 
     _src.resize(_m + _n);
     _tgt.resize(_m + _n);

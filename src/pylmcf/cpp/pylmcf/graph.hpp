@@ -333,6 +333,7 @@ public:
 #endif
 
     void solve(){
+        _solved = false;
         assert(costs_in_sync() && "solver costs out of sync with costs_map");
         check_bounds();
         // LEMON's init() rejects an empty node set and run() reports that as
@@ -506,6 +507,40 @@ public:
         }
         return out;
     }
+
+    // Fast raw solver values, in public node/arc order. The checked Python
+    // methods reject stale state; header consumers own the same lifetime rule.
+    void dual_values(std::span<T> pi, std::span<T> rc,
+                     std::span<T> lower, std::span<T> upper) const {
+        if (!_solved) throw std::runtime_error("solve() must succeed before reading dual values");
+        solver.dualValues(pi, rc, lower, upper);
+    }
+#ifdef INCLUDE_NANOBIND_STUFF
+    auto dual_values_py() const {
+        return dual_snapshot<Graph<T>, T>(*this, no_nodes(), no_edges());
+    }
+    void dual_values_into_py(writable_ndarray_1d<T> pi, writable_ndarray_1d<T> rc,
+                             writable_ndarray_1d<T> lower, writable_ndarray_1d<T> upper) const {
+        dual_values(writable_numpy_to_span(pi), writable_numpy_to_span(rc),
+                    writable_numpy_to_span(lower), writable_numpy_to_span(upper));
+    }
+    auto raw_potentials_py() const {
+        if (!_solved) throw std::runtime_error("solve() must succeed before reading dual values");
+        auto out = create_empty_numpy_array<T>(no_nodes());
+        for (LEMON_INDEX v = 0; v < no_nodes(); ++v)
+            out.data()[v] = solver.potential(lemon_graph.nodeFromId(v));
+        return out;
+    }
+    auto arc_duals_py(int kind) const {
+        if (!_solved) throw std::runtime_error("solve() must succeed before reading dual values");
+        auto out = create_empty_numpy_array<T>(no_edges());
+        for (LEMON_INDEX e = 0; e < no_edges(); ++e) {
+            const T rc = solver.reducedCost(lemon_graph.arcFromId(e));
+            out.data()[e] = kind == 0 ? rc : kind == 1 ? std::max(T(0), rc) : std::min(T(0), rc);
+        }
+        return out;
+    }
+#endif
 
     std::string to_string() const {
         std::string out = "Graph with " + std::to_string(no_nodes()) + " nodes and " + std::to_string(no_edges()) + " edges\n";

@@ -24,6 +24,10 @@ namespace nb = nanobind;
 template <typename T>
 using ndarray_1d = nb::ndarray<const T, nb::shape<-1>, nb::device::cpu>;
 
+// Output buffers must be writable even though caller inputs may be read-only.
+template <typename T>
+using writable_ndarray_1d = nb::ndarray<T, nb::shape<-1>, nb::device::cpu>;
+
 // A typed pointer must be aligned to its element: dereferencing a misaligned
 // int64_t* is undefined behaviour, and the optimizer may act on it (e.g.
 // peeling a vectorized loop to a 16-byte boundary assuming 8-byte alignment,
@@ -63,6 +67,13 @@ std::span<const T> numpy_to_span(ndarray_1d<T> array) {
 }
 
 template <typename T>
+std::span<T> writable_numpy_to_span(writable_ndarray_1d<T> array) {
+    // Reuse the input validation without casting away const on the output.
+    numpy_to_span<T>(ndarray_1d<T>(array));
+    return std::span<T>(array.data(), array.shape(0));
+}
+
+template <typename T>
 std::vector<T> numpy_to_vector(nb::ndarray<T, nb::shape<-1>> array) {
     require_aligned<T>(array.data(), array.shape(0));
     return std::vector<T>(static_cast<T*>(array.data()), static_cast<T*>(array.data()) + array.shape(0));
@@ -89,6 +100,22 @@ nb::ndarray<T, nb::numpy, nb::shape<-1>> create_empty_numpy_array(size_t size) {
     T* data = new T[size];
     nb::capsule capsule(data, [](void* data) noexcept { delete[] static_cast<T*>(data); });
     return nb::ndarray<T, nb::numpy, nb::shape<-1>>(data, {size}, capsule);
+}
+
+// Snapshot API shared by Graph and the LCT wrappers. Into variants avoid
+// allocations; all output arrays are writable, aligned, contiguous int64.
+template <typename Owner, typename T>
+nb::dict dual_snapshot(const Owner& owner, size_t n, size_t m) {
+    auto pi = create_empty_numpy_array<T>(n);
+    auto rc = create_empty_numpy_array<T>(m);
+    auto lower = create_empty_numpy_array<T>(m);
+    auto upper = create_empty_numpy_array<T>(m);
+    owner.dual_values(std::span<T>(pi.data(), n), std::span<T>(rc.data(), m),
+                      std::span<T>(lower.data(), m), std::span<T>(upper.data(), m));
+    nb::dict out;
+    out["potentials"] = pi; out["reduced_costs"] = rc;
+    out["lower_bound_multipliers"] = lower; out["upper_bound_multipliers"] = upper;
+    return out;
 }
 
 #endif // PYLMCF_PY_SUPPORT_H

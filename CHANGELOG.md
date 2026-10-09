@@ -11,6 +11,10 @@ Changes since 1.2.1.
   `solve_chain_1d`. The dynamic-tree variant remains experimental.
 - Canonical dual potentials through `Graph.potentials()` and
   `return_potentials=True` on all four functional LEMON solver APIs.
+- Checked raw dual certificates on `Graph`, `NetworkSimplexLCT`, and
+  `NetworkSimplexLCTDyn`, including reusable writable output buffers through
+  `dual_values_into()`. The LCT functional APIs support `return_duals=True`;
+  canonical potentials retain their existing contract.
 - Python controls for supply type, pivot rule, warm-repair strategy, repair time
   budget, and violation limit, plus warm/cold repair counters and
   `Graph.infeasibility_cut()` for diagnosing infeasible problems.
@@ -28,6 +32,8 @@ Changes since 1.2.1.
   containing a Python-specific extension. Build mode, wheel tags, and runtime
   dependencies now share one selector, and conflicting ABI requests are rejected.
 
+- LCT artificial costs account for the largest absolute real cost and use
+  checked multiplication, avoiding false infeasibility and signed overflow.
 - Rejected `Graph` setters leave the problem and retained solution unchanged.
   Previously, an invalid update could partially overwrite a map and cause a
   later warm solve to return a stale, suboptimal flow.

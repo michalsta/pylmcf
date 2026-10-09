@@ -127,6 +127,29 @@ public:
         for (size_t e = 0; e < starts_.size(); ++e) out.data()[e] = solver_->flow(int(e));
         return out;
     }
+    void dual_values(std::span<Int> pi, std::span<Int> rc,
+                     std::span<Int> lower, std::span<Int> upper) const {
+        require_solved(); solver_->dualValues(pi, rc, lower, upper);
+    }
+    auto dual_values_py() const { return dual_snapshot<LCTSolver, Int>(*this, supply_.size(), starts_.size()); }
+    void dual_values_into_py(writable_ndarray_1d<Int> pi, writable_ndarray_1d<Int> rc,
+                             writable_ndarray_1d<Int> lower, writable_ndarray_1d<Int> upper) const {
+        dual_values(writable_numpy_to_span(pi), writable_numpy_to_span(rc),
+                    writable_numpy_to_span(lower), writable_numpy_to_span(upper));
+    }
+    auto raw_potentials() const {
+        require_solved(); auto out = create_empty_numpy_array<Int>(supply_.size());
+        for (size_t v = 0; v < supply_.size(); ++v) out.data()[v] = solver_->potential(int(v));
+        return out;
+    }
+    auto arc_duals(int kind) const {
+        require_solved(); auto out = create_empty_numpy_array<Int>(starts_.size());
+        for (size_t e = 0; e < starts_.size(); ++e) {
+            auto rc = solver_->reducedCost(int(e));
+            out.data()[e] = kind == 0 ? rc : kind == 1 ? std::max(Int(0), rc) : std::min(Int(0), rc);
+        }
+        return out;
+    }
     Int total_cost() const { require_solved(); return solver_->totalCost(); }
     int warm_start_count() const { return warm_; }
     int cold_start_count() const { return cold_; }
@@ -145,14 +168,26 @@ void bind_lct(nb::module_& m, const char* class_name, const char* function_name,
         .def("solve", &Wrapper::solve, arg("warm") = true)
         .def("result", &Wrapper::result)
         .def("total_cost", &Wrapper::total_cost)
+        .def("raw_potentials", &Wrapper::raw_potentials)
+        .def("reduced_costs", [](const Wrapper& s) { return s.arc_duals(0); })
+        .def("lower_bound_multipliers", [](const Wrapper& s) { return s.arc_duals(1); })
+        .def("upper_bound_multipliers", [](const Wrapper& s) { return s.arc_duals(2); })
+        .def("dual_values", &Wrapper::dual_values_py)
+        .def("dual_values_into", &Wrapper::dual_values_into_py,
+             arg("potentials").noconvert(), arg("reduced_costs").noconvert(),
+             arg("lower_bound_multipliers").noconvert(), arg("upper_bound_multipliers").noconvert())
         .def("warm_start_count", &Wrapper::warm_start_count)
         .def("cold_start_count", &Wrapper::cold_start_count);
-    m.def(function_name, [](Array supply, Array starts, Array ends, Array caps, Array costs) {
+    m.def(function_name, [](Array supply, Array starts, Array ends, Array caps, Array costs,
+                            bool return_duals) -> nb::object {
         Wrapper solver(supply, starts, ends, caps, costs);
         solver.solve();
-        return solver.result();
+        auto flows = solver.result();
+        if (return_duals) return nb::make_tuple(flows, solver.dual_values_py());
+        return nb::cast(flows);
     }, doc, arg("node_supply").noconvert(), arg("edge_starts").noconvert(),
-       arg("edge_ends").noconvert(), arg("capacities").noconvert(), arg("costs").noconvert());
+       arg("edge_ends").noconvert(), arg("capacities").noconvert(), arg("costs").noconvert(),
+       arg("return_duals") = false);
 }
 
 inline nb::dict solve_chain_1d(Array positions, Array empirical, Array theoretical, Int kappa) {
