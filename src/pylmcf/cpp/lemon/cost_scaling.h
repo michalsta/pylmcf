@@ -1061,11 +1061,13 @@ namespace lemon {
               rc = _cost[a] + pi_u - _pi[v];
               if (rc < 0) {
                 LargeCost nrc = static_cast<LargeCost>((-rc - 0.5) / _epsilon);
-                if (nrc < LargeCost(_max_rank)) {
-                  int new_rank_v = rank_u + static_cast<int>(nrc);
-                  if (new_rank_v > _rank[v]) {
-                    _rank[v] = new_rank_v;
-                  }
+                // Bound the accumulated path rank, not just this arc's
+                // increment. If it cannot fit in the buckets, abandon the
+                // heuristic and let the regular scaling phase proceed.
+                if (nrc >= LargeCost(_max_rank - rank_u)) return false;
+                int new_rank_v = rank_u + static_cast<int>(nrc);
+                if (new_rank_v > _rank[v]) {
+                  _rank[v] = new_rank_v;
                 }
               }
             }

@@ -26,6 +26,9 @@ Changes since 1.2.1.
 
 ### Fixed
 
+- CostScaling price refinement falls back to the regular scaling phase when an
+  accumulated path rank exceeds its bucket range, avoiding memory corruption
+  on valid problems with signed edge costs.
 - Linked builds now produce wheels tagged for the building interpreter, including
   musl, 32-bit Windows, PyPy, older free-threaded Python, and forced linked builds.
   Previously, some linked wheels advertised `cp310-abi3` compatibility despite

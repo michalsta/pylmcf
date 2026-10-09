@@ -19,6 +19,28 @@ SOLVERS = {
 }
 
 
+@pytest.mark.parametrize("dtype", [np.int32, np.int64])
+@pytest.mark.parametrize("return_potentials", [False, True])
+def test_cost_scaling_signed_chain_rank_overflow(dtype, return_potentials):
+    """A valid signed-cost chain must not overflow price-refinement buckets."""
+    supply = np.array([7, -2, -3, 2, 1, 1, -1, 1, 2, 0, -7, 6, 2, -9], dtype=dtype)
+    starts = np.arange(13, dtype=dtype)
+    ends = starts + 1
+    caps = np.array([14, 10, 4, 8, 10, 12, 10, 12, 16, 16, 2, 14, 18], dtype=dtype)
+    costs = np.array([-1, -3, 0, 0, -3, -2, -3, -1, 0, 1, -3, -1, -3], dtype=dtype)
+    result = pylmcf_cpp.lmcf_cost_scaling(
+        supply, starts, ends, caps, costs, return_potentials=return_potentials,
+    )
+    flows = result[0] if return_potentials else result
+    # The only feasible flow on a directed chain is the cumulative supply.
+    np.testing.assert_array_equal(flows, np.cumsum(supply)[:-1])
+    assert np.dot(flows, costs) == -99
+    if return_potentials:
+        from mcf_certify import certify
+
+        certify(14, starts, ends, supply, caps, costs, flows, result[1], -99)
+
+
 def solve(solver_name, supply, starts, ends, caps, costs, mins=None):
     """Call the named solver; return (flows, total_cost)."""
     fn = SOLVERS[solver_name]

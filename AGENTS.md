@@ -66,6 +66,12 @@ The backend selects `wheel.py-api = "cp315t"` for free-threaded split builds, pr
 
 ### The vendored LEMON is MODIFIED — do not replace it wholesale
 
+`cost_scaling.h` also guards accumulated path ranks in price refinement: if a
+rank would exceed the bucket array, the optional heuristic returns false and
+the normal scaling phase proceeds. Bounding only each arc's increment allowed
+valid signed-cost chains to corrupt memory. `test_lmcf.cpp` checks the reproducer
+and randomized signed-cost problems against CapacityScaling and dual certificates.
+
 `src/pylmcf/cpp/lemon/` is a vendored LEMON copy, but `network_simplex.h` carries substantial pylmcf-specific work that upstream does not have. Overwriting it with a stock LEMON release silently destroys the warm-restart machinery that `wnet` depends on. Additions:
 
 - **`warmRun(PivotRule, WarmRepair, costs_changed)`** — skip `init()`, patch the retained spanning-tree basis for new caps/supplies, then reoptimize. Falls back transparently to a cold `init()+start()`. Only meaningful for EQ supply (`_sum_supply == 0`); nonzero lower bounds always force the cold fallback (init()/finalizeOptimal() transform supplies and flows and the warm path re-applies neither). Pass `costs_changed=true` when costs were re-pushed since the last solve: tree potentials are recomputed and `start()` reoptimizes from the reused basis instead of taking the "repair succeeded ⇒ already optimal" fast path (which would silently return stale flows).

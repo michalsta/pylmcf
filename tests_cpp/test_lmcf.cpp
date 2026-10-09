@@ -227,6 +227,41 @@ static void unbounded_for() {
           solver_name(s), (long long)got);
 }
 
+template <typename T>
+static void check_signed_cost_scaling(const Instance& in, const std::string& ctx) {
+    auto sup = narrow<T>(in.supply), st = narrow<T>(in.starts), en = narrow<T>(in.ends);
+    auto cap = narrow<T>(in.caps), cost = narrow<T>(in.costs);
+    std::vector<T> mins, flows(in.starts.size());
+    std::vector<LmcfCost> pi(in.n);
+    const auto got = call_impl<Solver::CS, T>(sup, st, en, cap, mins, cost, flows, pi);
+    CHECK(got == oracle_cost(in), "%s: cost differs from CapacityScaling", ctx.c_str());
+    certify(in, narrow<int64_t>(flows), pi, got, ctx);
+}
+
+static void test_signed_cost_scaling(Rng& rng) {
+    // Price refinement used to bound each rank increment but not their sum
+    // along a path, reading/writing beyond its bucket array on this chain.
+    Instance chain;
+    chain.n = 14;
+    chain.starts = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+    chain.ends = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13};
+    chain.supply = {7, -2, -3, 2, 1, 1, -1, 1, 2, 0, -7, 6, 2, -9};
+    chain.caps = {14, 10, 4, 8, 10, 12, 10, 12, 16, 16, 2, 14, 18};
+    chain.costs = {-1, -3, 0, 0, -3, -2, -3, -1, 0, 1, -3, -1, -3};
+    chain.mins.assign(chain.starts.size(), 0);
+    check_signed_cost_scaling<int64_t>(chain, "signed chain int64");
+    check_signed_cost_scaling<int32_t>(chain, "signed chain int32");
+
+    for (int iter = 0; iter < 300; ++iter) {
+        const int n = static_cast<int>(rint(rng, 2, 40));
+        auto in = random_instance(rng, n, 3 * n, false);
+        for (auto& cost : in.costs) cost = rint(rng, -50, 50);
+        if (iter % 2) in = shuffled(rng, in);
+        check_signed_cost_scaling<int64_t>(in, lbl("signed random int64 %d", iter));
+        check_signed_cost_scaling<int32_t>(in, lbl("signed random int32 %d", iter));
+    }
+}
+
 static void test_validation() {
     using V = std::vector<int64_t>;
     validation_for<Solver::NS>();
@@ -310,5 +345,6 @@ int main() {
     section("validation", [] { test_validation(); }, true);
     section("narrow cost overflow", [] { test_narrow_cost_overflow(); });
     section("random", [&] { test_random(rng); });
+    section("signed cost scaling", [&] { test_signed_cost_scaling(rng); });
     return finish("test_lmcf");
 }
