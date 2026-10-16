@@ -1,0 +1,17 @@
+# UBSan ignorelist for the strict clang lane (cpp_lane.sh clang-asan-ubsan).
+# Byte-identical in pylmcf, wnet and wnetalign.
+#
+# The strict checks (unsigned wraparound, implicit conversions) flag behaviour
+# that is well defined and intended. Our headers and the vendored LEMON live
+# under the checkout, not /usr, and stay checked, except as listed below.
+
+# The standard library, e.g. the multiply-with-wrap in std::mt19937_64 seeding.
+src:/usr/*
+
+# wnet's software 128-bit integer (the MSVC fallback, tested everywhere with
+# -DWNET_FORCE_SOFT_INT128) is two's-complement arithmetic on unsigned limbs:
+# wraparound and high bits shifted out are its definition.
+[unsigned-integer-overflow]
+src:*/wnet/wide_int.hpp
+[unsigned-shift-base]
+src:*/wnet/wide_int.hpp

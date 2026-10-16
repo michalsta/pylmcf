@@ -69,26 +69,49 @@ These are the real correctness net for the solver work. They are not built by
 CMake and not collected by pytest; they are standalone programs.
 
 CI runs every suite on each push, in the `tests_cpp` job of `run_tests.yml`,
-under five sanitizer/hardening lanes (all on the self-hosted `ubuntu-ci:24.04`
-image, all tiers — the whole set costs a few minutes per lane):
+under ten lanes (all on the self-hosted `ubuntu-ci:24.04` image, all tiers — a
+few minutes per lane, the valgrind lanes longer). Every lane is defined once,
+in `.github/scripts/cpp_lane.sh`, which the job calls and which reproduces a
+lane locally:
+
+```bash
+.github/scripts/cpp_lane.sh clang-msan tests_cpp/run_all.sh   # MSAN_LIBCXX=<prefix>
+```
+
+gcc and clang run every tool both implement. All clang lanes use LLVM 22 from
+apt.llvm.org (Ubuntu's libc++ is linked `-Bsymbolic-functions`, which makes
+ASan report a bogus alloc-dealloc-mismatch on every thrown exception).
 
 | Lane | What it catches |
 |---|---|
-| gcc ASan+UBSan, `_GLIBCXX_ASSERTIONS`, `_GLIBCXX_SANITIZE_VECTOR` | out-of-bounds / use-after-free / leaks (LeakSanitizer is on — these are plain executables), reads past `size()` within capacity, UB |
-| gcc `_GLIBCXX_DEBUG` + `_FORTIFY_SOURCE=3`, stack protector, pattern-initialised locals, perturbed malloc | iterator invalidation and container preconditions; uninitialised reads made visible as wrong answers |
-| clang ASan+UBSan strict (`integer`, `implicit-conversion`, `float-divide-by-zero`, `local-bounds`, `nullability`) | wraparound and narrowing such as an int64 count truncated into LEMON's `int` index. System headers are excluded via `tests_cpp/ubsan-system-headers.ignorelist` (libstdc++'s RNG wraps on purpose) |
-| clang libc++ `_LIBCPP_HARDENING_MODE_DEBUG` + ASan+UBSan | the same on the other standard library. Uses LLVM 22 from apt.llvm.org: Ubuntu's libc++ is linked `-Bsymbolic-functions`, which makes ASan report a bogus alloc-dealloc-mismatch on every thrown exception |
-| clang MSan (origin tracking, use-after-dtor) | uninitialised reads, which ASan cannot see |
+| `gcc-asan-ubsan`: ASan+UBSan, `_GLIBCXX_ASSERTIONS`, `_GLIBCXX_SANITIZE_VECTOR` | out-of-bounds / use-after-free / leaks (LeakSanitizer is on — these are plain executables), reads past `size()` within capacity, UB |
+| `clang-asan-ubsan`: the same plus `integer`, `implicit-conversion`, `float-divide-by-zero`, `local-bounds`, `nullability` | wraparound and narrowing such as an int64 count truncated into LEMON's `int` index. Exclusions live in `.github/scripts/ubsan-system-headers.ignorelist` (the standard library, whose RNG wraps on purpose, and wnet's software int128) |
+| `gcc-hardened`, `clang-hardened`: `_GLIBCXX_DEBUG` + `_FORTIFY_SOURCE=3`, stack protector, stack-clash, CET, pattern-initialised locals, perturbed malloc | iterator invalidation and container preconditions; uninitialised reads made visible as wrong answers |
+| `clang-libcxx-hardened`: `_LIBCPP_HARDENING_MODE_DEBUG` + ASan+UBSan | the same on the other standard library |
+| `clang-msan`: MSan (origin tracking, use-after-dtor) against an MSan-instrumented libc++ | uninitialised reads, which ASan cannot see. The libc++ is built from the matching LLVM release by `.github/scripts/build_msan_libcxx.sh` and cached; against an uninstrumented standard library every value it initialises would read as uninitialised |
+| `gcc-tsan`, `clang-tsan`: ThreadSanitizer | data races between independent solvers on concurrent threads (`test_concurrent.cpp`), the free-threading use case, including the shared function-local statics that read the `PYLMCF_WARM_*` overrides |
+| `gcc-valgrind`, `clang-valgrind`: uninstrumented `-O1 -g` under memcheck | invalid accesses, uninitialised values and definite leaks, with no compiler instrumentation in the way |
 
-Deliberately absent: ASan's `pointer-compare`/`pointer-subtract` (they flag
-libstdc++'s own `vector::capacity()`), and TSan (no suite is threaded).
+The slow lanes (MSan, TSan, valgrind) set `SUITE_LIGHT`, which a suite manifest
+can use to shrink randomized trial counts. Deliberately absent: ASan's
+`pointer-compare`/`pointer-subtract` (they flag libstdc++'s own
+`vector::capacity()`).
 
-All lanes build through `tests_cpp/run_all.sh`, which compiles every suite in
-parallel and runs them all, reporting every failure rather than the first:
+All lanes build through `tests_cpp/run_all.sh` (a wrapper over
+`.github/scripts/run_cpp_suites.sh`, shared with wnet and wnetalign), which
+compiles every suite in parallel and runs them all, reporting every failure
+rather than the first:
 
 ```bash
-CXX=clang++ CXXFLAGS="-O1 -g -fsanitize=memory" tests_cpp/run_all.sh
+CXX=clang++ CXXFLAGS="-O1 -g -fsanitize=address" tests_cpp/run_all.sh
+CXXFLAGS="-O1 -g" RUN_PREFIX="valgrind --error-exitcode=99" tests_cpp/run_all.sh
 ```
+
+The Python extension is checked too, outside `tests_cpp`: the `sanitize` job
+builds it with ASan+UBSan or the hardened standard-library modes (gcc, clang
+with libstdc++, clang with libc++; lanes in `ci_matrix.py`) and runs the pytest
+suite against it, and the `valgrind` job runs the pytest suite under memcheck
+(`.github/scripts/valgrind_pytest.sh`, Tier B: main, nightly, releases).
 
 Each is a standalone `main()` that exits non-zero on failure, with its build line
 in the header comment. They all validate against an **independent oracle** —

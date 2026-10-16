@@ -39,8 +39,9 @@ Tiers, cheapest first, each a superset of the last (asserted below):
      gcc-vs-clang at *every* Python on an emulated arch is the least
      informative axis in the design.
 
-Output goes to $GITHUB_OUTPUT as `tier`, `tests` and `sanitize`; the last two
-are `{"include": [...]}` objects consumed by
+Output goes to $GITHUB_OUTPUT as `tier`, `tests`, `sanitize`, `valgrind` and
+`has_valgrind`; `tests`, `sanitize` and `valgrind` are `{"include": [...]}`
+objects consumed by
 `strategy: matrix: ${{ fromJson(needs.select.outputs.tests) }}`.
 """
 
@@ -55,8 +56,9 @@ import sys
 RELEASE_TIER = "C"  # pylmcf, wnet. Leaves (wnetalign, wnetdeconv) use "B":
 #                     a leaf release rides on the fact that its dependencies
 #                     already passed their own Tier C.
-HAS_SANITIZE = False  # only wnet has a sanitizer job; elsewhere the `sanitize`
-#                     output is emitted and ignored.
+HAS_SANITIZE = True  # packages with real C++ (pylmcf, wnet, wnetalign) run the
+#                     `sanitize` and `valgrind` jobs; wnetdeconv's C++ is a
+#                     stub and its outputs are emitted and ignored.
 
 TIER_ORDER = {"A": 0, "B": 1, "C": 2}
 
@@ -269,6 +271,19 @@ SANITIZE = [
 
 SANITIZE_DEFAULTS = dict(install_clang_rt=False, use_llvm_apt=False, llvm_apt_version="22")
 
+# ── valgrind over the Python suites ──────────────────────────────────────────
+# Memcheck on the ordinary (uninstrumented) extension, under the package's own
+# pytest suite: invalid reads/writes and uninitialised values anywhere in the
+# process, with no instrumented runtime that has to agree with the
+# interpreter. Both compilers, since codegen decides what an uninitialised
+# read turns into. Slow (tens of times native), so Tier B: main, nightly and
+# releases. MSan and TSan need an instrumented interpreter at this level and
+# run on the standalone C++ suites instead (the `tests_cpp` job).
+VALGRIND = [
+    dict(label="valgrind gcc", tier="B", cc="gcc", cxx="g++", apt_extra="valgrind"),
+    dict(label="valgrind clang", tier="B", cc="clang", cxx="clang++", apt_extra="valgrind clang"),
+]
+
 
 def pick_tier() -> str:
     """Which tier this run gets. CI_TIER (workflow_dispatch) overrides."""
@@ -314,6 +329,7 @@ def select(tier: str):
             "realdata": ln["realdata"],
         })
     san = []
+    vg = []
     if HAS_SANITIZE:
         for s in SANITIZE:
             if TIER_ORDER[s["tier"]] > want:
@@ -321,7 +337,8 @@ def select(tier: str):
             entry = dict(SANITIZE_DEFAULTS)
             entry.update(s)
             san.append(entry)
-    return tests, san
+        vg = [dict(v) for v in VALGRIND if TIER_ORDER[v["tier"]] <= want]
+    return tests, san, vg
 
 
 def audit(tier: str, tests):
@@ -384,6 +401,8 @@ def audit(tier: str, tests):
     for lo, hi in (("A", "B"), ("B", "C")):
         small = {(t["os"], t["python-version"], t["compiler"]) for t in select(lo)[0]}
         big = {(t["os"], t["python-version"], t["compiler"]) for t in select(hi)[0]}
+        if not {v["label"] for v in select(lo)[2]} <= {v["label"] for v in select(hi)[2]}:
+            errs.append(f"tier {lo} valgrind lanes are not a subset of tier {hi}'s")
         if not small <= big:
             errs.append(f"tier {lo} is not a subset of tier {hi}: {sorted(small - big)}")
 
@@ -396,13 +415,14 @@ def audit(tier: str, tests):
 
 def main():
     tier = pick_tier()
-    tests, san = select(tier)
+    tests, san, vg = select(tier)
     audit(tier, tests)
 
     est = sum(PLATFORMS[t["os"]]["minutes"] for t in tests)
     lines = [
         f"### CI tier {tier} - {len(tests)} test jobs"
-        + (f" + {len(san)} sanitizer jobs" if san else ""),
+        + (f" + {len(san)} sanitizer jobs" if san else "")
+        + (f" + {len(vg)} valgrind jobs" if vg else ""),
         "",
         f"Estimated {est} job-minutes of test lanes.",
         "",
@@ -415,6 +435,8 @@ def main():
         )
     for s in san:
         lines.append(f"| [sanitize] {s['label']} | 3.14 | {s['cc']} | x86-64 |")
+    for v in vg:
+        lines.append(f"| [{v['label']}] | 3.14 | {v['cc']} | x86-64 |")
     summary = "\n".join(lines)
     print(summary)
 
@@ -424,6 +446,8 @@ def main():
             fh.write(f"tier={tier}\n")
             fh.write("tests=" + json.dumps({"include": tests}, separators=(",", ":")) + "\n")
             fh.write("sanitize=" + json.dumps({"include": san}, separators=(",", ":")) + "\n")
+            fh.write("valgrind=" + json.dumps({"include": vg}, separators=(",", ":")) + "\n")
+            fh.write(f"has_valgrind={'true' if vg else 'false'}\n")
     step = os.environ.get("GITHUB_STEP_SUMMARY")
     if step:
         with open(step, "a", encoding="utf-8") as fh:

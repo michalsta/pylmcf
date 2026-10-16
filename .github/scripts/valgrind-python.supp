@@ -1,0 +1,9 @@
+# Valgrind suppressions for valgrind_pytest.sh. Byte-identical in pylmcf, wnet
+# and wnetalign.
+#
+# Deliberately empty. With PYTHONMALLOC=malloc, CPython 3.14, numpy and scipy
+# ran the whole pylmcf suite under memcheck with zero reports (2026-10-16), so
+# there is nothing to hide yet. Add an entry only for a report shown to be
+# outside our extensions, with a comment naming the library and the reason;
+# valgrind_pytest.sh runs with --gen-suppressions=all, so a failing job's log
+# already contains the block to paste.
