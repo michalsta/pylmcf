@@ -33,6 +33,14 @@
 #include <pylmcf/dual_values.hpp>
 #include <lemon/math.h>
 
+#ifndef PYLMCF_NOINLINE
+#  if defined(_MSC_VER)
+#    define PYLMCF_NOINLINE __declspec(noinline)
+#  else
+#    define PYLMCF_NOINLINE __attribute__((noinline))
+#  endif
+#endif
+
 #ifdef PYLMCF_PIVOT_STATS
 // pylmcf: diagnostic counters for A/B-ing pivot rules.  Not even declared
 // unless PYLMCF_PIVOT_STATS is defined at compile time.
@@ -1750,6 +1758,32 @@ namespace lemon {
       return cnt;
     }
 
+    // Child node of the most-violated basic arc (largest flow excess over
+    // [0, cap]), or -1 when the tree is primal feasible.  Ties keep the
+    // lowest node index.  Deliberately out of line: inlined into the large
+    // repair loops, clang spilled the running argmax to the stack, putting a
+    // store-to-load round trip on every node of this O(n) scan; as a leaf
+    // function its state stays in registers under both compilers.
+    PYLMCF_NOINLINE int mostViolatedTreeNode() const {
+      const int* pred = _pred.data();
+      const signed char* state = _state.data();
+      const Value* flow = _flow.data();
+      const Value* cap = _cap.data();
+      int q = -1;
+      Value worst = 0;
+      for (int u = 0; u != _node_num; ++u) {
+        if (u == _root) continue;
+        const int l = pred[u];
+        if (state[l] != STATE_TREE) continue;
+        const Value f = flow[l];
+        Value v = 0;
+        if (f < 0)           v = -f;
+        else if (f > cap[l]) v = f - cap[l];
+        if (v > worst) { worst = v; q = u; }
+      }
+      return q;
+    }
+
     // Recompute node potentials from the current spanning tree so that every
     // tree arc has zero reduced cost under the CURRENT _cost[] — the primal-
     // simplex invariant.  Needed after costMap() changes costs: the stored
@@ -2021,17 +2055,7 @@ namespace lemon {
         if (work_limit > 0 && _work_acc - work_start > work_limit)
           return false;                         // budget burned -> cold fallback
         // Leaving arc: most-violated basic arc, via its child node q.
-        int q = -1;
-        Value worst = 0;
-        for (int u = 0; u != _node_num; ++u) {
-          if (u == _root) continue;
-          const int l = _pred[u];
-          if (_state[l] != STATE_TREE) continue;
-          Value v = 0;
-          if (_flow[l] < 0)            v = -_flow[l];
-          else if (_flow[l] > _cap[l]) v =  _flow[l] - _cap[l];
-          if (v > worst) { worst = v; q = u; }
-        }
+        const int q = mostViolatedTreeNode();
         if (q == -1) return true;                 // primal feasible — done.
 
         const int l = _pred[q];
@@ -2052,50 +2076,80 @@ namespace lemon {
         // Collect eligible cut-crossing candidates (|rc|, arc), reusing the
         // 1b smaller-side incidence enumeration (each cut arc visited once).
         cand.clear();
+        // Array bases are read into locals: cand.emplace_back() stores a
+        // pointer into *this, after which the compiler must otherwise reload
+        // every member vector's data pointer on each arc.  None of these
+        // arrays is resized here.
+        const signed char* state = _state.data();
+        const int* source = _source.data();
+        const int* target = _target.data();
+        const int* sub = in_sub.data();
+        const Value* cap = _cap.data();
+        const Cost* cost = _cost.data();
+        const Cost* pi = _pi.data();
+        const int* inc_head = _inc_head.data();
+        const int* inc_arc = _inc_arc.data();
+        const int* thread = _thread.data();
         auto consider = [&](int e) {
-          if (_state[e] == STATE_TREE) return;
-          const int se = _source[e], te = _target[e];
-          const bool ss = (in_sub[se] == g), st = (in_sub[te] == g);
+          if (state[e] == STATE_TREE) return;
+          const int se = source[e], te = target[e];
+          const bool ss = (sub[se] == g), st = (sub[te] == g);
           if (ss == st) return;
           const int dir_into_S = st ? 1 : -1;
-          if (pdq * dir_into_S * _state[e] != want) return;
-          if (_cap[e] <= 0) return;                       // no capacity to give
-          Cost rc = _cost[e] + _pi[se] - _pi[te];
+          if (pdq * dir_into_S * state[e] != want) return;
+          if (cap[e] <= 0) return;                        // no capacity to give
+          Cost rc = cost[e] + pi[se] - pi[te];
           if (rc < 0) rc = -rc;
           cand.emplace_back(rc, e);
         };
         if (2 * _succ_num[q] <= _node_num) {
           int w = q;
           for (int k = 0, n = _succ_num[q]; k < n; ++k) {
-            for (int p = _inc_head[w]; p < _inc_head[w + 1]; ++p)
-              consider(_inc_arc[p]);
-            w = _thread[w];
+            for (int p = inc_head[w]; p < inc_head[w + 1]; ++p)
+              consider(inc_arc[p]);
+            w = thread[w];
           }
         } else {
           for (int vv = 0; vv <= _node_num; ++vv) {
-            if (in_sub[vv] == g) continue;
-            for (int p = _inc_head[vv]; p < _inc_head[vv + 1]; ++p)
-              consider(_inc_arc[p]);
+            if (sub[vv] == g) continue;
+            for (int p = inc_head[vv]; p < inc_head[vv + 1]; ++p)
+              consider(inc_arc[p]);
           }
         }
         _work_acc += _succ_num[q] + (long long)cand.size();  // mark + enumerate
         if (cand.empty()) return false;                   // no candidate -> cold.
 
-        // Min-heap by (|rc|, arc_index): pop cheapest first without sorting
-        // the whole candidate list.  make_heap is O(k) vs O(k log k) for sort;
-        // we only pay O(log k) per arc actually consumed (often 1-3 total).
-        // Traversal order is identical to a full sort → bit-identical results.
+        // Candidates are consumed cheapest first by (|rc|, arc_index), a
+        // strict total order, so the sequence is the same as a full sort's
+        // whatever selects it.  A walk usually consumes only 1-3 of them:
+        // the first kLinearPops are taken by a linear min scan (one pass,
+        // well-predicted branches) and swap-removed; only a longer walk pays
+        // for make_heap over what remains, then O(log k) per pop as before.
+        constexpr int kLinearPops = 4;
         auto heap_cmp = [](const std::pair<Cost,int>& a,
                            const std::pair<Cost,int>& b) {
           return a.first != b.first ? a.first > b.first : a.second > b.second;
         };
-        std::make_heap(cand.begin(), cand.end(), heap_cmp);
+        int pops = 0;
+        bool heaped = false;
 
         // Long-step walk: bound-flip cheap arcs until one can absorb the
         // residual, which then enters the basis (single pivot).
         bool pivoted = false;
         while (!cand.empty()) {
-          std::pop_heap(cand.begin(), cand.end(), heap_cmp);
+          if (pops < kLinearPops) {
+            size_t best = 0;
+            for (size_t i = 1; i < cand.size(); ++i)
+              if (heap_cmp(cand[best], cand[i])) best = i;
+            std::swap(cand[best], cand.back());
+          } else {
+            if (!heaped) {
+              std::make_heap(cand.begin(), cand.end(), heap_cmp);
+              heaped = true;
+            }
+            std::pop_heap(cand.begin(), cand.end(), heap_cmp);
+          }
+          ++pops;
           const int e = cand.back().second;
           cand.pop_back();
           if (_cap[e] < remaining) {
@@ -2153,17 +2207,7 @@ namespace lemon {
         if (work_limit > 0 && _work_acc - work_start > work_limit)
           return false;                         // budget burned -> cold fallback
         // Leaving arc: most-violated basic arc, via its child node q.
-        int q = -1;
-        Value worst = 0;
-        for (int u = 0; u != _node_num; ++u) {
-          if (u == _root) continue;
-          const int l = _pred[u];
-          if (_state[l] != STATE_TREE) continue;
-          Value v = 0;
-          if (_flow[l] < 0)            v = -_flow[l];
-          else if (_flow[l] > _cap[l]) v =  _flow[l] - _cap[l];
-          if (v > worst) { worst = v; q = u; }
-        }
+        const int q = mostViolatedTreeNode();
         if (q == -1) return true;                 // primal feasible — done.
 
         const int l = _pred[q];
