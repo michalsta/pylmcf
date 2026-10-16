@@ -1,5 +1,5 @@
 # LEMON NetworkSimplex options exposed on Graph: supply type (geq/leq), pivot
-# rule, warm-repair strategy, warm-repair time budget, and the Circulation
+# rule, warm-repair strategy, warm-repair work budget, and the Circulation
 # infeasibility certificate.  Every solve is certified independently
 # (mcf_certify) or compared against an oracle; nothing trusts solver
 # internals.
@@ -288,7 +288,7 @@ def test_warm_repair_strategy(strategy):
                     reason="PYLMCF_WARM_REPAIR_BUDGET overrides the setter")
 def test_warm_repair_budget_roundtrip():
     g = Graph(2, np.array([0]), np.array([1]))
-    assert g.warm_repair_budget() == 64.0
+    assert g.warm_repair_budget() == 25.0
     g.set_warm_repair_budget(2.5)
     assert g.warm_repair_budget() == 2.5
     g.set_warm_repair_budget(0)
@@ -310,6 +310,25 @@ def test_warm_repair_budget_forces_cold_fallback():
     tight = counters(chain_graph(np.random.default_rng(5100), 60, 240, 25, configure(1e-9)))
     assert roomy["cold"] == 0
     assert tight["cold"] > 0
+
+
+@pytest.mark.skipif("PYLMCF_WARM_REPAIR_BUDGET" in os.environ,
+                    reason="PYLMCF_WARM_REPAIR_BUDGET overrides the setter")
+def test_warm_repair_budget_is_deterministic():
+    # The budget counts work, not wall time: a budget that bails on some
+    # repairs and not others must make the same choices on every run, or a
+    # timing hiccup could change which optimal basis (and so which answer an
+    # outer optimizer sees) comes back.  1.5x cold work is tight enough on
+    # this chain to mix repairs and bail-outs.
+    def configure(g):
+        g.set_warm_repair("dual_ratio")
+        g.set_warm_repair_budget(1.5)
+    runs = []
+    for _ in range(3):
+        g = chain_graph(np.random.default_rng(5100), 60, 240, 25, configure)
+        runs.append((counters(g), g.total_cost(), tuple(g.potentials())))
+    assert runs[0][0]["dual"] > 0 and runs[0][0]["cold"] > 0
+    assert runs[1] == runs[0] and runs[2] == runs[0]
 
 
 # --- infeasibility certificate --------------------------------------------

@@ -11,7 +11,7 @@
 //               runs, policy cold starts are recorded), with every result
 //               still checked against the CapacityScaling oracle;
 //   empty:      both set to "" -> treated as unset, setters honoured;
-//   unset:      both absent    -> defaults (-2, 64.0), setters honoured.
+//   unset:      both absent    -> defaults (-2, 25.0), setters honoured.
 //
 // The other suites refuse to run under these variables; this one sets and
 // clears them itself, so it is independent of the caller's environment.
@@ -50,7 +50,7 @@ static void setters_honoured(const char* scenario) {
     Tiny t;
     NS ns(t.g);
     CHECK(ns.warmViolationLimit() == -2, "%s: default violation limit %ld", scenario, ns.warmViolationLimit());
-    CHECK(ns.warmRepairBudget() == 64.0, "%s: default budget %g", scenario, ns.warmRepairBudget());
+    CHECK(ns.warmRepairBudget() == 25.0, "%s: default budget %g", scenario, ns.warmRepairBudget());
     ns.setWarmViolationLimit(7);
     ns.setWarmRepairBudget(2.5);
     CHECK(ns.warmViolationLimit() == 7, "%s: setter ignored (limit %ld)", scenario, ns.warmViolationLimit());
@@ -62,7 +62,7 @@ static void overridden() {
         Tiny t;
         NS ns(t.g);
         ns.setWarmViolationLimit(-1);
-        ns.setWarmRepairBudget(64.0);
+        ns.setWarmRepairBudget(25.0);
         CHECK(ns.warmViolationLimit() == 0, "env limit not in force: %ld", ns.warmViolationLimit());
         CHECK(ns.warmRepairBudget() == 3.5, "env budget not in force: %g", ns.warmRepairBudget());
     }

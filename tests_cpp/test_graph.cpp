@@ -509,7 +509,7 @@ static void test_policy_knobs(Rng& rng) {
     if (!std::getenv("PYLMCF_WARM_REPAIR_BUDGET")) {
         std::vector<int> s{0}, e{1};
         G64 g(2, s, e);
-        CHECK(g.warm_repair_budget() == 64.0, "default budget");
+        CHECK(g.warm_repair_budget() == 25.0, "default budget");
         g.set_warm_repair_budget(2.5);
         CHECK(g.warm_repair_budget() == 2.5, "budget roundtrip");
     }

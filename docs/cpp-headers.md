@@ -111,8 +111,8 @@ are:
 - Counters: `warmStartCount()`, `coldStartCount()`, `dualRepairCount()`,
   `primalRepairCount()`, `policyColdCount()`.
 - Policy: `setWarmViolationLimit()` / `warmViolationLimit()`,
-  `setWarmRepairBudget()` / `warmRepairBudget()` / `warmRepairLimitMs()` /
-  `lastColdMs()`.
+  `setWarmRepairBudget()` / `warmRepairBudget()` / `warmRepairWorkLimit()` /
+  `lastColdWork()`.
 - Stall detection in `dualSimplexRepair` (16 non-decreasing violation counts →
   cold fallback).
 - Two opt-in diagnostic compile flags — see

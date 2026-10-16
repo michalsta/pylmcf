@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- The warm-repair budget (`setWarmRepairBudget()` / `Graph.set_warm_repair_budget()`)
+  is now measured in deterministic work units instead of wall time, so a given
+  input always takes the same repair/cold path. The wall-time budget could trip
+  on an interrupt during the microsecond-scale solves of small subgraphs, which
+  changed the optimal basis returned and made outer optimizers converge to
+  different answers from run to run. The multiplier now scales the last cold
+  solve's work; the default is 25.0 (roughly the old 64x cold time).
+  In C++, `lastColdMs()` / `warmRepairLimitMs()` are replaced by
+  `lastColdWork()` / `warmRepairWorkLimit()`.
+
 ## 1.3.0 (2026-10-09)
 
 Changes since 1.2.1.

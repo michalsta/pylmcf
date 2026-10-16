@@ -148,8 +148,8 @@ int main() {
     printf("warm=%d cold=%d dual_repair=%d primal_repair=%d policy_cold=%d\n",
            ns.warmStartCount(), ns.coldStartCount(), ns.dualRepairCount(),
            ns.primalRepairCount(), ns.policyColdCount());
-    printf("last cold %.3f ms, repair limit %.3f ms (budget x%.1f)\n",
-           ns.lastColdMs(), ns.warmRepairLimitMs(), ns.warmRepairBudget());
+    printf("last cold %lld work units, repair limit %lld (budget x%.1f)\n",
+           ns.lastColdWork(), ns.warmRepairWorkLimit(), ns.warmRepairBudget());
     return 0;
 }
 ```
@@ -162,11 +162,8 @@ warm  supply 6 -> cost 27
 warm  supply 2 -> cost 6
 warm  repriced   -> cost 12
 warm=3 cold=0 dual_repair=1 primal_repair=0 policy_cold=0
-last cold 0.010 ms, repair limit 0.626 ms (budget x64.0)
+last cold 48 work units, repair limit 1200 (budget x25.0)
 ```
-
-(The two timings are wall-clock and will differ on your machine; the counters and
-costs will not.)
 
 ### `costs_changed` is load-bearing
 
@@ -213,28 +210,35 @@ flow vector. They are opt-in for that reason.
 `dualSimplexRepair` also carries stall detection: 16 consecutive
 non-decreasing violation counts abandons the repair for the cold fallback.
 
-### The time budget is a tripwire, not a dial
+### The work budget is a tripwire, not a dial
 
 ```cpp
-ns.setWarmRepairBudget(64.0);   // the default
+ns.setWarmRepairBudget(25.0);   // the default
 ns.setWarmRepairBudget(0.0);    // disable
 ```
 
 From Python: `G.set_warm_repair_budget(mult)` / `G.warm_repair_budget()`.
 
-A repair attempt bails to the (always correct) cold fallback once it has run for
-`mult` times the wall time of the last cold solve on that solver
-(`lastColdMs()`). `<= 0` disables it, as does having no cold reference yet.
+A repair attempt bails to the (always correct) cold fallback once it has done
+`mult` times the work of the last cold solve on that solver (`lastColdWork()`).
+`<= 0` disables it, as does having no cold reference yet.
 
-The default 64.0 is deliberately enormous. Budget bail-outs cascade through the
-same trajectory effect as the violation limit — a measured 16× budget came out
-**1.5× slower overall** than no budget at all — so the threshold has to sit far
-above the repair/cold ratios of workloads where repair pays. The worst observed
-*profitable* repair ran ≈31× the cold solve. Treat 64 as "something has gone
-catastrophically wrong", not as a knob.
+Work is counted in deterministic units: tree-walk steps in the pivot primitives,
+an O(√m) estimate per entering-arc search, O(n+m) per `init()`, and the repair
+loops' own scans. The budget therefore depends only on the problem and the
+basis, never on timing, so a given input always takes the same path. (It used
+to be wall time; on networks split into thousands of tiny subgraphs, where a
+cold solve takes microseconds, an interrupt during a repair could trip it and
+change which optimal basis — and so which answer — an outer optimizer saw.)
 
-It is wall time, not work units, on purpose: a unit-based budget was tried and
-its units skewed about 2.5× between cold pivots and repair tree walks.
+The default 25.0 is deliberately enormous. Work units skew about 2.5× between
+cold pivots and repair tree walks, so 25× cold work is roughly 64× cold time.
+Budget bail-outs cascade through the same trajectory effect as the violation
+limit — a measured 16× time budget came out **1.5× slower overall** than no
+budget at all — so the threshold has to sit far above the repair/cold ratios of
+workloads where repair pays. The worst observed *profitable* repair ran ≈31×
+the cold solve's time. Treat the budget as "something has gone catastrophically
+wrong", not as a knob.
 
 ### Environment overrides
 

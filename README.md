@@ -209,7 +209,7 @@ bounds force a cold solve.
 The pivot rule (`set_pivot_rule()`: `"block_search"` by default, or
 `"first_eligible"`, `"best_eligible"`, `"candidate_list"`, `"altering_list"`), the
 warm-repair strategy (`set_warm_repair()`: `"dual"` by default, or
-`"repair_only"`, `"primal"`, `"dual_ratio"`, `"dual_greedy"`) and the repair time
+`"repair_only"`, `"primal"`, `"dual_ratio"`, `"dual_greedy"`) and the repair work
 budget (`set_warm_repair_budget()`) are configurable; the defaults are what
 you want unless you are benchmarking. Full details, the repair strategies, the `set_warm_violation_limit()` policy and
 the C++ API: **[Warm restarts](https://github.com/michalsta/pylmcf/blob/main/docs/warm-restart.md)**.

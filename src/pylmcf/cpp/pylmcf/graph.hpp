@@ -379,8 +379,8 @@ public:
     int primal_repair_count() const { return solver.primalRepairCount(); }
     int policy_cold_count() const { return solver.policyColdCount(); }
     void set_warm_violation_limit(long v) { solver.setWarmViolationLimit(v); }
-    // Repair time budget as a multiple of the last cold solve's wall time
-    // (<= 0 disables).  A catastrophe tripwire, not a tuning knob — see
+    // Repair work budget as a multiple of the last cold solve's work, in
+    // deterministic units (<= 0 disables).  A catastrophe tripwire, not a tuning knob — see
     // NetworkSimplex::setWarmRepairBudget().  PYLMCF_WARM_REPAIR_BUDGET, if
     // set, overrides it.
     void set_warm_repair_budget(double mult) { solver.setWarmRepairBudget(mult); }
