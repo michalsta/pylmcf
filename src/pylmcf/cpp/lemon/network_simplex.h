@@ -2079,7 +2079,9 @@ namespace lemon {
         // Array bases are read into locals: cand.emplace_back() stores a
         // pointer into *this, after which the compiler must otherwise reload
         // every member vector's data pointer on each arc.  None of these
-        // arrays is resized here.
+        // arrays is resized here.  For the same reason the scan loops read
+        // their inc_head bound once: clang otherwise reloads it (and the
+        // node index) on every arc rather than only after an emplace.
         const signed char* state = _state.data();
         const int* source = _source.data();
         const int* target = _target.data();
@@ -2105,14 +2107,14 @@ namespace lemon {
         if (2 * _succ_num[q] <= _node_num) {
           int w = q;
           for (int k = 0, n = _succ_num[q]; k < n; ++k) {
-            for (int p = inc_head[w]; p < inc_head[w + 1]; ++p)
+            for (int p = inc_head[w], pe = inc_head[w + 1]; p < pe; ++p)
               consider(inc_arc[p]);
             w = thread[w];
           }
         } else {
           for (int vv = 0; vv <= _node_num; ++vv) {
             if (sub[vv] == g) continue;
-            for (int p = inc_head[vv]; p < inc_head[vv + 1]; ++p)
+            for (int p = inc_head[vv], pe = inc_head[vv + 1]; p < pe; ++p)
               consider(inc_arc[p]);
           }
         }
