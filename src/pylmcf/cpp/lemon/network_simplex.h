@@ -2046,7 +2046,16 @@ namespace lemon {
         _repair_in_sub.resize(_node_num + 1, 0);
       std::vector<int>& in_sub = _repair_in_sub;
       if (_inc_built_for != _all_arc_num) buildIncidenceCsr();
-      auto& cand = _ratio_cand;
+      // Candidates go into a flat buffer, nc of them live at a time.  Only cut
+      // arcs qualify and each is enumerated once (from its one endpoint on the
+      // scanned side), so nc <= _all_arc_num: sized once here, the scan below
+      // writes through a pointer with no growth path.  (An emplace_back there
+      // puts an operator new call inside the arc loop, and everything live
+      // across it -- ~18 values -- must then sit in the 6 callee-saved
+      // registers or on the stack.)
+      if (_ratio_cand.size() < (size_t)_all_arc_num)
+        _ratio_cand.resize(_all_arc_num);
+      std::pair<Cost,int>* const cand = _ratio_cand.data();
       const long long work_limit = warmRepairWorkLimit();
       const long long work_start = _work_acc;
 
@@ -2075,13 +2084,11 @@ namespace lemon {
 
         // Collect eligible cut-crossing candidates (|rc|, arc), reusing the
         // 1b smaller-side incidence enumeration (each cut arc visited once).
-        cand.clear();
-        // Array bases are read into locals: cand.emplace_back() stores a
-        // pointer into *this, after which the compiler must otherwise reload
-        // every member vector's data pointer on each arc.  None of these
-        // arrays is resized here.  For the same reason the scan loops read
-        // their inc_head bound once: clang otherwise reloads it (and the
-        // node index) on every arc rather than only after an emplace.
+        std::pair<Cost,int>* out = cand;
+        // Array bases are read into locals and the scan loops read their
+        // inc_head bound once: a store through `out` may alias any of them,
+        // after which the compiler must otherwise reload them on each arc.
+        // None of these arrays is resized here.
         const signed char* state = _state.data();
         const int* source = _source.data();
         const int* target = _target.data();
@@ -2102,7 +2109,7 @@ namespace lemon {
           if (cap[e] <= 0) return;                        // no capacity to give
           Cost rc = cost[e] + pi[se] - pi[te];
           if (rc < 0) rc = -rc;
-          cand.emplace_back(rc, e);
+          *out++ = {rc, e};
         };
         if (2 * _succ_num[q] <= _node_num) {
           int w = q;
@@ -2118,8 +2125,10 @@ namespace lemon {
               consider(inc_arc[p]);
           }
         }
-        _work_acc += _succ_num[q] + (long long)cand.size();  // mark + enumerate
-        if (cand.empty()) return false;                   // no candidate -> cold.
+        size_t nc = out - cand;
+        LEMON_ASSERT(nc <= _ratio_cand.size(), "dualRatioRepair: cut-arc bound violated");
+        _work_acc += _succ_num[q] + (long long)nc;        // mark + enumerate
+        if (nc == 0) return false;                        // no candidate -> cold.
 
         // Candidates are consumed cheapest first by (|rc|, arc_index), a
         // strict total order, so the sequence is the same as a full sort's
@@ -2138,22 +2147,21 @@ namespace lemon {
         // Long-step walk: bound-flip cheap arcs until one can absorb the
         // residual, which then enters the basis (single pivot).
         bool pivoted = false;
-        while (!cand.empty()) {
+        while (nc != 0) {
           if (pops < kLinearPops) {
             size_t best = 0;
-            for (size_t i = 1; i < cand.size(); ++i)
+            for (size_t i = 1; i < nc; ++i)
               if (heap_cmp(cand[best], cand[i])) best = i;
-            std::swap(cand[best], cand.back());
+            std::swap(cand[best], cand[nc - 1]);
           } else {
             if (!heaped) {
-              std::make_heap(cand.begin(), cand.end(), heap_cmp);
+              std::make_heap(cand, cand + nc, heap_cmp);
               heaped = true;
             }
-            std::pop_heap(cand.begin(), cand.end(), heap_cmp);
+            std::pop_heap(cand, cand + nc, heap_cmp);
           }
           ++pops;
-          const int e = cand.back().second;
-          cand.pop_back();
+          const int e = cand[--nc].second;
           if (_cap[e] < remaining) {
             // Full bound flip: cycle augmentation, no basis change.
             in_arc = e;
