@@ -287,6 +287,8 @@ namespace lemon {
     // Warm-restart counters (incremented by warmRun() only).
     int _warm_start_count = 0;
     int _crash_start_count = 0;
+    const std::vector<Value>* _cold_start_flow = nullptr;
+    const std::vector<int>* _cold_start_prefer = nullptr;
     // P2 repair budget: a repair attempt bails to the (always correct) cold
     // fallback once it has done _warm_repair_budget x the work of the most
     // recent cold init()+start() on this solver (_last_cold_work).  Work is
@@ -1682,9 +1684,14 @@ namespace lemon {
           return start(pivot_rule);
         }
       }
-      // Cold fallback.
+      // Cold fallback (crash-started when a cold-start flow is installed).
       ++_cold_start_count;
       const long long w0 = _work_acc;
+      if (_cold_start_flow != nullptr) {
+        auto st = crashRun(*_cold_start_flow, pivot_rule, _cold_start_prefer);
+        _last_cold_work = _work_acc - w0;
+        return st;
+      }
       if (!init()) return INFEASIBLE;
       auto st = start(pivot_rule);
       _last_cold_work = _work_acc - w0;      // budget yardstick
@@ -1704,8 +1711,16 @@ namespace lemon {
     // already basic); a primal-infeasible result goes through
     // primalSimplexRepair(), and start() reoptimizes.  Any failure falls back
     // to a cold init()+start().  Only for EQ supplies without lower bounds.
+    //
+    // prefer (optional) lists LEMON arc ids, in priority order, that may join
+    // the components left by the flow arcs as degenerate tree arcs before any
+    // artificial arc is used.  Choosing them well matters: they fix the
+    // starting potentials (e.g. wnet passes its Source->Emp / Theo->Sink
+    // anchors, which price every matching arc at "distance minus the trash
+    // price it saves").
     ProblemType crashRun(const std::vector<Value>& flow,
-                         PivotRule pivot_rule = BLOCK_SEARCH) {
+                         PivotRule pivot_rule = BLOCK_SEARCH,
+                         const std::vector<int>* prefer = nullptr) {
       if (!init()) return INFEASIBLE;
       if (_sum_supply != 0 || _has_lower ||
           (int)flow.size() != _arc_num) {
@@ -1732,6 +1747,18 @@ namespace lemon {
         uf[ru] = rv;
         _state[i] = STATE_TREE;
         tree_arcs.push_back(i);
+      }
+      if (prefer != nullptr) {
+        for (int k : *prefer) {
+          if (k < 0 || k >= _arc_num) continue;
+          const int i = _arc_id[_graph.arcFromId(k)];
+          if (_state[i] == STATE_TREE) continue;
+          const int ru = find(_source[i]), rv = find(_target[i]);
+          if (ru == rv) continue;
+          uf[ru] = rv;
+          _state[i] = STATE_TREE;
+          tree_arcs.push_back(i);
+        }
       }
       // artificial arcs: one per component (the first node met), others lower
       for (int u = 0; u != _node_num; ++u) {
@@ -1808,6 +1835,15 @@ namespace lemon {
       return start(pivot_rule);
     }
     int crashStartCount() const { return _crash_start_count; }
+    // Flow (indexed by LEMON arc id) that warmRun()'s cold fallback crash-
+    // starts from instead of LEMON's artificial basis; nullptr (default)
+    // restores the plain cold init().  The pointee must outlive the solves
+    // and be refreshed by the caller whenever supplies or capacities change.
+    void setColdStartFlow(const std::vector<Value>* flow,
+                          const std::vector<int>* prefer = nullptr) {
+      _cold_start_flow = flow;
+      _cold_start_prefer = prefer;
+    }
 
     int warmStartCount() const { return _warm_start_count; }
     int coldStartCount() const { return _cold_start_count; }
