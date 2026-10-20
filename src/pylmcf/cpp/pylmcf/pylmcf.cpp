@@ -242,6 +242,8 @@ NB_MODULE(pylmcf_cpp, m) {
         .def("set_edge_costs", &Graph<int64_t>::set_edge_costs_py, arg("costs").noconvert())
         .def("get_edge_costs", &Graph<int64_t>::get_edge_costs_py)
         .def("solve", &Graph<int64_t>::solve)
+        .def("solve_from_flow", &Graph<int64_t>::solve_from_flow_py, arg("flow").noconvert())
+        .def("crash_start_count", &Graph<int64_t>::crash_start_count)
         .def("warm_start_count", &Graph<int64_t>::warm_start_count)
         .def("cold_start_count", &Graph<int64_t>::cold_start_count)
         .def("dual_repair_count", &Graph<int64_t>::dual_repair_count)

@@ -368,6 +368,35 @@ public:
         _solved = true;
     }
 
+    // Solve cold, crash-starting from a caller-supplied feasible flow (one
+    // value per edge, in edge order) instead of LEMON's artificial basis.  See
+    // NetworkSimplex::crashRun(); only EQ supplies without minimums use the
+    // flow, anything else silently runs cold.
+    void solve_from_flow(const std::span<const T> &flow) {
+        if (flow.size() != _edge_starts.size())
+            throw std::invalid_argument("flow must have one value per edge");
+        _solved = false;
+        assert(costs_in_sync() && "solver costs out of sync with costs_map");
+        check_bounds();
+        if (_no_nodes == 0) { _costs_dirty = false; _solved = true; return; }
+        solver.supplyMap(node_supply_map);
+        std::vector<T> f(flow.begin(), flow.end());
+        const auto status = solver.crashRun(f, _pivot_rule);
+        _basis_valid = (status == Solver::OPTIMAL);
+        if (status != Solver::OPTIMAL) {
+            if (status == Solver::INFEASIBLE)
+                throw std::runtime_error("Solver failed: problem is INFEASIBLE "
+                                         "(infeasibility_cut() names a set of nodes that proves it)");
+            else if (status == Solver::UNBOUNDED)
+                throw std::runtime_error("Solver failed: problem is UNBOUNDED");
+            else
+                throw std::runtime_error("Solver failed with unknown status");
+        }
+        _costs_dirty = false;
+        _solved = true;
+    }
+    int crash_start_count() const { return solver.crashStartCount(); }
+
     // Warm-restart observability, backed by the solver's counters.  Only
     // warmRun() increments them: the first solve() and any solve() after a
     // non-OPTIMAL result go through plain run() and count in neither, so
@@ -605,6 +634,10 @@ public:
 
     void set_edge_minimums_py(const ndarray_1d<T> &minimums) {
         set_edge_minimums(numpy_to_span(minimums));
+    }
+
+    void solve_from_flow_py(const ndarray_1d<T> &flow) {
+        solve_from_flow(numpy_to_span(flow));
     }
 
     void set_edge_costs_py(const ndarray_1d<T> &costs) {

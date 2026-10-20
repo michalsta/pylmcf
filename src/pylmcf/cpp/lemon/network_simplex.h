@@ -286,6 +286,7 @@ namespace lemon {
 
     // Warm-restart counters (incremented by warmRun() only).
     int _warm_start_count = 0;
+    int _crash_start_count = 0;
     // P2 repair budget: a repair attempt bails to the (always correct) cold
     // fallback once it has done _warm_repair_budget x the work of the most
     // recent cold init()+start() on this solver (_last_cold_work).  Work is
@@ -1689,6 +1690,124 @@ namespace lemon {
       _last_cold_work = _work_acc - w0;      // budget yardstick
       return st;
     }
+
+    // Crash start from a caller-supplied flow.
+    //
+    // flow[k] is the flow on the arc with LEMON id k (graph.id(arc)); it
+    // should be feasible for the current supplies/capacities, but it does
+    // not have to be basic.  A spanning tree is built from the arcs with
+    // 0 < flow < cap (union-find, in arc order); free arcs that would close a
+    // cycle are left nonbasic at their lower bound, arcs at capacity become
+    // STATE_UPPER, and every resulting component is attached to the root by
+    // its first node's artificial arc.  repairTreeFlows() then recomputes the
+    // tree flows from the supplies (exactly the given flow when it was
+    // already basic); a primal-infeasible result goes through
+    // primalSimplexRepair(), and start() reoptimizes.  Any failure falls back
+    // to a cold init()+start().  Only for EQ supplies without lower bounds.
+    ProblemType crashRun(const std::vector<Value>& flow,
+                         PivotRule pivot_rule = BLOCK_SEARCH) {
+      if (!init()) return INFEASIBLE;
+      if (_sum_supply != 0 || _has_lower ||
+          (int)flow.size() != _arc_num) {
+        ++_cold_start_count;
+        return start(pivot_rule);
+      }
+      // union-find over real nodes + root
+      std::vector<int> uf(_node_num + 1);
+      for (int i = 0; i <= _node_num; ++i) uf[i] = i;
+      auto find = [&](int x) {
+        while (uf[x] != x) { uf[x] = uf[uf[x]]; x = uf[x]; }
+        return x;
+      };
+      // tree adjacency (built after selection)
+      std::vector<int> tree_arcs;
+      tree_arcs.reserve(_node_num);
+      for (ArcIt a(_graph); a != INVALID; ++a) {
+        const int i = _arc_id[a];
+        const Value x = flow[_graph.id(a)];
+        if (x <= 0) { _state[i] = STATE_LOWER; continue; }
+        if (x >= _cap[i]) { _state[i] = STATE_UPPER; continue; }
+        const int ru = find(_source[i]), rv = find(_target[i]);
+        if (ru == rv) { _state[i] = STATE_LOWER; continue; }   // cycle: drop to lower
+        uf[ru] = rv;
+        _state[i] = STATE_TREE;
+        tree_arcs.push_back(i);
+      }
+      // artificial arcs: one per component (the first node met), others lower
+      for (int u = 0; u != _node_num; ++u) {
+        const int e = _arc_num + u;
+        const int ru = find(u), rr = find(_root);
+        if (ru != rr) {
+          uf[ru] = rr;
+          _state[e] = STATE_TREE;
+          tree_arcs.push_back(e);
+        } else {
+          _state[e] = STATE_LOWER;
+          _flow[e] = 0;
+        }
+      }
+      // rebuild parent/pred/pred_dir and the thread order by an iterative DFS
+      std::vector<int> head(_node_num + 2, 0), adj(2 * tree_arcs.size());
+      for (int e : tree_arcs) { ++head[_source[e] + 1]; ++head[_target[e] + 1]; }
+      for (int v = 0; v <= _node_num; ++v) head[v + 1] += head[v];
+      {
+        std::vector<int> pos(head.begin(), head.end() - 1);
+        for (int e : tree_arcs) { adj[pos[_source[e]]++] = e; adj[pos[_target[e]]++] = e; }
+      }
+      std::vector<int> order;
+      order.reserve(_node_num + 1);
+      std::vector<int> stack{_root};
+      _parent[_root] = -1;
+      _pred[_root] = -1;
+      std::vector<char> seen(_node_num + 1, 0);
+      seen[_root] = 1;
+      while (!stack.empty()) {
+        const int v = stack.back();
+        stack.pop_back();
+        order.push_back(v);
+        for (int p = head[v]; p < head[v + 1]; ++p) {
+          const int e = adj[p];
+          const int w = _source[e] == v ? _target[e] : _source[e];
+          if (seen[w]) continue;
+          seen[w] = 1;
+          _parent[w] = v;
+          _pred[w] = e;
+          _pred_dir[w] = _source[e] == w ? DIR_UP : DIR_DOWN;
+          stack.push_back(w);
+        }
+      }
+      if ((int)order.size() != _node_num + 1) {   // cannot happen: tree spans
+        ++_cold_start_count;
+        if (!init()) return INFEASIBLE;
+        return start(pivot_rule);
+      }
+      // preorder threads; subtree sizes and last successors bottom-up
+      for (int k = 0; k != _node_num + 1; ++k) {
+        const int v = order[k], w = order[(k + 1) % (_node_num + 1)];
+        _thread[v] = w;
+        _rev_thread[w] = v;
+      }
+      for (int v = 0; v <= _node_num; ++v) { _succ_num[v] = 1; _last_succ[v] = v; }
+      for (int k = _node_num; k > 0; --k) {
+        const int v = order[k], p = _parent[v];
+        _succ_num[p] += _succ_num[v];
+      }
+      // last_succ[v] = the node at preorder position pos(v) + succ_num[v] - 1
+      {
+        std::vector<int> at(_node_num + 1);
+        for (int k = 0; k != _node_num + 1; ++k) at[order[k]] = k;
+        for (int v = 0; v <= _node_num; ++v) _last_succ[v] = order[at[v] + _succ_num[v] - 1];
+      }
+      _pi[_root] = 0;
+      recomputeTreePotentials();
+      ++_crash_start_count;
+      if (repairTreeFlows()) return start(pivot_rule);
+      if (primalSimplexRepair()) { ++_primal_repair_count; return start(pivot_rule); }
+      ++_cold_start_count;
+      if (!init()) return INFEASIBLE;
+      return start(pivot_rule);
+    }
+    int crashStartCount() const { return _crash_start_count; }
 
     int warmStartCount() const { return _warm_start_count; }
     int coldStartCount() const { return _cold_start_count; }
