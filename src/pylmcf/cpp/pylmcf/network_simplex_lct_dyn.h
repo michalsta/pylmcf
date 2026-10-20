@@ -321,7 +321,7 @@ class NetworkSimplexLCTDyn {
     if (_built) return;
     _m = (int)_src.size();
     _R = _n; _N = _n + 1;
-    _BIGM = simplexArtificialCost<Cost>(std::span<const Cost>(_cost.data(), _m), _n, _m);
+    _BIGM = simplexArtificialCost<Cost>(std::span<const Cost>(_cost.data(), _m), _n);
     _src.resize(_m + _n); _tgt.resize(_m + _n);
     _cost.resize(_m + _n); _cap.resize(_m + _n);
     _state.assign(_m + _n, ST_LOWER);

@@ -213,3 +213,34 @@ def test_lct_owns_inputs_and_rejects_updates_atomically(cls):
     result = solver.result()
     result[:] = 0
     assert solver.result()[0] == 5
+
+
+@pytest.mark.parametrize("fn", FUNCTIONS)
+def test_lct_overflow_guard_is_linear_in_nodes(fn):
+    # The guard used to bound Big-M by max_cost * n**2 * m, which refused
+    # every graph of about 1M nodes and 4M arcs even with costs of 4; this
+    # 1000-node chain tripped it the same way.
+    n = 1000
+    starts = np.arange(n - 1, dtype=np.int64)
+    ends = starts + 1
+    caps = np.full(n - 1, 3, dtype=np.int64)
+    costs = np.full(n - 1, 10**9, dtype=np.int64)
+    supply = np.zeros(n, dtype=np.int64)
+    supply[0], supply[-1] = 2, -2
+    flow = fn(supply, starts, ends, caps, costs)
+    assert_flow(supply, starts, ends, caps, costs, flow)
+    np.testing.assert_array_equal(flow, 2)
+
+
+@pytest.mark.parametrize("fn", FUNCTIONS)
+def test_lct_overflow_guard_boundary(fn):
+    # Big-M is max_cost * (n + 2) + 1, and 4 * Big-M must stay below
+    # INT64_MAX / 4: the largest cost that allows solves exactly.
+    supply, starts, ends, caps = arrays([5, 0, -5], [0, 0, 1], [1, 2, 2], [3, 3, 5])
+    limit = np.iinfo(np.int64).max // 4
+    largest = (limit // 4 - 1) // 5
+    costs = np.array([largest, largest, 1], dtype=np.int64)
+    assert_flow(supply, starts, ends, caps, costs, fn(supply, starts, ends, caps, costs))
+    costs[0] = largest + 1
+    with pytest.raises(OverflowError):
+        fn(supply, starts, ends, caps, costs)

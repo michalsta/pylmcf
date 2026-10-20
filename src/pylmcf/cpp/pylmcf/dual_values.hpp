@@ -29,18 +29,25 @@ inline C reducedCost(C cost, C source, C target) {
 }
 // Artificial paths must dominate negative as well as positive real paths.
 // A too-small Big-M leaves artificial flow and falsely reports infeasibility.
+// Leftover artificial flow at an optimum could be cancelled along a cycle
+// through the root: two artificial arcs (-2M) and a simple real path, which
+// costs at most (n - 1) * max|cost| in absolute value.  So any M above half
+// that is enough; M = max|cost| * (n + 2) + 1 keeps a factor of two to spare.
+// A tree path from the root holds at most one artificial arc, so potentials
+// stay within M + (n - 1) * max|cost| < 2M, and reduced costs within 5M:
+// M itself is kept below max / 8.
 template <typename C>
-inline C simplexArtificialCost(std::span<const C> costs, int n, int m) {
+inline C simplexArtificialCost(std::span<const C> costs, int n) {
     C magnitude = 1;
     for (C cost : costs) {
         if (cost == std::numeric_limits<C>::min())
             throw std::overflow_error("Artificial cost exceeds the cost type");
         magnitude = std::max(magnitude, cost < 0 ? C(-cost) : cost);
     }
-    const C nodes = C(n) + C(2), arcs = C(m) + C(2);
-    if (magnitude > (std::numeric_limits<C>::max() - C(1)) / nodes / arcs)
+    const C nodes = C(n) + C(2);
+    if (magnitude > (std::numeric_limits<C>::max() / C(8) - C(1)) / nodes)
         throw std::overflow_error("Artificial cost exceeds the cost type");
-    return magnitude * nodes * arcs + C(1);
+    return magnitude * nodes + C(1);
 }
 
 template <typename C>

@@ -156,7 +156,7 @@ class NetworkSimplexLCT {
     _R = _n;
     _N = _n + 1;
     _INF = std::numeric_limits<Value>::max() / 4;
-    _BIGM = simplexArtificialCost<Cost>(std::span<const Cost>(_cost.data(), _m), _n, _m);
+    _BIGM = simplexArtificialCost<Cost>(std::span<const Cost>(_cost.data(), _m), _n);
 
     _src.resize(_m + _n);
     _tgt.resize(_m + _n);

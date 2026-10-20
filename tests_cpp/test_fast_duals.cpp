@@ -48,11 +48,28 @@ template<class S> void test_negative_cost_artificial_budget() {
     assert(overflow);
 }
 
+template<class S> void test_long_chain_artificial_budget() {
+    // The only real path from node 0 to node n-1 costs (n-1)*|c|. Big-M must
+    // dominate it (it is linear in n), or the leftover artificial flow
+    // falsely reports this feasible problem INFEASIBLE.
+    const int n = 200;
+    for (I c : {I(1000003), I(-1000003)}) {
+        S s(n);
+        for (int u = 0; u + 1 < n; ++u) s.addArc(u, u + 1, c, 2);
+        s.setSupply(0, 2); s.setSupply(n - 1, -2);
+        assert(s.run() == S::OPTIMAL);
+        assert(s.totalCost() == 2 * I(n - 1) * c);
+        for (int e = 0; e + 1 < n; ++e) assert(s.flow(e) == 2);
+    }
+}
+
 int main() {
     test_lct<pylmcf::NetworkSimplexLCT<I, I>>();
     test_lct<pylmcf::NetworkSimplexLCTDyn<I, I>>();
     test_negative_cost_artificial_budget<pylmcf::NetworkSimplexLCT<I, I>>();
     test_negative_cost_artificial_budget<pylmcf::NetworkSimplexLCTDyn<I, I>>();
+    test_long_chain_artificial_budget<pylmcf::NetworkSimplexLCT<I, I>>();
+    test_long_chain_artificial_budget<pylmcf::NetworkSimplexLCTDyn<I, I>>();
     lemon::StaticDigraph g;
     std::vector<std::pair<int,int>> arcs = {{0,1}, {0,2}, {1,2}};
     g.build(3, arcs.begin(), arcs.end());

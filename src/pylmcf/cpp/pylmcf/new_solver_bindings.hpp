@@ -89,9 +89,11 @@ public:
             if (costs_[e] < 0) throw std::invalid_argument("Costs must be non-negative");
             max_cost = std::max(max_cost, costs_[e]);
         }
-        // Bound Big-M and path potentials, not just the final objective.
-        Int big_m = checked_add(checked_mul(checked_mul(max_cost, n + 2), m + 2), 1);
-        checked_mul(big_m, 4 * (Int(n) + 2));
+        // Bound Big-M (simplexArtificialCost) and the potentials and reduced
+        // costs built from it, which stay within a few M, not just the
+        // final objective.
+        Int big_m = checked_add(checked_mul(max_cost, Int(n) + 2), 1);
+        checked_mul(big_m, 4);
         check_caps(caps_, costs_);
         solver_ = std::make_unique<Solver>(int(n));
         for (size_t e = 0; e < m; ++e)

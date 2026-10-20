@@ -28,6 +28,15 @@
   In C++, `lastColdMs()` / `warmRepairLimitMs()` are replaced by
   `lastColdWork()` / `warmRepairWorkLimit()`.
 
+### Fixed
+
+- The LCT solvers' Big-M artificial cost grew as `max_cost * n * m`, and the
+  overflow guard of `NetworkSimplexLCT`, `NetworkSimplexLCTDyn`, `lmcf_lct`
+  and `lmcf_lct_dyn` as `max_cost * n**2 * m`, so every graph of about 1M
+  nodes and 4M arcs raised `OverflowError` even with costs of 4. Big-M is now
+  `max_cost * (n + 2) + 1`, twice what correctness needs, and both checks are
+  linear in the number of nodes.
+
 ## 1.3.0 (2026-10-09)
 
 Changes since 1.2.1.
