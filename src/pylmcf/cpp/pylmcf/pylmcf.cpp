@@ -249,6 +249,11 @@ NB_MODULE(pylmcf_cpp, m) {
         .def("policy_cold_count", &Graph<int64_t>::policy_cold_count)
         .def("set_warm_violation_limit", &Graph<int64_t>::set_warm_violation_limit)
         .def("set_warm_repair_budget", &Graph<int64_t>::set_warm_repair_budget, arg("multiplier"))
+        .def("set_warm_violation_mass_fraction", &Graph<int64_t>::set_warm_violation_mass_fraction, arg("fraction"))
+        .def("last_violation_count", &Graph<int64_t>::last_violation_count)
+        .def("last_violation_mass", &Graph<int64_t>::last_violation_mass)
+        .def("last_positive_supply", &Graph<int64_t>::last_positive_supply)
+        .def("work_units", &Graph<int64_t>::work_units)
         .def("warm_repair_budget", &Graph<int64_t>::warm_repair_budget)
         .def("set_supply_type", [](Graph<int64_t>& g, const std::string& name) {
                  g.set_supply_type(enum_from_name(supply_type_names, name, "supply type"));

@@ -385,6 +385,15 @@ public:
     // set, overrides it.
     void set_warm_repair_budget(double mult) { solver.setWarmRepairBudget(mult); }
     double warm_repair_budget() const { return solver.warmRepairBudget(); }
+    // Mass-based warm/cold policy (< 0 disables): skip repair when the
+    // violated basic-arc mass left by the tree patch exceeds this fraction of
+    // the total positive supply.  See setWarmViolationMassFraction().
+    void set_warm_violation_mass_fraction(double f) { solver.setWarmViolationMassFraction(f); }
+    // Violation measurements of the last warm solve that looked at them.
+    int last_violation_count() const { return solver.lastViolationCount(); }
+    double last_violation_mass() const { return solver.lastViolationMass(); }
+    double last_positive_supply() const { return solver.lastPositiveSupply(); }
+    long long work_units() const { return solver.workUnits(); }
 
     // Direction of the supply/demand constraints when total supply != 0
     // (LEMON's SupplyType; with zero total supply both mean equality):

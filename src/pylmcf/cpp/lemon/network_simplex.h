@@ -318,6 +318,9 @@ namespace lemon {
     // regimes.
     long long _work_acc = 0;
     long long _last_cold_work = 0;
+    int _last_violation_count = -1;
+    double _last_violation_mass = 0;
+    double _last_positive_supply = 0;
     double _warm_repair_budget = 25.0;   // multiplier; <= 0 disables
     int _cold_start_count = 0;
     int _dual_repair_count = 0;
@@ -329,6 +332,10 @@ namespace lemon {
     //   profile data), -1 = no limit (always attempt repair), >=0 = explicit
     //   max violated basic arcs before skipping repair.
     long _warm_violation_limit = -2;
+    // Mass-based warm/cold policy (see setWarmViolationMassFraction()):
+    // < 0 disables; otherwise skip repair when the violated tree-arc mass
+    // exceeds this fraction of the total positive supply.
+    double _warm_violation_mass_fraction = -1.0;
 
     // Reusable scratch buffers for the warm-restart repair routines, sized
     // lazily to _node_num+1 to avoid a per-solve heap allocation.  The solver
@@ -1595,8 +1602,11 @@ namespace lemon {
                         bool costs_changed = false) {
       // Recompute _sum_supply from the (already updated) real-node supplies.
       _sum_supply = 0;
-      for (int i = 0; i != _node_num; ++i)
+      Value positive_supply = 0;
+      for (int i = 0; i != _node_num; ++i) {
         _sum_supply += _supply[i];
+        if (_supply[i] > 0) positive_supply += _supply[i];
+      }
       // Warm path: EQ supply and tree remains primal-feasible after repair.
       // Nonzero lower bounds force cold: init() folds _lower into _supply and
       // solves in the transformed space, and finalizeOptimal() transforms
@@ -1626,19 +1636,25 @@ namespace lemon {
         // bounded simplex repair before paying for a cold init — unless the
         // warm/cold policy says repair is a losing move on this problem.
         const long limit = warmViolationLimit();
+        const double mass_fraction = _warm_violation_mass_fraction;
         bool try_repair = strategy != WarmRepair::RepairOnly;
         if (try_repair) {
 #ifndef PYLMCF_PIVOT_STATS
-          if (limit >= 0)
+          if (limit >= 0 || mass_fraction >= 0)
 #endif
           {
             Value viol_mass = 0;
             const int viol_cnt = countTreeViolations(viol_mass);
+            _last_violation_count = viol_cnt;
+            _last_violation_mass = (double)viol_mass;
+            _last_positive_supply = (double)positive_supply;
 #ifdef PYLMCF_PIVOT_STATS
             pylmcf_stats::warm_violations = (unsigned long long)viol_cnt;
             pylmcf_stats::warm_violation_mass = (unsigned long long)viol_mass;
 #endif
-            if (limit >= 0 && viol_cnt > limit) {
+            if ((limit >= 0 && viol_cnt > limit) ||
+                (mass_fraction >= 0 &&
+                 (double)viol_mass > mass_fraction * (double)positive_supply)) {
               ++_policy_cold_count;
               try_repair = false;
             }
@@ -1701,6 +1717,20 @@ namespace lemon {
     //       was tried and reverted for the same reason (it broke PBTTT).
     // The cold fallback is always correct, so every mode is safe.
     void setWarmViolationLimit(long v) { _warm_violation_limit = v; }
+
+    // Mass-based warm/cold policy: when >= 0, skip repair (go cold) whenever
+    // the violated basic-arc mass left by repairTreeFlows() exceeds this
+    // fraction of the total positive supply.  < 0 (default) disables it.
+    // Combines with the count limit: either one can force the cold start.
+    void setWarmViolationMassFraction(double f) { _warm_violation_mass_fraction = f; }
+
+    // Deterministic work units accumulated over every run on this solver
+    // (see _work_acc), and the violation measurements of the last warmRun()
+    // whose repair policy looked at them (-1 / NaN-free zeros before that).
+    long long workUnits() const { return _work_acc; }
+    int lastViolationCount() const { return _last_violation_count; }
+    double lastViolationMass() const { return _last_violation_mass; }
+    double lastPositiveSupply() const { return _last_positive_supply; }
 
     // Work budget for one warm-repair attempt, as a multiple of the work of
     // the last measured cold solve on this solver (<= 0 disables).  See the

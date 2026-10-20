@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Added
+
+- A mass-based warm/cold policy: `setWarmViolationMassFraction(f)` /
+  `Graph.set_warm_violation_mass_fraction(f)` skips simplex repair (cold
+  start, counted in `policyColdCount()`) when the violated basic-arc mass left
+  by the tree patch exceeds `f` times the total positive supply. Negative
+  (default) disables it; it combines with the count limit, either of which
+  can force the cold start. Measured on 2-D NMR deconvolution, repair beats a
+  cold start only while that mass stays below roughly 0.5% of supply.
+- Observability for warm/cold policies: `workUnits()` (deterministic work
+  accumulated over all runs) and `lastViolationCount()`,
+  `lastViolationMass()`, `lastPositiveSupply()` (the measurements of the last
+  warm solve whose policy looked at them), with `Graph` counterparts.
+
 ### Changed
 
 - The warm-repair budget (`setWarmRepairBudget()` / `Graph.set_warm_repair_budget()`)
