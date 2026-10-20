@@ -18,6 +18,15 @@
 
 ### Changed
 
+- NetworkSimplex's pivot loop now shifts the potentials of whichever side of
+  the spanning tree is smaller after each pivot, instead of always the moved
+  subtree. Both differ by a global constant that no reduced cost sees, so the
+  pivots, flows and (after a final renormalization) potentials are exactly
+  those of stock LEMON. On wnet's 2-D NMR networks, where a hub node makes
+  moved subtrees large, it cuts cutting-plane oracle time by 8%.
+  `setSmallerSidePotentials(false)` / `Graph.set_smaller_side_potentials(False)`
+  or `PYLMCF_SMALLER_SIDE_POTENTIALS=0` restores the stock update;
+  `complementPotentialUpdates()` counts the pivots that used the complement.
 - The warm-repair budget (`setWarmRepairBudget()` / `Graph.set_warm_repair_budget()`)
   is now measured in deterministic work units instead of wall time, so a given
   input always takes the same repair/cold path. The wall-time budget could trip
