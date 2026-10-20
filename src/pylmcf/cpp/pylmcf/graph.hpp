@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <span>
 #include <vector>
+#include <optional>
 #include <lemon/static_graph.h>
 #include <lemon/network_simplex.h>
 #include <lemon/circulation.h>
@@ -16,6 +17,7 @@
 #ifdef INCLUDE_NANOBIND_STUFF
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
+#include <nanobind/stl/optional.h>
 #include "py_support.hpp"
 #endif
 
@@ -91,6 +93,12 @@ private:
     // "repair succeeded => already optimal" fast path, which is only valid
     // while the retained basis prices the current costs.
     bool _costs_dirty = false;
+    // Cold-start flow installed by set_cold_start_flow(): every cold start of
+    // solve() (the first solve, and warmRun()'s cold fallback) crash-starts
+    // from it instead of LEMON's artificial basis.
+    bool _has_cold_start_flow = false;
+    std::vector<T> _cold_start_flow;
+    std::vector<int> _cold_start_prefer;
 
     typename Solver::SupplyType _supply_type = Solver::GEQ;
     typename Solver::PivotRule _pivot_rule = Solver::BLOCK_SEARCH;
@@ -351,9 +359,14 @@ public:
         // reused (non-EQ supply, nonzero lower bounds, failed repair), so
         // every mutation of capacities/supplies/costs/minimums is safe here;
         // _costs_dirty only steers it off the costs-unchanged fast path.
+        if (_has_cold_start_flow)
+            solver.setColdStartFlow(&_cold_start_flow, &_cold_start_prefer);
         const auto status = _basis_valid
             ? solver.warmRun(_pivot_rule, _warm_repair, _costs_dirty)
-            : solver.run(_pivot_rule);
+            : (_has_cold_start_flow
+                   ? solver.crashRun(_cold_start_flow, _pivot_rule, &_cold_start_prefer)
+                   : solver.run(_pivot_rule));
+        solver.setColdStartFlow(nullptr);
         _basis_valid = (status == Solver::OPTIMAL);
         if (status != Solver::OPTIMAL) {
             if (status == Solver::INFEASIBLE)
@@ -372,16 +385,23 @@ public:
     // value per edge, in edge order) instead of LEMON's artificial basis.  See
     // NetworkSimplex::crashRun(); only EQ supplies without minimums use the
     // flow, anything else silently runs cold.
-    void solve_from_flow(const std::span<const T> &flow) {
+    //
+    // prefer (optional): edge indices, in priority order, that the crash may
+    // use as zero-flow tree arcs to connect what the flow leaves disconnected,
+    // before falling back to artificial arcs.  They set the starting
+    // potentials, so a good choice (arcs whose reduced cost should start near
+    // zero) can matter more than the flow itself.
+    void solve_from_flow(const std::span<const T> &flow, const std::span<const T> &prefer = {}) {
         if (flow.size() != _edge_starts.size())
             throw std::invalid_argument("flow must have one value per edge");
+        const std::vector<int> pref = edge_index_list(prefer);
         _solved = false;
         assert(costs_in_sync() && "solver costs out of sync with costs_map");
         check_bounds();
         if (_no_nodes == 0) { _costs_dirty = false; _solved = true; return; }
         solver.supplyMap(node_supply_map);
         std::vector<T> f(flow.begin(), flow.end());
-        const auto status = solver.crashRun(f, _pivot_rule);
+        const auto status = solver.crashRun(f, _pivot_rule, &pref);
         _basis_valid = (status == Solver::OPTIMAL);
         if (status != Solver::OPTIMAL) {
             if (status == Solver::INFEASIBLE)
@@ -396,6 +416,36 @@ public:
         _solved = true;
     }
     int crash_start_count() const { return solver.crashStartCount(); }
+
+    // Install a flow (and optional preferred tree edges, as in
+    // solve_from_flow()) that every later cold start of solve() crash-starts
+    // from.  It is not refreshed automatically: after changing supplies or
+    // capacities, install a flow that fits them (an infeasible one still gives
+    // the exact optimum, only more slowly).
+    void set_cold_start_flow(const std::span<const T> &flow, const std::span<const T> &prefer = {}) {
+        if (flow.size() != _edge_starts.size())
+            throw std::invalid_argument("flow must have one value per edge");
+        _cold_start_prefer = edge_index_list(prefer);
+        _cold_start_flow.assign(flow.begin(), flow.end());
+        _has_cold_start_flow = true;
+    }
+    void clear_cold_start_flow() {
+        _has_cold_start_flow = false;
+        _cold_start_flow.clear();
+        _cold_start_prefer.clear();
+    }
+    bool has_cold_start_flow() const { return _has_cold_start_flow; }
+
+    std::vector<int> edge_index_list(const std::span<const T> &edges) const {
+        std::vector<int> out;
+        out.reserve(edges.size());
+        for (T e : edges) {
+            if (e < 0 || e >= static_cast<T>(_edge_starts.size()))
+                throw std::invalid_argument("preferred edge index out of range: " + std::to_string(e));
+            out.push_back(static_cast<int>(e));
+        }
+        return out;
+    }
 
     // Warm-restart observability, backed by the solver's counters.  Only
     // warmRun() increments them: the first solve() and any solve() after a
@@ -636,8 +686,13 @@ public:
         set_edge_minimums(numpy_to_span(minimums));
     }
 
-    void solve_from_flow_py(const ndarray_1d<T> &flow) {
-        solve_from_flow(numpy_to_span(flow));
+    void solve_from_flow_py(const ndarray_1d<T> &flow, std::optional<ndarray_1d<T>> prefer) {
+        solve_from_flow(numpy_to_span(flow),
+                        prefer ? numpy_to_span(*prefer) : std::span<const T>{});
+    }
+    void set_cold_start_flow_py(const ndarray_1d<T> &flow, std::optional<ndarray_1d<T>> prefer) {
+        set_cold_start_flow(numpy_to_span(flow),
+                            prefer ? numpy_to_span(*prefer) : std::span<const T>{});
     }
 
     void set_edge_costs_py(const ndarray_1d<T> &costs) {

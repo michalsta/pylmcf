@@ -289,6 +289,12 @@ namespace lemon {
     int _crash_start_count = 0;
     const std::vector<Value>* _cold_start_flow = nullptr;
     const std::vector<int>* _cold_start_prefer = nullptr;
+    // True while the basis descends from crashRun() rather than init().  A
+    // crash basis hangs the root off the components by a few artificial arcs,
+    // so the remaining artificial arcs need not carry the huge reduced costs
+    // the warm repairs rely on to leave them alone; the repairs then skip
+    // artificial arcs as entering candidates (no candidate -> cold fallback).
+    bool _crash_basis = false;
     // P2 repair budget: a repair attempt bails to the (always correct) cold
     // fallback once it has done _warm_repair_budget x the work of the most
     // recent cold init()+start() on this solver (_last_cold_work).  Work is
@@ -1377,6 +1383,7 @@ namespace lemon {
 
     // Initialize internal data structures
     bool init() {
+      _crash_basis = false;
       if (_node_num == 0) return false;
 
       // Check the sum of supply values
@@ -1828,6 +1835,7 @@ namespace lemon {
       _pi[_root] = 0;
       recomputeTreePotentials();
       ++_crash_start_count;
+      _crash_basis = true;
       if (repairTreeFlows()) return start(pivot_rule);
       if (primalSimplexRepair()) { ++_primal_repair_count; return start(pivot_rule); }
       ++_cold_start_count;
@@ -2159,6 +2167,7 @@ namespace lemon {
         int  best_e = -1, best_uin = 0, best_vin = 0;
         Cost best_score = 0;
         auto consider = [&](int e) {
+          if (_crash_basis && e >= _search_arc_num) return;   // see _crash_basis
           if (_state[e] == STATE_TREE) return;            // basic — not entering
           const int se = _source[e], te = _target[e];
           const bool ss = (in_sub[se] == g), st = (in_sub[te] == g);
@@ -2285,6 +2294,7 @@ namespace lemon {
         const int* inc_arc = _inc_arc.data();
         const int* thread = _thread.data();
         auto consider = [&](int e) {
+          if (_crash_basis && e >= _search_arc_num) return;   // see _crash_basis
           if (state[e] == STATE_TREE) return;
           const int se = source[e], te = target[e];
           const bool ss = (sub[se] == g), st = (sub[te] == g);
@@ -2574,6 +2584,7 @@ namespace lemon {
         int  best_e = -1, best_uin = 0, best_vin = 0;
         Cost best_score = 0;
         auto consider = [&](int e) {
+          if (_crash_basis && e >= _search_arc_num) return;   // see _crash_basis
           if (_state[e] == STATE_TREE) return;            // basic — not entering
           const int se = _source[e], te = _target[e];
           const bool ss = (in_sub[se] == g), st = (in_sub[te] == g);
