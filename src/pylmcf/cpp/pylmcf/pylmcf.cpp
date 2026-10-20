@@ -254,6 +254,9 @@ NB_MODULE(pylmcf_cpp, m) {
         .def("last_violation_mass", &Graph<int64_t>::last_violation_mass)
         .def("last_positive_supply", &Graph<int64_t>::last_positive_supply)
         .def("work_units", &Graph<int64_t>::work_units)
+        .def("set_smaller_side_potentials", &Graph<int64_t>::set_smaller_side_potentials, arg("on"))
+        .def("smaller_side_potentials", &Graph<int64_t>::smaller_side_potentials)
+        .def("complement_potential_updates", &Graph<int64_t>::complement_potential_updates)
         .def("warm_repair_budget", &Graph<int64_t>::warm_repair_budget)
         .def("set_supply_type", [](Graph<int64_t>& g, const std::string& name) {
                  g.set_supply_type(enum_from_name(supply_type_names, name, "supply type"));

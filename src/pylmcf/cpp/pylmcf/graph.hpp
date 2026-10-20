@@ -394,6 +394,13 @@ public:
     double last_violation_mass() const { return solver.lastViolationMass(); }
     double last_positive_supply() const { return solver.lastPositiveSupply(); }
     long long work_units() const { return solver.workUnits(); }
+    // Main-loop potential update on the smaller tree side (default) or the
+    // moved subtree (stock).  See NetworkSimplex::setSmallerSidePotentials().
+    void set_smaller_side_potentials(bool on) { solver.setSmallerSidePotentials(on); }
+    bool smaller_side_potentials() const { return solver.smallerSidePotentials(); }
+    long long complement_potential_updates() const { return solver.complementPotentialUpdates(); }
+    // LEMON's raw potential of node v after a solve (no canonicalization).
+    T raw_potential(LEMON_INDEX v) const { return solver.potential(lemon_graph.nodeFromId(v)); }
 
     // Direction of the supply/demand constraints when total supply != 0
     // (LEMON's SupplyType; with zero total supply both mean equality):
