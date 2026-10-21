@@ -6,7 +6,7 @@ Start at the [project README](../README.md) for installation and the Python API.
 
 | | |
 |---|---|
-| [Warm restarts](warm-restart.md) | How re-solving reuses the spanning-tree basis, the five repair strategies, the counters, and the two policy knobs. Relevant from **Python and C++** — it is on by default and affects every re-solve. |
+| [Warm restarts](warm-restart.md) | How re-solving reuses the spanning-tree basis, the five repair strategies, the counters, the two policy knobs, and crash starts from a caller-supplied flow. Relevant from **Python and C++** — it is on by default and affects every re-solve. |
 | [The C++ header tree](cpp-headers.md) | Consuming `src/pylmcf/cpp/` from your own C++, an index of what is in it, and why the vendored LEMON must not be replaced wholesale. |
 | [Link-cut trees](link-cut-tree.md) | `LinkCutTree<Val>` — a standalone Sleator–Tarjan link-cut tree with path-sum, path-min-with-argmin and lazy path-add. C++ only. |
 | [LCT network simplex](lct-network-simplex.md) | `NetworkSimplexLCT` and the experimental `NetworkSimplexLCTDyn`, plus the adapter that A/B-tests them against real `lemon::NetworkSimplex`. C++ only. |

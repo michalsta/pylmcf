@@ -243,12 +243,24 @@ NB_MODULE(pylmcf_cpp, m) {
         .def("get_edge_costs", &Graph<int64_t>::get_edge_costs_py)
         .def("solve", &Graph<int64_t>::solve)
         .def("solve_from_flow", &Graph<int64_t>::solve_from_flow_py, arg("flow").noconvert(),
-             arg("prefer").noconvert() = nb::none())
+             arg("prefer").noconvert() = nb::none(),
+             "Solve cold, crash-starting from flow (one int64 per edge) instead of LEMON's "
+             "artificial basis. The flow need not be feasible or basic; the result is the exact "
+             "optimum either way. prefer: edge indices, in priority order, that may join the "
+             "flow's components as zero-flow tree edges before artificial arcs do; they set the "
+             "starting potentials. Only EQ supplies without minimums use the flow.")
         .def("set_cold_start_flow", &Graph<int64_t>::set_cold_start_flow_py, arg("flow").noconvert(),
-             arg("prefer").noconvert() = nb::none())
-        .def("clear_cold_start_flow", &Graph<int64_t>::clear_cold_start_flow)
+             arg("prefer").noconvert() = nb::none(),
+             "Crash-start every later cold solve of solve() (the first one, and warm restarts that "
+             "fall back to cold) from flow, as in solve_from_flow(). The flow is copied and not "
+             "refreshed: install a new one after changing supplies or capacities.")
+        .def("clear_cold_start_flow", &Graph<int64_t>::clear_cold_start_flow,
+             "Forget the flow installed by set_cold_start_flow(); cold solves start from "
+             "LEMON's artificial basis again.")
         .def("has_cold_start_flow", &Graph<int64_t>::has_cold_start_flow)
-        .def("crash_start_count", &Graph<int64_t>::crash_start_count)
+        .def("crash_start_count", &Graph<int64_t>::crash_start_count,
+             "Number of solves that started from a crash basis (solve_from_flow() or an "
+             "installed cold-start flow), the first solve included.")
         .def("warm_start_count", &Graph<int64_t>::warm_start_count)
         .def("cold_start_count", &Graph<int64_t>::cold_start_count)
         .def("dual_repair_count", &Graph<int64_t>::dual_repair_count)

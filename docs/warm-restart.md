@@ -257,6 +257,113 @@ job is to assert the in-code defaults.
 
 ---
 
+## Crash starts
+
+A cold solve normally starts from LEMON's artificial basis: one artificial arc
+per node, all supply routed over them, and the simplex pivots its way out. A
+*crash start* builds the starting basis from a flow you supply instead.
+
+### From Python
+
+`G.solve_from_flow(flow, prefer=None)` solves once from `flow` (one int64 per
+edge). `G.set_cold_start_flow(flow, prefer=None)` installs a flow that every
+later cold solve of `solve()` starts from: the first solve, and any re-solve
+whose warm restart falls back to cold. `G.clear_cold_start_flow()` removes it,
+and `G.has_cold_start_flow()` says whether one is installed.
+
+```python
+import numpy as np
+import pylmcf
+
+H = pylmcf.Graph(3,
+    edge_starts=np.array([0, 0, 1]),
+    edge_ends=np.array([1, 2, 2]))
+H.set_edge_costs(np.array([1, 3, 5]))
+H.set_edge_capacities(np.array([3, 3, 5]))
+H.set_warm_repair("repair_only")         # every failed patch goes cold
+for d in (3, 2, 6):
+    H.set_node_supply(np.array([d, 0, -d]))
+    H.set_cold_start_flow(np.array([0, min(d, 3), max(d - 3, 0)]), prefer=np.array([0]))
+    H.solve()
+    print(d, H.result(), H.total_cost())
+print("crash =", H.crash_start_count(), " cold =", H.cold_start_count(), " warm =", H.warm_start_count())
+```
+
+```
+3 [0 3 0] 9
+2 [0 2 0] 6
+6 [3 3 3] 27
+crash = 3  cold = 2  warm = 0
+```
+
+The flow is copied and not refreshed, which is why the loop installs a new one
+for each supply. A stale or infeasible flow still gives the exact optimum,
+only more slowly.
+
+### What the crash does
+
+1. Arcs with `0 < flow < cap` become tree arcs, in arc order, unless one would
+   close a cycle; then it stays nonbasic at zero. Arcs with `flow >= cap` start
+   at their upper bound.
+2. The `prefer` arcs, in the order given, join the components that are still
+   separate, as zero-flow tree arcs.
+3. Each component left after that is attached to the root by one artificial
+   arc.
+4. Tree flows are recomputed from the supplies (exactly the given flow when
+   it was already basic) and potentials from the tree. If the recomputed flows
+   break a bound, the primal repair pass runs. Then the ordinary simplex
+   finishes.
+
+The flow therefore does not have to be feasible or basic. It only has to be a
+good place to begin.
+
+**Choose `prefer` with care.** The preferred arcs fix the starting potentials,
+and on transport-like problems that matters more than the flow itself. In
+`wnet`, the start flow sends all mass to the trash arcs and the preferred arcs
+are the `Source->Emp` and `Theo->Sink` anchors. That prices every matching arc
+at "distance minus the trash cost it saves" from the first pivot. Without the
+anchors the same flow gained about ±10%. With them, wnet's synthetic
+benchmarks ran in 0.08–1.0× the time of the artificial start, with the biggest
+gains on the largest components.
+
+### Counters
+
+`crash_start_count()` counts the solves that started from a crash basis, the
+first solve included. A crash start inside a warm restart's cold fallback is
+also counted in `cold_start_count()`. If the crash basis needed the primal
+repair pass, that pass is counted in `primal_repair_count()` as well. So with
+a cold-start flow installed, the identity
+`warm + cold + dual_repair + primal_repair == re-solves` can overcount.
+
+### Scope
+
+Only EQ supplies without lower bounds use the flow. GEQ/LEQ problems and
+nonzero edge minimums run a plain cold solve, counted in `cold_start_count()`
+and not in `crash_start_count()`. A flow of the wrong length raises
+`ValueError` in Python, and so do `prefer` indices out of range; the C++ call
+skips such indices.
+
+### From C++
+
+```cpp
+ProblemType crashRun(const std::vector<Value>& flow,        // indexed by graph.id(arc)
+                     PivotRule pivot_rule = BLOCK_SEARCH,
+                     const std::vector<int>* prefer = nullptr);  // LEMON arc ids
+void setColdStartFlow(const std::vector<Value>* flow,       // nullptr: plain cold init()
+                      const std::vector<int>* prefer = nullptr);
+int crashStartCount() const;
+```
+
+`crashRun()` replaces `run()` for a cold solve. `setColdStartFlow()` makes
+`warmRun()`'s cold fallback call `crashRun()`. It stores the pointers, not
+copies: the vectors must outlive the solves, and the caller refreshes them when
+supplies or capacities change. After a crash start, the dual and primal
+repairs of later warm restarts never choose an artificial arc to enter the
+basis. On a crash basis that could put flow on an artificial arc and end in a
+false `INFEASIBLE`. The restriction lasts until the next `init()`.
+
+---
+
 ## Scope
 
 The warm path requires:

@@ -4,6 +4,17 @@
 
 ### Added
 
+- Crash starts: a cold solve can start from a caller-supplied flow instead of
+  LEMON's artificial basis. `Graph.solve_from_flow(flow, prefer=None)` solves
+  once from it; `Graph.set_cold_start_flow(flow, prefer=None)` makes every
+  later cold solve of `solve()` (the first, and warm-restart cold fallbacks)
+  start from it, and `clear_cold_start_flow()` / `has_cold_start_flow()`
+  manage it. The flow need not be feasible or basic; the result is the exact
+  optimum either way. `prefer` lists edges that may complete the starting
+  tree at zero flow and so set the starting potentials. `crash_start_count()`
+  counts these starts. In C++: `NetworkSimplex::crashRun()`,
+  `setColdStartFlow()` and `crashStartCount()`. See
+  [Crash starts](docs/warm-restart.md#crash-starts).
 - A mass-based warm/cold policy: `setWarmViolationMassFraction(f)` /
   `Graph.set_warm_violation_mass_fraction(f)` skips simplex repair (cold
   start, counted in `policyColdCount()`) when the violated basic-arc mass left

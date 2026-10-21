@@ -214,6 +214,39 @@ budget (`set_warm_repair_budget()`) are configurable; the defaults are what
 you want unless you are benchmarking. Full details, the repair strategies, the `set_warm_violation_limit()` policy and
 the C++ API: **[Warm restarts](https://github.com/michalsta/pylmcf/blob/main/docs/warm-restart.md)**.
 
+#### Starting from a known flow (crash start)
+
+A cold solve normally starts from LEMON's artificial basis, where every unit
+travels over artificial arcs. If you already know a flow close to the
+optimum, or just a cheap feasible one, `solve_from_flow()` starts from that
+flow instead:
+
+```python
+C = pylmcf.Graph(3,
+    edge_starts=np.array([0, 0, 1]),
+    edge_ends=np.array([1, 2, 2]))
+C.set_edge_costs(np.array([1, 3, 5]))
+C.set_edge_capacities(np.array([3, 3, 5]))
+C.set_node_supply(np.array([5, 0, -5]))
+
+C.solve_from_flow(np.array([0, 3, 0]))   # need not be feasible: ships 3 of 5 units
+C.result()             # np.array([2, 3, 2])
+C.total_cost()         # 21
+C.crash_start_count()  # 1
+```
+
+The answer is the exact optimum whatever flow you pass. The flow only sets
+where the simplex begins. `prefer=` names edges (in priority order) that may
+complete the starting spanning tree at zero flow; they fix the starting
+potentials, so a good choice can matter more than the flow itself.
+
+`set_cold_start_flow(flow, prefer=None)` installs a flow that every later
+cold solve of `solve()` starts from: the first solve, and any re-solve whose
+warm restart falls back to cold. It is copied and not refreshed, so install a
+new one after changing supplies or capacities. `clear_cold_start_flow()`
+removes it. Supplies that do not balance and nonzero edge minimums ignore the
+flow. Details: **[Crash starts](https://github.com/michalsta/pylmcf/blob/main/docs/warm-restart.md#crash-starts)**.
+
 #### Constructing from a NetworkX graph
 
 > **Note:** `Graph.FromNX()` iterates over graph elements in Python and is significantly slower than constructing `Graph` directly from numpy arrays. Prefer the direct API for performance-sensitive code.
