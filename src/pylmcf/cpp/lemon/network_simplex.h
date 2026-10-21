@@ -345,6 +345,10 @@ namespace lemon {
     // < 0 disables; otherwise skip repair when the violated tree-arc mass
     // exceeds this fraction of the total positive supply.
     double _warm_violation_mass_fraction = -1.0;
+    // Main pivot loop updates the smaller side of the tree's potentials (see
+    // updatePotentialSmallerSide()); false restores stock updatePotential().
+    bool _smaller_side_potentials = true;
+    long long _complement_updates = 0;
 
     // Reusable scratch buffers for the warm-restart repair routines, sized
     // lazily to _node_num+1 to avoid a per-solve heap allocation.  The solver
@@ -1887,6 +1891,23 @@ namespace lemon {
     // Combines with the count limit: either one can force the cold start.
     void setWarmViolationMassFraction(double f) { _warm_violation_mass_fraction = f; }
 
+    // Potential update of the main pivot loop: true (default) shifts the
+    // smaller side of the spanning tree, false the moved subtree as stock
+    // LEMON does.  Both give the same pivots, flows and final potentials.
+    // PYLMCF_SMALLER_SIDE_POTENTIALS=0/1, if set, overrides it (read once).
+    void setSmallerSidePotentials(bool on) { _smaller_side_potentials = on; }
+    bool smallerSidePotentials() const {
+      static const int env = [] {
+        const char* s = std::getenv("PYLMCF_SMALLER_SIDE_POTENTIALS");
+        if (!s || !*s) return -1;
+        return std::atoi(s) != 0 ? 1 : 0;
+      }();
+      return env >= 0 ? env == 1 : _smaller_side_potentials;
+    }
+    // Pivots whose potential update shifted the complement of the moved
+    // subtree instead of the subtree itself.
+    long long complementPotentialUpdates() const { return _complement_updates; }
+
     // Deterministic work units accumulated over every run on this solver
     // (see _work_acc), and the violation measurements of the last warmRun()
     // whose repair policy looked at them (-1 / NaN-free zeros before that).
@@ -2883,6 +2904,39 @@ namespace lemon {
       }
     }
 
+    // updatePotential() for the main pivot loop: shift whichever side of the
+    // tree is smaller.  Adding sigma to the moved subtree and adding -sigma to
+    // everything else differ by a global constant, which no reduced cost
+    // sees, so the pivot sequence is unchanged.  The complement update moves
+    // _pi[_root] off 0 (stock keeps it there: the root is never in a moved
+    // subtree); renormalizePotentials() subtracts it again, restoring the
+    // stock potentials exactly.  The complement is used only while sigma and
+    // the drift stay small, so stock + drift never nears the Cost range.
+    void updatePotentialSmallerSide() {
+      const Cost sigma = _pi[v_in] - _pi[u_in] -
+                         _pred_dir[u_in] * _cost[in_arc];
+      const int moved = _succ_num[u_in];
+      const Cost lim = std::numeric_limits<Cost>::max() / 16;
+      if (2 * (long long)moved <= (long long)_node_num + 1 ||
+          sigma > lim || sigma < -lim) {
+        const int end = _thread[_last_succ[u_in]];
+        for (int u = u_in; u != end; u = _thread[u]) _pi[u] += sigma;
+        return;
+      }
+      if (_pi[_root] > lim || _pi[_root] < -lim) renormalizePotentials();
+      for (int u = _thread[_last_succ[u_in]]; u != u_in; u = _thread[u])
+        _pi[u] -= sigma;
+      ++_complement_updates;
+    }
+
+    // Shift every potential so that _pi[_root] == 0 again (see
+    // updatePotentialSmallerSide()).
+    void renormalizePotentials() {
+      const Cost d = _pi[_root];
+      if (d == 0) return;
+      for (int u = 0; u <= _node_num; ++u) _pi[u] -= d;
+    }
+
     // Heuristic initial pivots
     bool initialPivots() {
       Value curr, total = 0;
@@ -3015,13 +3069,15 @@ namespace lemon {
         _work_acc += scan_est;
         findJoinNode();
         bool change = findLeavingArc();
-        if (delta >= MAX) return UNBOUNDED;
+        if (delta >= MAX) { renormalizePotentials(); return UNBOUNDED; }
         changeFlow(change);
         if (change) {
           updateTreeStructure();
-          updatePotential();
+          if (smallerSidePotentials()) updatePotentialSmallerSide();
+          else updatePotential();
         }
       }
+      renormalizePotentials();
 
       return finalizeOptimal();
     }
