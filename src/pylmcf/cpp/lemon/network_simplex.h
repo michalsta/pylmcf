@@ -1630,7 +1630,6 @@ namespace lemon {
       // silently wrong results, not just a slow path.
       if (_sum_supply == 0 && !_has_lower) {
         _supply[_root] = 0;
-        syncCapsFromUpper();
         if (costs_changed) recomputeTreePotentials();
         if (repairTreeFlows()) {
           ++_warm_start_count;
@@ -2012,68 +2011,61 @@ namespace lemon {
       }
     }
 
-    // Sync _cap[i] from _upper[i] for all real arcs (i < _arc_num).
-    // Call after upperMap() and before repairTreeFlows().  Lower bounds are
-    // never on the warm path (warmRun() sends them cold: init() folds _lower
-    // into _supply/_cap and the warm path re-applies neither), so _cap is the
-    // plain capacity here.  A future caller with lower bounds would need
-    // init()'s per-sign shift, not this copy.
-    void syncCapsFromUpper() {
-      LEMON_ASSERT(!_has_lower, "syncCapsFromUpper() does not handle lower bounds");
-      for (int i = 0; i != _arc_num; ++i) {
-        _cap[i] = _upper[i];
-      }
-    }
-
-    // Recompute tree arc flows to satisfy conservation for the current _supply[]
-    // and _cap[] (after syncCapsFromUpper).  Non-tree arcs are forced to their
-    // bound: STATE_LOWER → 0, STATE_UPPER → cap.  Tree arc flows are computed
-    // bottom-up via reverse-preorder (_rev_thread).
-    // Returns false if any tree arc flow would be negative or exceed its capacity
-    // (primal infeasible — caller should fall back to a cold run()).
+    // Recompute tree arc flows to satisfy conservation for the current
+    // _supply[] and the capacities last pushed by upperMap().  One pass over
+    // the real arcs syncs _cap[i] from _upper[i] (lower bounds are never on
+    // the warm path: warmRun() sends them cold, since init() folds _lower into
+    // _supply/_cap and nothing here re-applies that shift) and forces every
+    // non-tree arc to its bound, STATE_LOWER -> 0, STATE_UPPER -> cap, while
+    // accumulating the per-node excess those bounds leave.  Tree arc flows are
+    // then computed bottom-up via reverse preorder (_rev_thread), and checked
+    // for [0, cap] on the way: every tree arc is the pred arc of exactly one
+    // non-root node, so the walk visits each of them once.  Artificial arcs
+    // have cap == INF, so for them only flow >= 0 can fail — a negative
+    // artificial-arc flow means a STATE_UPPER real arc had its capacity
+    // increased, draining a node whose supply the current tree cannot
+    // replenish, and the basis is not warm-startable.
+    // Returns false in that case (the tree flows are still fully recomputed,
+    // which the simplex repairs rely on); the caller then repairs or goes cold.
+    // Previously this was five separate O(m) passes (cap sync, pinning,
+    // excess accumulation, the tree walk and a final scan of all arcs); on the
+    // repair-free fast path those passes were the whole solve.
     bool repairTreeFlows() {
-      // Fix non-tree arc flows to their bounds.
-      for (int i = 0; i != _arc_num; ++i) {
-        if      (_state[i] == STATE_LOWER) _flow[i] = 0;
-        else if (_state[i] == STATE_UPPER) _flow[i] = _cap[i];
-      }
-
-      // Per-node running excess: supply minus non-tree arc contributions.
-      // Reuse a member buffer (fully overwritten below) to avoid a per-solve
-      // heap allocation.
+      LEMON_ASSERT(!_has_lower, "repairTreeFlows() does not handle lower bounds");
       if ((int)_repair_running.size() < _node_num + 1)
         _repair_running.resize(_node_num + 1);
       ValueVector& running = _repair_running;
       for (int i = 0; i <= _node_num; ++i) running[i] = _supply[i];
+
+      const Value* upper = _upper.data();
+      Value* cap = _cap.data();
+      Value* flow = _flow.data();
+      const signed char* state = _state.data();
+      const int* source = _source.data();
+      const int* target = _target.data();
+      Value* run = running.data();
       for (int i = 0; i != _arc_num; ++i) {
-        if (_state[i] != STATE_TREE) {
-          running[_source[i]] -= _flow[i];
-          running[_target[i]] += _flow[i];
+        const Value c = upper[i];
+        cap[i] = c;
+        const signed char st = state[i];
+        if (st == STATE_LOWER) {
+          flow[i] = 0;
+        } else if (st == STATE_UPPER) {
+          flow[i] = c;
+          run[source[i]] -= c;
+          run[target[i]] += c;
         }
       }
 
-      // Bottom-up traversal via reverse preorder (_rev_thread).
-      // For each non-root node u:  _flow[pred[u]] = _pred_dir[u] * running[u]
-      //   DIR_UP (+1): arc u→parent, carries running[u] units out of subtree.
-      //   DIR_DOWN (-1): arc parent→u, carries -running[u] units into subtree.
-      // Then propagate running[u] into parent.
+      bool feasible = true;
       for (int u = _rev_thread[_root]; u != _root; u = _rev_thread[u]) {
-        int e = _pred[u];
-        _flow[e] = Value(_pred_dir[u]) * running[u];
-        running[_parent[u]] += running[u];
+        const int e = _pred[u];
+        const Value f = Value(_pred_dir[u]) * run[u];
+        flow[e] = f;
+        run[_parent[u]] += run[u];
+        if (f < 0 || f > cap[e]) feasible = false;
       }
-
-      // Check all tree arcs (real and artificial) for feasibility.
-      // Real arcs: flow must be in [0, cap].
-      // Artificial arcs: cap == INF so only check flow >= 0.  A negative
-      // artificial-arc flow means a STATE_UPPER real arc had its capacity
-      // increased, draining a node whose supply cannot be replenished by the
-      // current tree — the basis is not warm-startable in this case.
-      for (int i = 0; i != _all_arc_num; ++i) {
-        if (_state[i] == STATE_TREE && (_flow[i] < 0 || _flow[i] > _cap[i]))
-          return false;
-      }
-      return true;
+      return feasible;
     }
 
     // Dual-simplex repair of a primal-infeasible / dual-feasible basis.
