@@ -105,7 +105,7 @@ are:
   strategies — see [Warm restarts](warm-restart.md).
 - Supporting internals: `repairTreeFlows()`, `dualSimplexRepair()`,
   `primalSimplexRepair()`, `dualRatioRepair()`, `dualGreedyRepair()`,
-  `syncCapsFromUpper()`, `finalizeOptimal()`, reusable scratch buffers
+  `finalizeOptimal()`, reusable scratch buffers
   (`_repair_*`), a lazily built CSR node→incident-arc index, and exposed
   `internalState()` / `sumSupplyMutable()` / `STATE_*_VAL`.
 - Counters: `warmStartCount()`, `coldStartCount()`, `dualRepairCount()`,
