@@ -6,12 +6,32 @@ on:
       - v*
 
 jobs:
+  # Between releases the stack's internal dependencies may be pinned to git
+  # commits (PEP 508 direct references) in two places: [build-system] requires
+  # in pyproject.toml and BASE_DEPENDENCIES in _pylmcf_metadata.py.  PyPI rejects
+  # such metadata, so a release must first put version requirements back in
+  # both; this job stops the release before anything is built if it did not.
+  no_direct_references:
+    name: No commit pins in dependencies
+    if: github.repository_owner == 'michalsta'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Fail on direct-reference requirements
+        run: |
+          if grep -nE '@[[:space:]]*(git\+|https?://|file:)' pyproject.toml _pylmcf_metadata.py; then
+            echo "::error::Commit/URL pins found (above). Replace them with version requirements in pyproject.toml [build-system] requires and _pylmcf_metadata.py, then retag."
+            exit 1
+          fi
+
   build_wheels:
     if: github.repository_owner == 'michalsta'
+    needs: [no_direct_references]
     uses: ./.github/workflows/build_wheels.yml
 
   tests:
     if: github.repository_owner == 'michalsta'
+    needs: [no_direct_references]
     uses: ./.github/workflows/run_tests.yml
 
   upload_pypi:
@@ -30,6 +50,29 @@ jobs:
           pattern: cibw-*
           path: dist
           merge-multiple: true
+
+      - name: Check built metadata for direct references
+        # Second line of defence: what is actually uploaded, including
+        # dependencies a metadata provider computed at build time.
+        run: |
+          python3 - <<'EOF'
+          import glob, re, sys, tarfile, zipfile
+          bad = []
+          for f in sorted(glob.glob("dist/*")):
+              if f.endswith(".whl"):
+                  with zipfile.ZipFile(f) as z:
+                      texts = [z.read(n).decode() for n in z.namelist() if n.endswith(".dist-info/METADATA")]
+              elif f.endswith(".tar.gz"):
+                  with tarfile.open(f) as t:
+                      texts = [t.extractfile(m).read().decode() for m in t.getmembers()
+                               if m.name.count("/") == 1 and m.name.endswith(("/PKG-INFO", "/pyproject.toml"))]
+              else:
+                  continue
+              for text in texts:
+                  bad += [f"{f}: {l}" for l in text.splitlines() if re.search(r"@\s*(git\+|https?://|file:)", l)]
+          print("\n".join(bad) or "no direct references")
+          sys.exit(1 if bad else 0)
+          EOF
 
       - uses: pypa/gh-action-pypi-publish@release/v1
         # To test uploads to TestPyPI, uncomment the following:
