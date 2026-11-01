@@ -292,6 +292,14 @@ namespace lemon {
     const std::vector<int>* _cold_start_tree = nullptr;
     const std::vector<int>* _cold_start_upper = nullptr;
     int _dual_start_count = 0;
+    int _ratio_variant = [] {
+      const char* e = std::getenv("PYLMCF_RATIO_VARIANT");
+      return e ? std::atoi(e) : 0;
+    }();
+    int _ratio_min_nodes = [] {
+      const char* e = std::getenv("PYLMCF_RATIO_MIN_NODES");
+      return e ? std::atoi(e) : 0;
+    }();
     // True while the basis descends from crashRun() rather than init().  A
     // crash basis hangs the root off the components by a few artificial arcs,
     // so the remaining artificial arcs need not carry the huge reduced costs
@@ -1006,7 +1014,10 @@ namespace lemon {
     template<typename UpperMap>
     NetworkSimplex& upperMap(const UpperMap& map) {
       for (ArcIt a(_graph); a != INVALID; ++a) {
-        _upper[_arc_id[a]] = map[a];
+        const int i = _arc_id[a];
+        const Value v = map[a];
+        if ((v >= INF) != (_upper[i] >= INF)) _dual_lists_valid = false;
+        _upper[i] = v;
       }
       return *this;
     }
@@ -1027,6 +1038,7 @@ namespace lemon {
       for (ArcIt a(_graph); a != INVALID; ++a) {
         _cost[_arc_id[a]] = map[a];
       }
+      _dual_lists_valid = false;
       return *this;
     }
 
@@ -1186,6 +1198,7 @@ namespace lemon {
       }
       _has_lower = false;
       _stype = GEQ;
+      _dual_lists_valid = false;
       return *this;
     }
 
@@ -1924,6 +1937,13 @@ namespace lemon {
       return start(pivot_rule);
     }
     int dualStartCount() const { return _dual_start_count; }
+    // PROTOTYPE (branch warm-repair-packed): dualRatioRepair()
+    // implementation: 0 stock, 1 packed cut scan (same pivots), 2 packed
+    // scan + leaving-arc heap.  PYLMCF_RATIO_VARIANT sets the initial value.
+    void setRatioRepairVariant(int v) { _ratio_variant = v; }
+    // ... used only on graphs with at least this many nodes (smaller ones
+    // keep the stock repair).  PYLMCF_RATIO_MIN_NODES sets the initial value.
+    void setRatioPackedMinNodes(int n) { _ratio_min_nodes = n; }
     // Basis (as for dualSimplexRun()) that warmRun()'s cold fallback starts
     // from with the dual network simplex, taking precedence over a cold-start
     // flow (which then serves as its fallback); nullptr (default) clears it.
@@ -2326,6 +2346,8 @@ namespace lemon {
     // that arc's capacity in the required direction.  Same max_pivots cap and
     // false->cold fallback as dualSimplexRepair: never a wrong answer.
     bool dualRatioRepair() {
+      if (_ratio_variant != 0 && _crash_basis && _node_num >= _ratio_min_nodes)
+        return dualRatioRepairPacked(_ratio_variant == 2);
       const int max_pivots = _all_arc_num + _node_num + 16;
       if ((int)_repair_in_sub.size() < _node_num + 1)
         _repair_in_sub.resize(_node_num + 1, 0);
@@ -2498,6 +2520,11 @@ namespace lemon {
     std::vector<int> _dual_oh, _dual_ih, _dual_fh;
     std::vector<DualEnt> _dual_out, _dual_in;
     std::vector<int> _dual_fin;
+    // The lists hold costs and the uncapacitated/finite split: costMap()
+    // and an upperMap() that changes which arcs are uncapacitated clear this.
+    bool _dual_lists_valid = false;
+    // Whether dualChangeFlow() feeds the leaving-arc heap.
+    bool _dual_heap_on = true;
 
     void dualBuildLists() {
       const int nn = _node_num + 1;
@@ -2523,6 +2550,7 @@ namespace lemon {
           _dual_fin[pf[t]++] = e;
         }
       }
+      _dual_lists_valid = true;
     }
 
     Value dualViolation(int e) const {
@@ -2547,7 +2575,7 @@ namespace lemon {
     // changeFlow() that also pushes every cycle arc whose flow it changes.
     void dualChangeFlow(bool change) {
       changeFlow(change);
-      if (delta > 0) {
+      if (_dual_heap_on && delta > 0) {
         for (int u = _source[in_arc]; u != join; u = _parent[u]) dualHeapPush(_pred[u]);
         for (int u = _target[in_arc]; u != join; u = _parent[u]) dualHeapPush(_pred[u]);
       }
@@ -2604,7 +2632,8 @@ namespace lemon {
     bool dualSimplexLoop() {
       if ((int)_repair_in_sub.size() < _node_num + 1) _repair_in_sub.resize(_node_num + 1, 0);
       if (_ratio_cand.size() < (size_t)_all_arc_num) _ratio_cand.resize(_all_arc_num);
-      dualBuildLists();
+      if (!_dual_lists_valid) dualBuildLists();
+      _dual_heap_on = true;
       dualHeapRebuild();
       const int N1 = _node_num + 1;
       const long long max_iters = 64LL * _all_arc_num + 1024;
@@ -2648,6 +2677,55 @@ namespace lemon {
       }
     }
 
+    // PROTOTYPE (branch warm-repair-packed): dualRatioRepair() on the dual
+    // simplex machinery -- smaller cut side marked by thread interval,
+    // packed direction-split cut scan, smaller-side potential update.  With
+    // heap == false the leaving arc is mostViolatedTreeNode()'s, so the
+    // pivot sequence is dualRatioRepair()'s exactly; heap == true takes the
+    // most violated arc from the lazy heap instead (ties by arc id).  Same
+    // iteration cap, work accounting and budget.  Crash bases only (the
+    // packed lists leave out artificial arcs).
+    bool dualRatioRepairPacked(bool heap) {
+      const int max_pivots = _all_arc_num + _node_num + 16;
+      if ((int)_repair_in_sub.size() < _node_num + 1) _repair_in_sub.resize(_node_num + 1, 0);
+      if (_ratio_cand.size() < (size_t)_all_arc_num) _ratio_cand.resize(_all_arc_num);
+      if (!_dual_lists_valid) dualBuildLists();
+      _dual_heap_on = heap;
+      if (heap) dualHeapRebuild();
+      const long long work_limit = warmRepairWorkLimit();
+      const long long work_start = _work_acc;
+      bool ok = false;
+      for (int iter = 0; iter < max_pivots; ++iter) {
+        _work_acc += _node_num;               // leaving-arc scan (heap: build + pops)
+        if (work_limit > 0 && _work_acc - work_start > work_limit) break;
+        int l = -1;
+        if (heap) {
+          while (!_dual_heap.empty()) {
+            const auto top = _dual_heap.front();
+            const int e = -top.second;
+            if (_state[e] == STATE_TREE && dualViolation(e) == top.first) { l = e; break; }
+            std::pop_heap(_dual_heap.begin(), _dual_heap.end());
+            _dual_heap.pop_back();
+          }
+          if (_dual_heap.size() > 8 * (size_t)(_node_num + 1) + 1024) {
+            dualHeapRebuild();
+            if (l >= 0) {
+              _dual_heap.emplace_back(dualViolation(l), -l);
+              std::push_heap(_dual_heap.begin(), _dual_heap.end());
+            }
+          }
+        } else {
+          const int q = mostViolatedTreeNode();
+          if (q >= 0) l = _pred[q];
+        }
+        if (l < 0) { ok = true; break; }       // primal feasible
+        if (!dualStep(l)) break;               // no candidate -> cold
+      }
+      _dual_heap_on = true;
+      if (ok) renormalizePotentials();
+      return ok;
+    }
+
     // One dual iteration on leaving arc l.  The cheapest eligible
     // uncapacitated cut arc is tracked as a running minimum (it always ends
     // the walk); only finite arcs are collected for the long-step walk.
@@ -2689,29 +2767,28 @@ namespace lemon {
       int best_e = -1;
       std::pair<Cost, int>* const cand = _ratio_cand.data();
       std::pair<Cost, int>* out = cand;
-      long long scanned = 0;
+      long long ninf = 0;
       for (int k = 0, w = first; k < cnt; ++k, w = thread[w]) {
         const Cost pw = pi[w];
         if (out_ok) {
-          scanned += oh[w + 1] - oh[w];
           for (int p = oh[w], pe = oh[w + 1]; p < pe; ++p) {
             const DualEnt& x = O[p];
             if (sub[x.nb] == g || x.e == l) continue;
+            ++ninf;
             Cost rc = x.c + pw - pi[x.nb];
             if (rc < 0) rc = -rc;
             if (best_e < 0 || rc < best || (rc == best && x.e < best_e)) { best = rc; best_e = x.e; }
           }
         } else {
-          scanned += ih[w + 1] - ih[w];
           for (int p = ih[w], pe = ih[w + 1]; p < pe; ++p) {
             const DualEnt& x = I[p];
             if (sub[x.nb] == g || x.e == l) continue;
+            ++ninf;
             Cost rc = x.c + pi[x.nb] - pw;
             if (rc < 0) rc = -rc;
             if (best_e < 0 || rc < best || (rc == best && x.e < best_e)) { best = rc; best_e = x.e; }
           }
         }
-        scanned += fh[w + 1] - fh[w];
         for (int p = fh[w], pe = fh[w + 1]; p < pe; ++p) {
           const int e = fin[p];
           const signed char st = state[e];
@@ -2728,7 +2805,7 @@ namespace lemon {
         }
       }
       size_t nc = out - cand;
-      _work_acc += cnt + scanned;
+      _work_acc += sq + (long long)nc + ninf;           // as dualRatioRepair()
       if (nc == 0 && best_e < 0) return false;          // dual unbounded / stuck
 
       // Long-step walk over the finite candidates, cheapest (|rc|, arc)
