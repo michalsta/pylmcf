@@ -362,6 +362,35 @@ repairs of later warm restarts never choose an artificial arc to enter the
 basis. On a crash basis that could put flow on an artificial arc and end in a
 false `INFEASIBLE`. The restriction lasts until the next `init()`.
 
+## Dual simplex starts (experimental)
+
+A cold solve can also start the *dual* network simplex from a basis you
+supply. `G.solve_from_basis(tree, upper)` takes `tree`, edge indices that form
+a forest, and `upper`, the edges that start at their capacity. Every other
+edge starts at 0, and the forest's components hang on LEMON's root by
+artificial arcs, as in a crash start.
+
+The basis should be *dual feasible*: under the potentials the tree fixes,
+every edge at 0 has reduced cost >= 0 and every edge at capacity has reduced
+cost <= 0. It may break flow conservation by any amount. The dual simplex
+then removes the violated tree arcs one by one, keeping the reduced costs
+feasible, and `start()` confirms the optimum. A basis that is only nearly
+dual feasible still works: `start()` finishes with primal pivots. A basis
+that is not a forest, or names an uncapacitated edge in `upper`, is refused
+and the solve runs cold. The result is the exact optimum either way.
+`dual_start_count()` counts the solves that took the basis.
+
+In C++, `dualSimplexRun(tree, upper, pivot_rule)` replaces `run()` (LEMON arc
+ids). `setColdStartBasis(&tree, &upper)` makes `warmRun()`'s cold fallback
+call it, before any flow installed by `setColdStartFlow()`. That flow becomes
+the fallback if the dual simplex gets stuck. `dualStartCount()` counts the
+starts. The scope is that of crash starts.
+
+It is exact but not fast. On wnet's captured production solves (2026-11) it
+ran 1.3-19x slower than a crash start: each dual iteration must price every
+arc across its cut. Partial pricing, which keeps the primal simplex cheap,
+would break dual feasibility.
+
 ---
 
 ## Scope
