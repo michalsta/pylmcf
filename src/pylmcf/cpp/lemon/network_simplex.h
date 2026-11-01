@@ -289,6 +289,9 @@ namespace lemon {
     int _crash_start_count = 0;
     const std::vector<Value>* _cold_start_flow = nullptr;
     const std::vector<int>* _cold_start_prefer = nullptr;
+    const std::vector<int>* _cold_start_tree = nullptr;
+    const std::vector<int>* _cold_start_upper = nullptr;
+    int _dual_start_count = 0;
     // True while the basis descends from crashRun() rather than init().  A
     // crash basis hangs the root off the components by a few artificial arcs,
     // so the remaining artificial arcs need not carry the huge reduced costs
@@ -1694,9 +1697,15 @@ namespace lemon {
           return start(pivot_rule);
         }
       }
-      // Cold fallback (crash-started when a cold-start flow is installed).
+      // Cold fallback (dual-simplex-started when a cold-start basis is
+      // installed, else crash-started when a cold-start flow is).
       ++_cold_start_count;
       const long long w0 = _work_acc;
+      if (_cold_start_tree != nullptr) {
+        auto st = dualSimplexRun(*_cold_start_tree, *_cold_start_upper, pivot_rule);
+        _last_cold_work = _work_acc - w0;
+        return st;
+      }
       if (_cold_start_flow != nullptr) {
         auto st = crashRun(*_cold_start_flow, pivot_rule, _cold_start_prefer);
         _last_cold_work = _work_acc - w0;
@@ -1706,6 +1715,61 @@ namespace lemon {
       auto st = start(pivot_rule);
       _last_cold_work = _work_acc - w0;      // budget yardstick
       return st;
+    }
+
+    // Rebuild _parent/_pred/_pred_dir, the thread order, _succ_num and
+    // _last_succ from tree_arcs (internal arc ids, _state already TREE),
+    // which must span the real nodes and the root; false when they do not.
+    bool installTree(const std::vector<int>& tree_arcs) {
+      // parent/pred/pred_dir and the thread order by an iterative DFS
+      std::vector<int> head(_node_num + 2, 0), adj(2 * tree_arcs.size());
+      for (int e : tree_arcs) { ++head[_source[e] + 1]; ++head[_target[e] + 1]; }
+      for (int v = 0; v <= _node_num; ++v) head[v + 1] += head[v];
+      {
+        std::vector<int> pos(head.begin(), head.end() - 1);
+        for (int e : tree_arcs) { adj[pos[_source[e]]++] = e; adj[pos[_target[e]]++] = e; }
+      }
+      std::vector<int> order;
+      order.reserve(_node_num + 1);
+      std::vector<int> stack{_root};
+      _parent[_root] = -1;
+      _pred[_root] = -1;
+      std::vector<char> seen(_node_num + 1, 0);
+      seen[_root] = 1;
+      while (!stack.empty()) {
+        const int v = stack.back();
+        stack.pop_back();
+        order.push_back(v);
+        for (int p = head[v]; p < head[v + 1]; ++p) {
+          const int e = adj[p];
+          const int w = _source[e] == v ? _target[e] : _source[e];
+          if (seen[w]) continue;
+          seen[w] = 1;
+          _parent[w] = v;
+          _pred[w] = e;
+          _pred_dir[w] = _source[e] == w ? DIR_UP : DIR_DOWN;
+          stack.push_back(w);
+        }
+      }
+      if ((int)order.size() != _node_num + 1) return false;
+      // preorder threads; subtree sizes and last successors bottom-up
+      for (int k = 0; k != _node_num + 1; ++k) {
+        const int v = order[k], w = order[(k + 1) % (_node_num + 1)];
+        _thread[v] = w;
+        _rev_thread[w] = v;
+      }
+      for (int v = 0; v <= _node_num; ++v) { _succ_num[v] = 1; _last_succ[v] = v; }
+      for (int k = _node_num; k > 0; --k) {
+        const int v = order[k], p = _parent[v];
+        _succ_num[p] += _succ_num[v];
+      }
+      // last_succ[v] = the node at preorder position pos(v) + succ_num[v] - 1
+      {
+        std::vector<int> at(_node_num + 1);
+        for (int k = 0; k != _node_num + 1; ++k) at[order[k]] = k;
+        for (int v = 0; v <= _node_num; ++v) _last_succ[v] = order[at[v] + _succ_num[v] - 1];
+      }
+      return true;
     }
 
     // Crash start from a caller-supplied flow.
@@ -1783,57 +1847,10 @@ namespace lemon {
           _flow[e] = 0;
         }
       }
-      // rebuild parent/pred/pred_dir and the thread order by an iterative DFS
-      std::vector<int> head(_node_num + 2, 0), adj(2 * tree_arcs.size());
-      for (int e : tree_arcs) { ++head[_source[e] + 1]; ++head[_target[e] + 1]; }
-      for (int v = 0; v <= _node_num; ++v) head[v + 1] += head[v];
-      {
-        std::vector<int> pos(head.begin(), head.end() - 1);
-        for (int e : tree_arcs) { adj[pos[_source[e]]++] = e; adj[pos[_target[e]]++] = e; }
-      }
-      std::vector<int> order;
-      order.reserve(_node_num + 1);
-      std::vector<int> stack{_root};
-      _parent[_root] = -1;
-      _pred[_root] = -1;
-      std::vector<char> seen(_node_num + 1, 0);
-      seen[_root] = 1;
-      while (!stack.empty()) {
-        const int v = stack.back();
-        stack.pop_back();
-        order.push_back(v);
-        for (int p = head[v]; p < head[v + 1]; ++p) {
-          const int e = adj[p];
-          const int w = _source[e] == v ? _target[e] : _source[e];
-          if (seen[w]) continue;
-          seen[w] = 1;
-          _parent[w] = v;
-          _pred[w] = e;
-          _pred_dir[w] = _source[e] == w ? DIR_UP : DIR_DOWN;
-          stack.push_back(w);
-        }
-      }
-      if ((int)order.size() != _node_num + 1) {   // cannot happen: tree spans
+      if (!installTree(tree_arcs)) {              // cannot happen: tree spans
         ++_cold_start_count;
         if (!init()) return INFEASIBLE;
         return start(pivot_rule);
-      }
-      // preorder threads; subtree sizes and last successors bottom-up
-      for (int k = 0; k != _node_num + 1; ++k) {
-        const int v = order[k], w = order[(k + 1) % (_node_num + 1)];
-        _thread[v] = w;
-        _rev_thread[w] = v;
-      }
-      for (int v = 0; v <= _node_num; ++v) { _succ_num[v] = 1; _last_succ[v] = v; }
-      for (int k = _node_num; k > 0; --k) {
-        const int v = order[k], p = _parent[v];
-        _succ_num[p] += _succ_num[v];
-      }
-      // last_succ[v] = the node at preorder position pos(v) + succ_num[v] - 1
-      {
-        std::vector<int> at(_node_num + 1);
-        for (int k = 0; k != _node_num + 1; ++k) at[order[k]] = k;
-        for (int v = 0; v <= _node_num; ++v) _last_succ[v] = order[at[v] + _succ_num[v] - 1];
       }
       _pi[_root] = 0;
       recomputeTreePotentials();
@@ -1854,6 +1871,67 @@ namespace lemon {
                           const std::vector<int>* prefer = nullptr) {
       _cold_start_flow = flow;
       _cold_start_prefer = prefer;
+    }
+
+    // Cold dual network simplex from a caller-supplied basis.
+    //
+    // tree lists LEMON arc ids (graph.id(arc)) forming a forest of the real
+    // nodes; upper lists the arc ids that start at their upper bound (finite
+    // capacity only); every other arc starts at 0.  The forest's components
+    // are hung on the root by artificial arcs, as in crashRun().  The basis
+    // should be DUAL feasible (reduced cost >= 0 on arcs at 0, <= 0 on arcs
+    // at their upper bound) and may be primal infeasible by any amount:
+    //
+    //   leaving   among the kDualLeaveK most violated tree arcs (a lazy
+    //             max-heap, refreshed along every changed cycle), the one
+    //             whose cut has the smallest smaller side;
+    //   cut       removing it splits the tree into the subtree of its child
+    //             node and the rest; only arcs incident to the smaller side
+    //             are enumerated (packed per-node lists, see DualEnt);
+    //   entering  long-step ratio test: eligible cut arcs in (|rc|, arc)
+    //             order; a finite arc that cannot absorb the remaining
+    //             violation is bound-flipped, the first that can enters.
+    //
+    // start() then confirms optimality (and finishes with primal pivots
+    // where the basis was not quite dual feasible).  A bad basis, a stuck
+    // ratio test or the iteration cap falls back to the cold-start flow
+    // installed by setColdStartFlow() if any, else to init()+start(): never
+    // a wrong answer.  Only for EQ supplies without lower bounds.
+    //
+    // Measured against crash starts (dualns_work, 2026-11-01): exact
+    // everywhere, but 1.3-19x slower on wnet's production solves.  Each dual
+    // iteration must price its whole cut (partial pricing would break dual
+    // feasibility), which costs far more than the primal pivots it saves.
+    ProblemType dualSimplexRun(const std::vector<int>& tree,
+                               const std::vector<int>& upper,
+                               PivotRule pivot_rule = BLOCK_SEARCH) {
+      if (!init()) return INFEASIBLE;
+      if (_sum_supply != 0 || _has_lower) {
+        ++_cold_start_count;
+        return start(pivot_rule);
+      }
+      if (dualInstallBasis(tree, upper)) {
+        ++_dual_start_count;
+        if (repairTreeFlows() || dualSimplexLoop()) {
+          renormalizePotentials();
+          return start(pivot_rule);
+        }
+      }
+      if (_cold_start_flow != nullptr)
+        return crashRun(*_cold_start_flow, pivot_rule, _cold_start_prefer);
+      ++_cold_start_count;
+      if (!init()) return INFEASIBLE;
+      return start(pivot_rule);
+    }
+    int dualStartCount() const { return _dual_start_count; }
+    // Basis (as for dualSimplexRun()) that warmRun()'s cold fallback starts
+    // from with the dual network simplex, taking precedence over a cold-start
+    // flow (which then serves as its fallback); nullptr (default) clears it.
+    // The pointees must outlive the solves.
+    void setColdStartBasis(const std::vector<int>* tree,
+                           const std::vector<int>* upper) {
+      _cold_start_tree = tree;
+      _cold_start_upper = upper;
     }
 
     int warmStartCount() const { return _warm_start_count; }
@@ -2397,6 +2475,312 @@ namespace lemon {
         if (!pivoted) return false;   // couldn't cover violation -> cold.
       }
       return false;                                       // iteration cap -> cold.
+    }
+
+    // ---- dual network simplex (dualSimplexRun()) ----
+
+    // Leaving-arc rule: cheapest cut among this many most violated tree arcs.
+    // 4 against 1 (plain most violated, 2026-11-01): sparse synthetic clouds
+    // 30-120x faster (the most violated arc there tends to cut the tree near
+    // its middle), dense 2-D NMR jobs 0.8-1.3x.
+    static constexpr int kDualLeaveK = 4;
+    // Lazy max-heap of violated tree arcs, (violation, -arc): arcs are pushed
+    // whenever their flow changes; entries whose arc left the tree or whose
+    // violation changed are dropped when they surface.
+    std::vector<std::pair<Value, int>> _dual_heap;
+    // Packed per-node arc lists for the cut scan.  Uncapacitated arcs, split
+    // by direction, carry {other endpoint, arc, cost}: off the tree they are
+    // always at 0, and the only tree arc across a cut is the leaving arc, so
+    // their scan needs neither _state nor _source/_target/_cost.  Finite arcs
+    // are listed by id (both endpoints) and take the generic eligibility
+    // test.  Artificial arcs are not listed: they never enter a crash basis.
+    struct DualEnt { int nb; int e; Cost c; };
+    std::vector<int> _dual_oh, _dual_ih, _dual_fh;
+    std::vector<DualEnt> _dual_out, _dual_in;
+    std::vector<int> _dual_fin;
+
+    void dualBuildLists() {
+      const int nn = _node_num + 1;
+      _dual_oh.assign(nn + 1, 0); _dual_ih.assign(nn + 1, 0); _dual_fh.assign(nn + 1, 0);
+      for (int e = 0; e != _search_arc_num; ++e) {
+        if (_cap[e] >= INF) { ++_dual_oh[_source[e] + 1]; ++_dual_ih[_target[e] + 1]; }
+        else { ++_dual_fh[_source[e] + 1]; ++_dual_fh[_target[e] + 1]; }
+      }
+      for (int i = 0; i < nn; ++i) {
+        _dual_oh[i + 1] += _dual_oh[i]; _dual_ih[i + 1] += _dual_ih[i]; _dual_fh[i + 1] += _dual_fh[i];
+      }
+      _dual_out.resize(_dual_oh[nn]); _dual_in.resize(_dual_ih[nn]); _dual_fin.resize(_dual_fh[nn]);
+      std::vector<int> po(_dual_oh.begin(), _dual_oh.end() - 1),
+                       pi(_dual_ih.begin(), _dual_ih.end() - 1),
+                       pf(_dual_fh.begin(), _dual_fh.end() - 1);
+      for (int e = 0; e != _search_arc_num; ++e) {
+        const int s = _source[e], t = _target[e];
+        if (_cap[e] >= INF) {
+          _dual_out[po[s]++] = {t, e, _cost[e]};
+          _dual_in[pi[t]++] = {s, e, _cost[e]};
+        } else {
+          _dual_fin[pf[s]++] = e;
+          _dual_fin[pf[t]++] = e;
+        }
+      }
+    }
+
+    Value dualViolation(int e) const {
+      const Value f = _flow[e];
+      return f < 0 ? -f : (f > _cap[e] ? f - _cap[e] : 0);
+    }
+    void dualHeapPush(int e) {
+      const Value v = dualViolation(e);
+      if (v <= 0) return;
+      _dual_heap.emplace_back(v, -e);
+      std::push_heap(_dual_heap.begin(), _dual_heap.end());
+    }
+    void dualHeapRebuild() {
+      _dual_heap.clear();
+      for (int u = 0; u != _node_num; ++u) {
+        const Value v = dualViolation(_pred[u]);
+        if (v > 0) _dual_heap.emplace_back(v, -_pred[u]);
+      }
+      std::make_heap(_dual_heap.begin(), _dual_heap.end());
+    }
+
+    // changeFlow() that also pushes every cycle arc whose flow it changes.
+    void dualChangeFlow(bool change) {
+      changeFlow(change);
+      if (delta > 0) {
+        for (int u = _source[in_arc]; u != join; u = _parent[u]) dualHeapPush(_pred[u]);
+        for (int u = _target[in_arc]; u != join; u = _parent[u]) dualHeapPush(_pred[u]);
+      }
+    }
+
+    // Install the basis of dualSimplexRun(); false when tree is not a forest
+    // or upper names an uncapacitated arc.
+    bool dualInstallBasis(const std::vector<int>& tree, const std::vector<int>& upper) {
+      for (int i = 0; i != _arc_num; ++i) { _state[i] = STATE_LOWER; _flow[i] = 0; }
+      for (int k : upper) {
+        if (k < 0 || k >= _arc_num) return false;
+        const int i = _arc_id[_graph.arcFromId(k)];
+        if (_upper[i] >= INF) return false;
+        _state[i] = STATE_UPPER;
+      }
+      std::vector<int> uf(_node_num + 1);
+      for (int i = 0; i <= _node_num; ++i) uf[i] = i;
+      auto find = [&](int x) {
+        while (uf[x] != x) { uf[x] = uf[uf[x]]; x = uf[x]; }
+        return x;
+      };
+      std::vector<int> tree_arcs;
+      tree_arcs.reserve(_node_num + 1);
+      for (int k : tree) {
+        if (k < 0 || k >= _arc_num) return false;
+        const int i = _arc_id[_graph.arcFromId(k)];
+        const int ru = find(_source[i]), rv = find(_target[i]);
+        if (ru == rv || _state[i] != STATE_LOWER) return false;
+        uf[ru] = rv;
+        _state[i] = STATE_TREE;
+        tree_arcs.push_back(i);
+      }
+      for (int u = 0; u != _node_num; ++u) {
+        const int e = _arc_num + u;
+        const int ru = find(u), rr = find(_root);
+        if (ru != rr) {
+          uf[ru] = rr;
+          _state[e] = STATE_TREE;
+          tree_arcs.push_back(e);
+        } else {
+          _state[e] = STATE_LOWER;
+          _flow[e] = 0;
+        }
+      }
+      if (!installTree(tree_arcs)) return false;
+      _pi[_root] = 0;
+      recomputeTreePotentials();
+      _crash_basis = true;
+      return true;
+    }
+
+    // The dual network simplex loop of dualSimplexRun(); true once no tree
+    // arc is violated, false when stuck or over the iteration cap.
+    bool dualSimplexLoop() {
+      if ((int)_repair_in_sub.size() < _node_num + 1) _repair_in_sub.resize(_node_num + 1, 0);
+      if (_ratio_cand.size() < (size_t)_all_arc_num) _ratio_cand.resize(_all_arc_num);
+      dualBuildLists();
+      dualHeapRebuild();
+      const int N1 = _node_num + 1;
+      const long long max_iters = 64LL * _all_arc_num + 1024;
+      long long iters = 0;
+      for (;;) {
+        // Leaving arc: pop up to kDualLeaveK valid distinct entries, keep the
+        // one with the smallest cut side, push the rest back.
+        int pick[kDualLeaveK];
+        int np = 0;
+        while (np < kDualLeaveK && !_dual_heap.empty()) {
+          const auto top = _dual_heap.front();
+          std::pop_heap(_dual_heap.begin(), _dual_heap.end());
+          _dual_heap.pop_back();
+          const int e = -top.second;
+          if (_state[e] != STATE_TREE || dualViolation(e) != top.first) continue;
+          bool dup = false;
+          for (int i = 0; i < np; ++i) dup |= pick[i] == e;
+          if (!dup) pick[np++] = e;
+        }
+        if (np == 0) return true;                       // primal feasible
+        if (++iters > max_iters) return false;
+        int bi = 0, bside = std::numeric_limits<int>::max();
+        for (int i = 0; i < np; ++i) {
+          const int e = pick[i];
+          const int c = (_source[e] != _root && _pred[_source[e]] == e) ? _source[e] : _target[e];
+          const int side = std::min(_succ_num[c], N1 - _succ_num[c]);
+          if (side < bside) { bside = side; bi = i; }
+        }
+        const int l = pick[bi];
+        for (int i = 0; i < np; ++i)
+          if (i != bi) {
+            _dual_heap.emplace_back(dualViolation(pick[i]), -pick[i]);
+            std::push_heap(_dual_heap.begin(), _dual_heap.end());
+          }
+        if (_dual_heap.size() > 8 * (size_t)N1 + 1024) {  // mostly stale entries
+          dualHeapRebuild();
+          _dual_heap.emplace_back(dualViolation(l), -l);   // l stays violated
+          std::push_heap(_dual_heap.begin(), _dual_heap.end());
+        }
+        if (!dualStep(l)) return false;
+      }
+    }
+
+    // One dual iteration on leaving arc l.  The cheapest eligible
+    // uncapacitated cut arc is tracked as a running minimum (it always ends
+    // the walk); only finite arcs are collected for the long-step walk.
+    bool dualStep(int l) {
+      const int N1 = _node_num + 1;
+      const int q = (_source[l] != _root && _pred[_source[l]] == l) ? _source[l] : _target[l];
+      const bool over = _flow[l] > _cap[l];
+      const int pdq = _pred_dir[q];
+      const int want = over ? -1 : 1;
+      Value remaining = over ? (_flow[l] - _cap[l]) : (-_flow[l]);
+
+      // Mark the smaller side of the cut: q's subtree S or its complement,
+      // each one thread interval.
+      int* const sub = _repair_in_sub.data();
+      const int sq = _succ_num[q];
+      const bool markS = 2 * sq <= N1;
+      const int g = ++_repair_gen;
+      const int first = markS ? q : _thread[_last_succ[q]];
+      const int cnt = markS ? sq : N1 - sq;
+      const int* thread = _thread.data();
+      for (int k = 0, w = first; k < cnt; ++k, w = thread[w]) sub[w] = g;
+
+      const Cost* pi = _pi.data();
+      const signed char* state = _state.data();
+      const int* source = _source.data();
+      const int* target = _target.data();
+      const Value* cap = _cap.data();
+      const Cost* cost = _cost.data();
+      const DualEnt* O = _dual_out.data();
+      const DualEnt* I = _dual_in.data();
+      const int* oh = _dual_oh.data();
+      const int* ih = _dual_ih.data();
+      const int* fh = _dual_fh.data();
+      const int* fin = _dual_fin.data();
+      // An out-arc of a marked node enters S iff the marked side is the
+      // complement; arcs at 0 are eligible in exactly one direction.
+      const bool out_ok = pdq * (markS ? -1 : 1) == want;
+      Cost best = 0;
+      int best_e = -1;
+      std::pair<Cost, int>* const cand = _ratio_cand.data();
+      std::pair<Cost, int>* out = cand;
+      long long scanned = 0;
+      for (int k = 0, w = first; k < cnt; ++k, w = thread[w]) {
+        const Cost pw = pi[w];
+        if (out_ok) {
+          scanned += oh[w + 1] - oh[w];
+          for (int p = oh[w], pe = oh[w + 1]; p < pe; ++p) {
+            const DualEnt& x = O[p];
+            if (sub[x.nb] == g || x.e == l) continue;
+            Cost rc = x.c + pw - pi[x.nb];
+            if (rc < 0) rc = -rc;
+            if (best_e < 0 || rc < best || (rc == best && x.e < best_e)) { best = rc; best_e = x.e; }
+          }
+        } else {
+          scanned += ih[w + 1] - ih[w];
+          for (int p = ih[w], pe = ih[w + 1]; p < pe; ++p) {
+            const DualEnt& x = I[p];
+            if (sub[x.nb] == g || x.e == l) continue;
+            Cost rc = x.c + pi[x.nb] - pw;
+            if (rc < 0) rc = -rc;
+            if (best_e < 0 || rc < best || (rc == best && x.e < best_e)) { best = rc; best_e = x.e; }
+          }
+        }
+        scanned += fh[w + 1] - fh[w];
+        for (int p = fh[w], pe = fh[w + 1]; p < pe; ++p) {
+          const int e = fin[p];
+          const signed char st = state[e];
+          if (st == STATE_TREE) continue;
+          const int se = source[e], te = target[e];
+          const bool ms = sub[se] == g, mt = sub[te] == g;
+          if (ms == mt) continue;
+          const int dir_into_S = (mt == markS) ? 1 : -1;
+          if (pdq * dir_into_S * st != want) continue;
+          if (cap[e] <= 0) continue;
+          Cost rc = cost[e] + pi[se] - pi[te];
+          if (rc < 0) rc = -rc;
+          *out++ = {rc, e};
+        }
+      }
+      size_t nc = out - cand;
+      _work_acc += cnt + scanned;
+      if (nc == 0 && best_e < 0) return false;          // dual unbounded / stuck
+
+      // Long-step walk over the finite candidates, cheapest (|rc|, arc)
+      // first, merged with the uncapacitated minimum (as dualRatioRepair()).
+      auto worse = [](const std::pair<Cost, int>& a, const std::pair<Cost, int>& b) {
+        return a.first != b.first ? a.first > b.first : a.second > b.second;
+      };
+      constexpr int kLinearPops = 4;
+      int pops = 0;
+      bool heaped = false;
+      int e;
+      for (;;) {
+        bool take_inf = true;
+        if (nc != 0) {
+          if (pops < kLinearPops) {
+            size_t b = 0;
+            for (size_t i = 1; i < nc; ++i)
+              if (worse(cand[b], cand[i])) b = i;
+            std::swap(cand[b], cand[nc - 1]);
+          } else {
+            if (!heaped) { std::make_heap(cand, cand + nc, worse); heaped = true; }
+            std::pop_heap(cand, cand + nc, worse);
+          }
+          ++pops;
+          const auto& f = cand[nc - 1];
+          take_inf = best_e >= 0 && (best < f.first || (best == f.first && best_e < f.second));
+        }
+        if (take_inf) {
+          if (best_e < 0) return false;
+          e = best_e;
+          break;
+        }
+        e = cand[--nc].second;
+        if (_cap[e] >= remaining) break;
+        in_arc = e;                                     // bound flip
+        findJoinNode();
+        delta = _cap[e];
+        dualChangeFlow(false);
+        remaining -= _cap[e];
+      }
+      const int se = _source[e], te = _target[e];
+      const bool se_in_S = (sub[se] == g) == markS;
+      in_arc = e;
+      findJoinNode();
+      delta = remaining;
+      u_out = q;
+      u_in = se_in_S ? se : te;
+      v_in = se_in_S ? te : se;
+      dualChangeFlow(true);
+      updateTreeStructure();
+      updatePotentialSmallerSide();
+      return true;
     }
 
     // Greedy-capacity dual repair (WarmRepair::DualGreedy).

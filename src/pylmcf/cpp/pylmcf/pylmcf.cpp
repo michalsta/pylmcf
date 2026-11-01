@@ -249,6 +249,13 @@ NB_MODULE(pylmcf_cpp, m) {
              "optimum either way. prefer: edge indices, in priority order, that may join the "
              "flow's components as zero-flow tree edges before artificial arcs do; they set the "
              "starting potentials. Only EQ supplies without minimums use the flow.")
+        .def("solve_from_basis", &Graph<int64_t>::solve_from_basis_py, arg("tree").noconvert(),
+             arg("upper").noconvert(),
+             "Solve cold with the dual network simplex from a basis: tree lists edge indices "
+             "forming a forest, upper the edges starting at their capacity (every other edge "
+             "starts at 0). The basis should be dual feasible (reduced cost >= 0 on edges at 0, "
+             "<= 0 on edges at capacity); the result is the exact optimum either way. Only EQ "
+             "supplies without minimums use the basis.")
         .def("set_cold_start_flow", &Graph<int64_t>::set_cold_start_flow_py, arg("flow").noconvert(),
              arg("prefer").noconvert() = nb::none(),
              "Crash-start every later cold solve of solve() (the first one, and warm restarts that "
@@ -261,6 +268,9 @@ NB_MODULE(pylmcf_cpp, m) {
         .def("crash_start_count", &Graph<int64_t>::crash_start_count,
              "Number of solves that started from a crash basis (solve_from_flow() or an "
              "installed cold-start flow), the first solve included.")
+        .def("dual_start_count", &Graph<int64_t>::dual_start_count,
+             "Number of solves that started the dual network simplex from a basis "
+             "(solve_from_basis()).")
         .def("warm_start_count", &Graph<int64_t>::warm_start_count)
         .def("cold_start_count", &Graph<int64_t>::cold_start_count)
         .def("dual_repair_count", &Graph<int64_t>::dual_repair_count)

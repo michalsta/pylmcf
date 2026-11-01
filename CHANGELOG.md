@@ -15,6 +15,15 @@
   counts these starts. In C++: `NetworkSimplex::crashRun()`,
   `setColdStartFlow()` and `crashStartCount()`. See
   [Crash starts](docs/warm-restart.md#crash-starts).
+- Dual network simplex starts (experimental): `Graph.solve_from_basis(tree,
+  upper)` solves cold with a dual network simplex from a caller-supplied
+  basis (a forest of edges, plus the edges starting at capacity), which
+  should be dual feasible; the result is the exact optimum either way.
+  `dual_start_count()` counts these starts. In C++:
+  `NetworkSimplex::dualSimplexRun()`, `dualStartCount()`, and
+  `setColdStartBasis()`, which makes warmRun()'s cold fallback start from a
+  basis. Slower than crash starts on every production solve measured
+  (1.3-19x, 2026-11): each dual iteration prices its whole cut.
 - A mass-based warm/cold policy: `setWarmViolationMassFraction(f)` /
   `Graph.set_warm_violation_mass_fraction(f)` skips simplex repair (cold
   start, counted in `policyColdCount()`) when the violated basic-arc mass left

@@ -417,6 +417,35 @@ public:
     }
     int crash_start_count() const { return solver.crashStartCount(); }
 
+    // Solve cold with the dual network simplex from the basis given by tree
+    // (edge indices forming a forest) and upper (edge indices starting at
+    // their capacity; every other edge starts at 0).  The basis should be
+    // dual feasible (see NetworkSimplex::dualSimplexRun()); whatever it is,
+    // the result is the exact optimum.  Only EQ supplies without minimums use
+    // the basis.
+    void solve_from_basis(const std::span<const T> &tree, const std::span<const T> &upper) {
+        const std::vector<int> t = edge_index_list(tree), u = edge_index_list(upper);
+        _solved = false;
+        assert(costs_in_sync() && "solver costs out of sync with costs_map");
+        check_bounds();
+        if (_no_nodes == 0) { _costs_dirty = false; _solved = true; return; }
+        solver.supplyMap(node_supply_map);
+        const auto status = solver.dualSimplexRun(t, u, _pivot_rule);
+        _basis_valid = (status == Solver::OPTIMAL);
+        if (status != Solver::OPTIMAL) {
+            if (status == Solver::INFEASIBLE)
+                throw std::runtime_error("Solver failed: problem is INFEASIBLE "
+                                         "(infeasibility_cut() names a set of nodes that proves it)");
+            else if (status == Solver::UNBOUNDED)
+                throw std::runtime_error("Solver failed: problem is UNBOUNDED");
+            else
+                throw std::runtime_error("Solver failed with unknown status");
+        }
+        _costs_dirty = false;
+        _solved = true;
+    }
+    int dual_start_count() const { return solver.dualStartCount(); }
+
     // Install a flow (and optional preferred tree edges, as in
     // solve_from_flow()) that every later cold start of solve() crash-starts
     // from.  It is not refreshed automatically: after changing supplies or
@@ -696,6 +725,9 @@ public:
     void solve_from_flow_py(const ndarray_1d<T> &flow, std::optional<ndarray_1d<T>> prefer) {
         solve_from_flow(numpy_to_span(flow),
                         prefer ? numpy_to_span(*prefer) : std::span<const T>{});
+    }
+    void solve_from_basis_py(const ndarray_1d<T> &tree, const ndarray_1d<T> &upper) {
+        solve_from_basis(numpy_to_span(tree), numpy_to_span(upper));
     }
     void set_cold_start_flow_py(const ndarray_1d<T> &flow, std::optional<ndarray_1d<T>> prefer) {
         set_cold_start_flow(numpy_to_span(flow),
